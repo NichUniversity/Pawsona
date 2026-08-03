@@ -7,6 +7,7 @@ import {
   View,
 } from "react-native";
 
+import { AvatarDisplay } from "../../components/ui/AvatarDisplay";
 import { PetEntry, usePets } from "../../context/PetInformation";
 import {
   CATEGORY_LABELS,
@@ -92,7 +93,14 @@ export default function StoreTab() {
                 ]}
                 onPress={() => setSelectedPet(pet)}
               >
-                <Text style={styles.petChipEmoji}>{pet.selectedEmoji}</Text>
+                <View style={{ marginBottom: 4 }}>
+                  <AvatarDisplay
+                    category={pet.category}
+                    emoji={pet.selectedEmoji}
+                    color={pet.color}
+                    size={28}
+                  />
+                </View>
                 <Text
                   style={[
                     styles.petChipName,

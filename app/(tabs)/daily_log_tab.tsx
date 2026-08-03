@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 
+import { AvatarDisplay } from "../../components/ui/AvatarDisplay";
 import { PetEntry, usePets } from "../../context/PetInformation";
 
 type Activity = {
@@ -208,7 +209,14 @@ export default function DailyPawLog() {
                 style={styles.petCard}
                 onPress={() => changePet(pet)}
               >
-                <Text style={styles.petEmoji}>{pet.selectedEmoji}</Text>
+                <View style={{ marginRight: 20 }}>
+                  <AvatarDisplay
+                    category={pet.category}
+                    emoji={pet.selectedEmoji}
+                    color={pet.color}
+                    size={35}
+                  />
+                </View>
 
                 <Text style={styles.petName}>
                   {pet.name || "Unnamed Pet"}

@@ -24,10 +24,10 @@ import {
 } from '../../context/PetInformation';
 import {
   AVATAR_OPTIONS,
-  AvatarOption,
   PET_CATEGORIES,
   PetCategory,
 } from '../../data/petcategories';
+import { AvatarDisplay, findAvatarOption } from '../../components/ui/AvatarDisplay';
 
 const ATTRIBUTES = [
   { key: 'intelligence', label: 'Intelligence' },
@@ -52,55 +52,6 @@ async function pickPetPhoto(): Promise<string | undefined> {
 
 function categoryMeta(category: PetCategory) {
   return PET_CATEGORIES.find((c) => c.key === category)!;
-}
-
-function findAvatarOption(
-  category: PetCategory | null,
-  emoji: string | null,
-  color: string | null
-): AvatarOption | undefined {
-  if (!category || !emoji) return undefined;
-  return AVATAR_OPTIONS[category].find(
-    (opt) => opt.emoji === emoji && opt.color === color
-  );
-}
-
-function AvatarVisual({
-  option,
-  fallbackEmoji,
-  size,
-  fontSize,
-}: {
-  option: AvatarOption | undefined;
-  fallbackEmoji: string;
-  size: number;
-  fontSize: number;
-}) {
-  if (option?.image) {
-    return (
-      <View
-        style={{
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          backgroundColor: '#000',
-          alignItems: 'center',
-          justifyContent: 'center',
-          overflow: 'hidden',
-        }}
-      >
-        <Image
-          source={option.image}
-          style={{ width: size * 0.82, height: size * 0.82 }}
-          resizeMode="contain"
-        />
-      </View>
-    );
-  }
-
-  return (
-    <Text style={{ fontSize }}>{option?.emoji ?? fallbackEmoji}</Text>
-  );
 }
 
 function PawRating({ value }: { value: number }) {
@@ -300,15 +251,11 @@ export default function HomeScreen() {
                           { backgroundColor: currentEntry.color ?? '#fff' },
                         ]}
                       >
-                        <AvatarVisual
-                          option={findAvatarOption(
-                            currentEntry.category,
-                            currentEntry.selectedEmoji,
-                            currentEntry.color
-                          )}
-                          fallbackEmoji={currentEntry.selectedEmoji}
-                          size={32}
-                          fontSize={22}
+                        <AvatarDisplay
+                          category={currentEntry.category}
+                          emoji={currentEntry.selectedEmoji}
+                          color={currentEntry.color}
+                          size={28}
                         />
                       </View>
                     )}
@@ -460,18 +407,14 @@ export default function HomeScreen() {
                           },
                         ]}
                       >
-                        <AvatarVisual
-                          option={findAvatarOption(
-                            currentEntry.category,
-                            currentEntry.selectedEmoji,
-                            currentEntry.color
-                          )}
-                          fallbackEmoji={
+                        <AvatarDisplay
+                          category={currentEntry.category}
+                          emoji={
                             currentEntry.selectedEmoji ??
                             categoryMeta(currentEntry.category).emoji
                           }
-                          size={56}
-                          fontSize={36}
+                          color={currentEntry.color}
+                          size={48}
                         />
                       </View>
 
@@ -613,11 +556,11 @@ export default function HomeScreen() {
                               { backgroundColor: option.color },
                             ]}
                           >
-                            <AvatarVisual
-                              option={option}
-                              fallbackEmoji={option.emoji}
-                              size={32}
-                              fontSize={20}
+                            <AvatarDisplay
+                              category={avatarModalState.category}
+                              emoji={option.emoji}
+                              color={option.color}
+                              size={28}
                             />
                           </View>
 

@@ -1,38 +1,70 @@
 import React from "react";
-import { Image, ImageStyle, StyleProp, Text, TextStyle } from "react-native";
+import {
+  Image,
+  StyleProp,
+  Text,
+  TextStyle,
+  View,
+  ViewStyle,
+} from "react-native";
 
-import { getAvatarOption } from "../../data/avatars";
+import { AVATAR_OPTIONS, AvatarOption, PetCategory } from "../../data/petcategories";
+
+export function findAvatarOption(
+  category: PetCategory | null | undefined,
+  emoji: string | null | undefined,
+  color: string | null | undefined
+): AvatarOption | undefined {
+  if (!category || !emoji) return undefined;
+  return AVATAR_OPTIONS[category].find(
+    (opt) => opt.emoji === emoji && opt.color === color
+  );
+}
 
 type Props = {
-  id: string | null | undefined;
+  category: PetCategory | null | undefined;
+  emoji: string | null | undefined;
+  color?: string | null;
   size?: number;
-  style?: StyleProp<TextStyle> | StyleProp<ImageStyle>;
+  style?: StyleProp<ViewStyle> | StyleProp<TextStyle>;
 };
 
-export function AvatarDisplay({ id, size = 40, style }: Props) {
-  const option = getAvatarOption(id);
+/**
+ * Renders a pet avatar anywhere in the app: a custom image (on a black
+ * backdrop so transparent PNGs stand out) when the matched option has one,
+ * otherwise the emoji. Falls back to a paw emoji if nothing matches.
+ */
+export function AvatarDisplay({ category, emoji, color, size = 40, style }: Props) {
+  const option = findAvatarOption(category, emoji, color);
 
-  if (!option) {
+  if (option?.image) {
     return (
-      <Text style={[{ fontSize: size }, style as StyleProp<TextStyle>]}>
-        🐾
-      </Text>
-    );
-  }
-
-  if (option.kind === "image") {
-    return (
-      <Image
-        source={option.image}
-        style={[{ width: size, height: size }, style as StyleProp<ImageStyle>]}
-        resizeMode="contain"
-      />
+      <View
+        style={[
+          {
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            backgroundColor: "#000",
+            alignItems: "center",
+            justifyContent: "center",
+            overflow: "hidden",
+          },
+          style as StyleProp<ViewStyle>,
+        ]}
+      >
+        <Image
+          source={option.image}
+          style={{ width: size * 0.82, height: size * 0.82 }}
+          resizeMode="contain"
+        />
+      </View>
     );
   }
 
   return (
     <Text style={[{ fontSize: size }, style as StyleProp<TextStyle>]}>
-      {option.emoji}
+      {option?.emoji ?? emoji ?? "🐾"}
     </Text>
   );
 }

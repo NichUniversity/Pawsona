@@ -8,6 +8,7 @@ import {
   View,
 } from "react-native";
 
+import { AvatarDisplay } from "../../components/ui/AvatarDisplay";
 import { PetEntry, usePets } from "../../context/PetInformation";
 import { ADVENTURES } from "../../data/adventure";
 
@@ -110,7 +111,14 @@ export default function Adventure() {
                 style={styles.card}
                 onPress={() => setSelectedPet(pet)}
               >
-                <Text style={styles.avatar}>{pet.selectedEmoji}</Text>
+                <View style={{ marginRight: 20 }}>
+                  <AvatarDisplay
+                    category={pet.category}
+                    emoji={pet.selectedEmoji}
+                    color={pet.color}
+                    size={36}
+                  />
+                </View>
 
                 <Text style={styles.name}>{pet.name || "Unnamed Pet"}</Text>
               </Pressable>
