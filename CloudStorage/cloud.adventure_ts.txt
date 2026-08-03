@@ -1,0 +1,103 @@
+export const ADVENTURES = {
+  "Magical Forest": [
+    {
+      id: "forest-1",
+      story:
+        "You and your pet enter the Magical Forest. The trees glow with a mysterious light as a hidden path appears.",
+      choices: [
+        { text: "Follow the glowing trail 🌟", attribute: "intelligence" },
+        { text: "Run deeper into the forest 🐾", attribute: "speed" },
+        { text: "Investigate the strange sounds 👂", attribute: "mischief" },
+      ],
+    },
+    {
+      id: "forest-3",
+      story:
+        "A tiny magical creature jumps onto the path. It looks like it needs help finding its home.",
+      choices: [
+        { text: "Help the creature 🤝", attribute: "energy" },
+        { text: "Search for clues 🔍", attribute: "intelligence" },
+        { text: "Follow it quietly 🐕", attribute: "speed" },
+      ],
+    },
+    {
+      id: "forest-3",
+      story:
+        "A tinyyyy magical creature jumps onto the path. It looks like it needs help finding its home.",
+      choices: [
+        { text: "Help the creature 🤝", attribute: "energy" },
+        { text: "Search for clues 🔍", attribute: "intelligence" },
+        { text: "Follow it quietly 🐕", attribute: "speed" },
+      ],
+    },
+  ],
+
+  "Frostpaw Tundra": [
+    {
+      id: "frostpaw-1",
+      story:
+        "The wind howls as you and your pet step onto the frozen tundra. Snowdrifts stretch in every direction, and strange paw prints vanish into a blizzard.",
+      choices: [
+        { text: "Track the mysterious prints 🐾", attribute: "speed" },
+        { text: "Dig a shelter in the snow ❄️", attribute: "strength" },
+        { text: "Listen for signs of the creature 👂", attribute: "intelligence" },
+      ],
+    },
+    {
+      id: "frostpaw-2",
+      story:
+        "You find a frozen cave glowing with a soft blue light. Something inside seems to be waiting.",
+      choices: [
+        { text: "Push forward into the cave 🕳️", attribute: "strength" },
+        { text: "Sniff out any danger 🐽", attribute: "mischief" },
+        { text: "Warm up before going further 🔥", attribute: "energy" },
+      ],
+    },
+  ],
+
+  "Crystal Caverns": [
+    {
+      id: "crystal-1",
+      story:
+        "Deep underground, the Crystal Caverns sparkle with countless gems embedded in the walls. Every step echoes.",
+      choices: [
+        { text: "Climb toward the glittering ceiling 🧗", attribute: "strength" },
+        { text: "Study the crystal patterns 🔬", attribute: "intelligence" },
+        { text: "Chase the echoing sounds 🏃", attribute: "speed" },
+      ],
+    },
+    {
+      id: "crystal-2",
+      story:
+        "A narrow crystal bridge stretches over a deep chasm. It looks fragile.",
+      choices: [
+        { text: "Dash across quickly 💨", attribute: "speed" },
+        { text: "Test each crystal carefully 🧠", attribute: "intelligence" },
+        { text: "Sneak along the edge 🐾", attribute: "mischief" },
+      ],
+    },
+  ],
+
+  "Bone Desert": [
+    {
+      id: "bone-1",
+      story:
+        "The sun blazes over the Bone Desert, its sands littered with ancient fossils. A trail of bones leads toward the horizon.",
+      choices: [
+        { text: "Dig up buried treasure ⛏️", attribute: "strength" },
+        { text: "Follow the bone trail 🦴", attribute: "mischief" },
+        { text: "Scout ahead for water 🏜️", attribute: "speed" },
+      ],
+    },
+    {
+      id: "bone-2",
+      story:
+        "A massive fossilized skeleton looms overhead, its ribs forming an eerie archway.",
+      choices: [
+        { text: "Investigate the skeleton 🔍", attribute: "intelligence" },
+        { text: "Power through the heat 💪", attribute: "energy" },
+        { text: "Rest in its shade 😌", attribute: "energy" },
+      ],
+    },
+  ],
+};

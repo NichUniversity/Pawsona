@@ -1,0 +1,6 @@
+{
+  "name": "pet-log-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Serverless backend for the Daily Paw Log AI coach"
+}
