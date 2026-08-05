@@ -32,10 +32,16 @@ export const AVATAR_OPTIONS: Record<PetCategory, AvatarOption[]> = {
     { label: "Guide Dog", emoji: "🐕‍🦺", color: "#8C6C4B" },
     { label: "Wolf Pup", emoji: "🐺", color: "#8A8F99" },
     {
-      label: "Custom Pup",
-      emoji: "custom-dog-emoji-brown",
-      color: "#E8B98A",
-      image: require("../assets/avatars/dog_emoji_brown.png"),
+      label: "Bulldog",
+      emoji: "bulldog-myavatar",
+      color: "#C9C9C9",
+      image: require("../assets/avatars/bulldog.png"),
+    },
+    {
+      label: "Golden Retriever",
+      emoji: "golden-retriever-myavatar",
+      color: "#E0B876",
+      image: require("../assets/avatars/golden_retriever.png"),
     },
   ],
   cat: [
