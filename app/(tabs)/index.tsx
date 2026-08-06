@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 
+import { AvatarDisplay, findAvatarOption } from '../../components/ui/AvatarDisplay';
 import {
   AttributeRatings,
   EMPTY_RATINGS,
@@ -24,10 +25,10 @@ import {
 } from '../../context/PetInformation';
 import {
   AVATAR_OPTIONS,
+  AvatarOption,
   PET_CATEGORIES,
   PetCategory,
 } from '../../data/petcategories';
-import { AvatarDisplay, findAvatarOption } from '../../components/ui/AvatarDisplay';
 
 const ATTRIBUTES = [
   { key: 'intelligence', label: 'Intelligence' },
