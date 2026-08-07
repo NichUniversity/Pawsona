@@ -29,6 +29,7 @@ import {
   PET_CATEGORIES,
   PetCategory,
 } from '../../data/petcategories';
+import { useTabBarClearance } from '../../hooks/useTabBarClearance';
 
 const ATTRIBUTES = [
   { key: 'intelligence', label: 'Intelligence' },
@@ -72,6 +73,7 @@ function PawRating({ value }: { value: number }) {
 
 export default function HomeScreen() {
   const { pets: entries, setPets: setEntries } = usePets();
+  const tabBarClearance = useTabBarClearance();
 
   const [categoryModalId, setCategoryModalId] = useState<string | null>(null);
   const [avatarModalState, setAvatarModalState] = useState<{
@@ -209,7 +211,10 @@ export default function HomeScreen() {
       />
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: tabBarClearance },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.container}>

@@ -11,6 +11,7 @@ import {
 
 import { ScrollingLayer } from "../../components/ui/ScrollingLayer";
 import { usePets } from "../../context/PetInformation";
+import { useTabBarClearance } from "../../hooks/useTabBarClearance";
 
 type GameId = "simon" | "minesweeper" | "parkour" | "parkourFP";
 
@@ -54,9 +55,15 @@ const GAMES: {
 export default function Minigames() {
   const { coins } = usePets();
   const [activeGame, setActiveGame] = useState<GameId | "menu">("menu");
+  const tabBarClearance = useTabBarClearance();
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView
+      contentContainerStyle={[
+        styles.container,
+        { paddingBottom: tabBarClearance },
+      ]}
+    >
       <Text style={styles.title}>🎮 Mini Games</Text>
 
       <View style={styles.coinBadge}>
