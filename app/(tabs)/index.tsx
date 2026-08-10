@@ -205,7 +205,7 @@ export default function HomeScreen() {
     <View style={styles.screen}>
       <View style={styles.fullScreenBackgroundWrap}>
         <Image
-          source={require('../../assets/images/spring_day.png')}
+          source={require('../../assets/images/spring_day_falling_leaves_loop.gif')}
           style={styles.fullScreenBackground}
           resizeMode="contain"
         />
