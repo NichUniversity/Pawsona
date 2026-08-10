@@ -205,7 +205,7 @@ export default function HomeScreen() {
     <View style={styles.screen}>
       <View style={styles.fullScreenBackgroundWrap}>
         <Image
-          source={require('../../assets/images/pawsona_day_forest_piskel_512.png')}
+          source={require('../../assets/images/spring_day.png')}
           style={styles.fullScreenBackground}
           resizeMode="contain"
         />
@@ -600,7 +600,7 @@ const styles = StyleSheet.create({
 
   fullScreenBackgroundWrap: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#4B9AD7',
+    backgroundColor: '#5FBEFC',
   },
 
   fullScreenBackground: {
