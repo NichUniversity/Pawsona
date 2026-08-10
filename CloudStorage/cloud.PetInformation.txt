@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState } from "react";
 
+import { PetCategory } from "../data/petcategories";
+
 export type AttributeRatings = {
   intelligence: number;
   speed: number;
@@ -26,7 +28,9 @@ export type EquippedCosmetics = {
 export type PetEntry = {
   id: string;
   photoUri: string | null;
+  category: PetCategory | null;
   selectedEmoji: string | null;
+  color: string | null;
   name: string;
   confirmed: boolean;
   ratings: AttributeRatings;
@@ -55,7 +59,9 @@ export const STARTING_COINS = 50;
 export const makeEmptyEntry = (): PetEntry => ({
   id: `pet-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   photoUri: null,
+  category: null,
   selectedEmoji: null,
+  color: null,
   name: "",
   confirmed: false,
   ratings: { ...EMPTY_RATINGS },
@@ -72,6 +78,8 @@ type PetContextType = {
   spendCoins: (amount: number) => boolean;
   unlockedAreas: string[];
   unlockArea: (areaName: string, price: number) => boolean;
+  hasStorybook: boolean;
+  unlockStorybook: () => void;
 };
 
 const PetContext = createContext<PetContextType | undefined>(undefined);
@@ -86,6 +94,7 @@ export function PetProvider({
   const [unlockedAreas, setUnlockedAreas] = useState<string[]>([
     "Magical Forest",
   ]);
+  const [hasStorybook, setHasStorybook] = useState<boolean>(false);
 
   const earnCoins = (amount: number) => {
     setCoins((prev) => prev + amount);
@@ -97,7 +106,6 @@ export function PetProvider({
     return true;
   };
 
-  // Returns true if the area is (now) unlocked.
   const unlockArea = (areaName: string, price: number) => {
     if (unlockedAreas.includes(areaName)) return true;
 
@@ -106,6 +114,10 @@ export function PetProvider({
       setUnlockedAreas((prev) => [...prev, areaName]);
     }
     return success;
+  };
+
+  const unlockStorybook = () => {
+    setHasStorybook(true);
   };
 
   return (
@@ -118,6 +130,8 @@ export function PetProvider({
         spendCoins,
         unlockedAreas,
         unlockArea,
+        hasStorybook,
+        unlockStorybook,
       }}
     >
       {children}
