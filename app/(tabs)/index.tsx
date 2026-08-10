@@ -4,7 +4,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Image,
-  ImageBackground,
   Modal,
   PanResponder,
   Pressable,
@@ -204,11 +203,13 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.screen}>
-      <ImageBackground
-        source={require('../../assets/images/paw-background.png')}
-        style={StyleSheet.absoluteFillObject}
-        resizeMode="cover"
-      />
+      <View style={styles.fullScreenBackgroundWrap}>
+        <Image
+          source={require('../../assets/images/pawsona_day_forest_piskel_512.png')}
+          style={styles.fullScreenBackground}
+          resizeMode="contain"
+        />
+      </View>
 
       <ScrollView
         contentContainerStyle={[
@@ -595,6 +596,16 @@ const styles = StyleSheet.create({
 
   scrollContent: {
     flexGrow: 1,
+  },
+
+  fullScreenBackgroundWrap: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#4B9AD7',
+  },
+
+  fullScreenBackground: {
+    width: '100%',
+    height: '100%',
   },
 
   container: {
