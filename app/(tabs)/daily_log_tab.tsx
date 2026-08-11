@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 
+import OriginStoryWizard from "../../components/OriginStoryWizard";
 import { AvatarDisplay, findAvatarOption } from "../../components/ui/AvatarDisplay";
 import { PetEntry, usePets } from "../../context/PetInformation";
 import { useTabBarClearance } from "../../hooks/useTabBarClearance";
@@ -58,6 +59,7 @@ export default function DailyPawLog() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiFeedback, setAiFeedback] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [isOriginStoryVisible, setIsOriginStoryVisible] = useState(false);
 
   const handleAiSubmit = async () => {
     if (!selectedPet || !logText.trim() || isAnalyzing) return;
@@ -137,6 +139,7 @@ export default function DailyPawLog() {
     setLogText("");
     setAiFeedback(null);
     setAiError(null);
+    setIsOriginStoryVisible(false);
   };
 
   const updateBackstory = (petId: string, text: string) => {
@@ -177,12 +180,13 @@ export default function DailyPawLog() {
   );
 
   return (
-    <ScrollView
-      contentContainerStyle={[
-        styles.container,
-        { paddingBottom: tabBarClearance },
-      ]}
-    >
+    <>
+      <ScrollView
+        contentContainerStyle={[
+          styles.container,
+          { paddingBottom: tabBarClearance },
+        ]}
+      >
       <View style={styles.headerRow}>
         <View style={styles.pageLabelPill}>
           <Text style={styles.pageLabelPillText}>📖 Daily Paw Log</Text>
@@ -299,6 +303,22 @@ export default function DailyPawLog() {
                 value={selectedPet.backstory}
                 onChangeText={(text) => updateBackstory(selectedPet.id, text)}
               />
+
+              <Pressable
+                style={styles.originStoryButton}
+                onPress={() => setIsOriginStoryVisible(true)}
+              >
+                <MaterialCommunityIcons
+                  name="auto-fix"
+                  size={16}
+                  color={PARCHMENT}
+                />
+                <Text style={styles.originStoryButtonText}>
+                  {selectedPet.backstory
+                    ? "Rewrite with the Origin Story wizard"
+                    : "Create with the Origin Story wizard"}
+                </Text>
+              </Pressable>
             </View>
 
             <View style={styles.statsSection}>
@@ -375,7 +395,18 @@ export default function DailyPawLog() {
           </View>
         </View>
       )}
-    </ScrollView>
+      </ScrollView>
+
+      {selectedPet && (
+        <OriginStoryWizard
+          visible={isOriginStoryVisible}
+          petName={selectedPet.name}
+          petCategory={selectedPet.category}
+          onClose={() => setIsOriginStoryVisible(false)}
+          onComplete={(story) => updateBackstory(selectedPet.id, story)}
+        />
+      )}
+    </>
   );
 }
 
@@ -578,6 +609,25 @@ const styles = StyleSheet.create({
     minHeight: 60,
     textAlignVertical: "top",
     padding: 0,
+  },
+
+  originStoryButton: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: WOOD_MID,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    alignSelf: "flex-start",
+  },
+
+  originStoryButtonText: {
+    color: PARCHMENT,
+    fontWeight: "700",
+    fontSize: 13,
   },
 
   statsSection: {

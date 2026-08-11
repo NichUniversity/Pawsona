@@ -12,10 +12,12 @@ import {
   Text,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AvatarDisplay } from "../../components/ui/AvatarDisplay";
 import { PetEntry, usePets } from "../../context/PetInformation";
 import { ADVENTURES } from "../../data/adventure";
+import { PILL_TAB_BAR_STYLE } from "./_layout";
 
 type AreaName = keyof typeof ADVENTURES;
 
@@ -31,9 +33,10 @@ const AREA_BACKGROUNDS: Partial<Record<AreaName, ImageSourcePropType>> = {
   "Magical Forest": require("../../assets/backgrounds/EnchantedForestCartoon.png"),
 };
 
-const TRANSITION_FADE_IN_MS = 450;
-const TRANSITION_HOLD_MS = 500;
-const TRANSITION_FADE_OUT_MS = 500;
+const TRANSITION_FADE_IN_MS = 900;
+const TRANSITION_TEXT_SCALE_MS = 650;
+const TRANSITION_HOLD_MS = 950;
+const TRANSITION_FADE_OUT_MS = 850;
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const FIREFLY_COUNT = 12;
@@ -140,6 +143,7 @@ function FireflyField({ fireflies }: { fireflies: FireflyConfig[] }) {
 export default function Adventure() {
   const router = useRouter();
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { pets, coins, unlockedAreas, unlockArea, unlockStorybook } =
     usePets();
 
@@ -147,33 +151,77 @@ export default function Adventure() {
   const [selectedArea, setSelectedArea] = useState<AreaName | null>(null);
   const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
 
+  // Reset target for the tab bar — matches the "bottom" calculation in
+  // _layout.tsx's screenOptions exactly, so re-applying this looks
+  // identical to the bar's normal resting state instead of resetting to
+  // `undefined` (which drops the pill styling entirely and falls back to
+  // the default flat MaterialTopTabs bar anchored to the screen edge).
+  const restoredTabBarStyle = useMemo(
+    () => ({
+      ...PILL_TAB_BAR_STYLE,
+      bottom: insets.bottom > 0 ? insets.bottom + 8 : 16,
+    }),
+    [insets.bottom]
+  );
+
+  // Drives a gradual fade instead of an instant show/hide. We can't just
+  // hand an Animated.Value straight to navigation.setOptions (tabBarStyle
+  // is read as a plain style object by the navigator, not passed through
+  // to an Animated component), so a JS-driven listener recomputes a plain
+  // numeric opacity every frame and re-applies it via setOptions.
+  const tabBarOpacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const listenerId = tabBarOpacity.addListener(({ value }) => {
+      navigation.setOptions({
+        tabBarStyle: {
+          ...restoredTabBarStyle,
+          opacity: value,
+          // Only pull it out of layout/touch once it's essentially invisible,
+          // so the fade gets to finish instead of being cut off.
+          ...(value <= 0.01 ? { display: "none" } : null),
+        },
+      });
+    });
+
+    return () => tabBarOpacity.removeListener(listenerId);
+  }, [navigation, restoredTabBarStyle, tabBarOpacity]);
+
   // Hides the floating bottom tab bar only once the player has actually
   // entered an area's story (selectedArea set), not just when the Adventure
   // tab itself is focused — so swiping to the pet/area picker still shows
-  // the tab bar, and it disappears when the adventure story begins.
-  // adventure_tab is a direct child screen of the Tabs navigator, so
-  // `navigation` here is already scoped to that Tabs navigator — no
-  // getParent() needed.
+  // the tab bar, and it fades out gradually once the adventure story begins.
   useEffect(() => {
-    navigation.setOptions({
-      tabBarStyle: selectedArea ? { display: "none" } : undefined,
-    });
-  }, [selectedArea, navigation]);
+    Animated.timing(tabBarOpacity, {
+      toValue: selectedArea ? 0 : 1,
+      duration: 350,
+      useNativeDriver: false, // driving a JS listener, not a native style prop
+    }).start();
+  }, [selectedArea, tabBarOpacity]);
 
-  // Safety net: always restore the tab bar when leaving this tab entirely
-  // (e.g. swiping away mid-adventure), regardless of selectedArea state,
-  // since the screen stays mounted and its state persists across tab swaps.
+  // Safety net: always restore the tab bar instantly when leaving this tab
+  // entirely (e.g. swiping away mid-adventure), regardless of selectedArea
+  // state or any in-flight fade, since the screen stays mounted and its
+  // state persists across tab swaps. adventure_tab is a direct child screen
+  // of the Tabs navigator, so `navigation` here is already scoped to that
+  // Tabs navigator — no getParent() needed.
   useFocusEffect(
     useCallback(() => {
       return () => {
-        navigation.setOptions({ tabBarStyle: undefined });
+        tabBarOpacity.stopAnimation();
+        tabBarOpacity.setValue(1);
+        navigation.setOptions({ tabBarStyle: restoredTabBarStyle });
       };
-    }, [navigation])
+    }, [navigation, restoredTabBarStyle, tabBarOpacity])
   );
 
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [transitionLabel, setTransitionLabel] = useState("");
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  // Starts the "Entering {areaName}..." text slightly small and scales it
+  // up to full size once the screen is fully black, so the label builds
+  // into place during the hold instead of just popping in at full size.
+  const transitionTextScale = useRef(new Animated.Value(0.82)).current;
   const fireflies = useMemo(() => buildFireflies(), []);
 
   const currentStory =
@@ -192,6 +240,7 @@ export default function Adventure() {
     setTransitionLabel(`Entering ${areaName}...`);
     setIsTransitioning(true);
     fadeAnim.setValue(0);
+    transitionTextScale.setValue(0.82);
 
     Animated.timing(fadeAnim, {
       toValue: 1,
@@ -199,6 +248,12 @@ export default function Adventure() {
       useNativeDriver: true,
     }).start(() => {
       onMidpoint();
+
+      Animated.timing(transitionTextScale, {
+        toValue: 1,
+        duration: TRANSITION_TEXT_SCALE_MS,
+        useNativeDriver: true,
+      }).start();
 
       Animated.timing(fadeAnim, {
         toValue: 0,
@@ -508,7 +563,14 @@ export default function Adventure() {
           pointerEvents="auto"
           style={[styles.transitionOverlay, { opacity: fadeAnim }]}
         >
-          <Text style={styles.transitionText}>{transitionLabel}</Text>
+          <Animated.Text
+            style={[
+              styles.transitionText,
+              { transform: [{ scale: transitionTextScale }] },
+            ]}
+          >
+            {transitionLabel}
+          </Animated.Text>
         </Animated.View>
       )}
     </View>
