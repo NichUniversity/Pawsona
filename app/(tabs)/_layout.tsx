@@ -15,6 +15,25 @@ import { PawsonaTabIcon } from '../../components/ui/pawsona-tab-icons';
 
 const { Navigator } = createMaterialTopTabNavigator();
 
+// Shared with adventure_tab.tsx: whenever a screen needs to reset the tab
+// bar back to its normal floating-pill look via navigation.setOptions, it
+// must re-apply this object rather than passing `undefined` — undefined
+// clobbers the pill styling below instead of falling back to it.
+export const PILL_TAB_BAR_STYLE = {
+  position: 'absolute' as const,
+  left: 16,
+  right: 16,
+  height: 58,
+  borderRadius: 24,
+  backgroundColor: 'rgba(65, 63, 63, 0.85)',
+  borderTopWidth: 0,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.15,
+  shadowRadius: 12,
+  elevation: 8,
+};
+
 export const Tabs = withLayoutContext <
   MaterialTopTabNavigationOptions,
   typeof Navigator,
@@ -77,19 +96,8 @@ export default function TabLayout() {
           marginTop: 2,
         },
         tabBarStyle: {
-          position: 'absolute',
-          left: 16,
-          right: 16,
+          ...PILL_TAB_BAR_STYLE,
           bottom: insets.bottom > 0 ? insets.bottom + 8 : 16,
-          height: 58,
-          borderRadius: 24,
-          backgroundColor: 'rgba(65, 63, 63, 0.85)',
-          borderTopWidth: 0,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.15,
-          shadowRadius: 12,
-          elevation: 8,
         },
       }}
     >

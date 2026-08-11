@@ -14,9 +14,11 @@ import {
   COSMETICS,
   CosmeticCategory,
 } from "../../data/cosmetics";
+import { useTabBarClearance } from "../../hooks/useTabBarClearance";
 
 export default function StoreTab() {
   const { pets, setPets, coins, spendCoins } = usePets();
+  const tabBarClearance = useTabBarClearance();
 
   const [selectedPet, setSelectedPet] = useState<PetEntry | null>(null);
   const [activeCategory, setActiveCategory] =
@@ -62,7 +64,12 @@ export default function StoreTab() {
   );
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView
+      contentContainerStyle={[
+        styles.container,
+        { paddingBottom: tabBarClearance },
+      ]}
+    >
       <Text style={styles.title}>🛍️ Pet Store</Text>
 
       <View style={styles.coinBadge}>

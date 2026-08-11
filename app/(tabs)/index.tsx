@@ -4,7 +4,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Image,
-  ImageBackground,
   Modal,
   PanResponder,
   Pressable,
@@ -29,6 +28,7 @@ import {
   PET_CATEGORIES,
   PetCategory,
 } from '../../data/petcategories';
+import { useTabBarClearance } from '../../hooks/useTabBarClearance';
 
 const ATTRIBUTES = [
   { key: 'intelligence', label: 'Intelligence' },
@@ -72,6 +72,7 @@ function PawRating({ value }: { value: number }) {
 
 export default function HomeScreen() {
   const { pets: entries, setPets: setEntries } = usePets();
+  const tabBarClearance = useTabBarClearance();
 
   const [categoryModalId, setCategoryModalId] = useState<string | null>(null);
   const [avatarModalState, setAvatarModalState] = useState<{
@@ -202,14 +203,19 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.screen}>
-      <ImageBackground
-        source={require('../../assets/images/paw-background.png')}
-        style={StyleSheet.absoluteFillObject}
-        resizeMode="cover"
-      />
+      <View style={styles.fullScreenBackgroundWrap}>
+        <Image
+          source={require('../../assets/images/spring_day.png')}
+          style={styles.fullScreenBackground}
+          resizeMode="contain"
+        />
+      </View>
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: tabBarClearance },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.container}>
@@ -590,6 +596,16 @@ const styles = StyleSheet.create({
 
   scrollContent: {
     flexGrow: 1,
+  },
+
+  fullScreenBackgroundWrap: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#5FBEFC',
+  },
+
+  fullScreenBackground: {
+    width: '100%',
+    height: '100%',
   },
 
   container: {
