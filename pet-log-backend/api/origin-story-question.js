@@ -5,10 +5,10 @@
 //
 // Generates the next interview question for a pet's Origin Story wizard
 // (Daily Paw Log tab), building on whatever the owner has answered so far.
-//   Request:  { petName: string, category: string, qaHistory: { question: string, answer: string }[] }
+//   Request:  { petName: string, category: string, mode: "true" | "legend", qaHistory: { question: string, answer: string }[] }
 //   Response: { question: string }
 
-const SYSTEM_PROMPT = `You are conducting a warm, gentle interview with a pet owner to help them build a heartfelt origin story for their pet, for a family pet-bonding app.
+const TRUE_SYSTEM_PROMPT = `You are conducting a warm, gentle interview with a pet owner to help them build a heartfelt origin story for their pet, for a family pet-bonding app.
 
 You'll be given the pet's name, species/category, and the questions asked so far along with the owner's answers.
 
@@ -18,6 +18,21 @@ Write ONE new follow-up question that:
 - Explores a NEW angle not already covered by earlier questions (e.g. personality quirks, a favorite memory, how they met, a funny habit, what makes the bond special).
 - Is under 22 words.
 - Speaks directly to the owner ("you"), and can reference the pet by name.
+
+Respond with ONLY a JSON object, no markdown fences, no extra text, in exactly this shape:
+{"question": "string"}`;
+
+const LEGEND_SYSTEM_PROMPT = `You are conducting a playful, imaginative interview with a pet owner who believes their pet secretly lived an extraordinary past life (as a ruler, warrior, explorer, magical creature, or something else entirely) before becoming their everyday companion. You're helping them build that legend, for a family pet-bonding app.
+
+You'll be given the pet's name, species/category, and the questions asked so far along with the owner's imaginative answers.
+
+Write ONE new follow-up question that:
+- Builds naturally on the imaginative world/persona already established (reference specific details when it makes sense).
+- Is playful and whimsical, and invites more imaginative worldbuilding — never yes/no.
+- Explores a NEW angle not already covered (e.g. their title or role, allies or rivals, a legendary feat, how their reign or adventure ended, a trait that carried over into today).
+- Is under 22 words.
+- Speaks directly to the owner ("you"), and can reference the pet by name.
+- Keeps the setting an ORIGINAL, generic fantasy world — never real historical figures, real countries/nations, or existing copyrighted fictional worlds or characters.
 
 Respond with ONLY a JSON object, no markdown fences, no extra text, in exactly this shape:
 {"question": "string"}`;
@@ -40,11 +55,15 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { petName, category, qaHistory } = req.body || {};
+  const { petName, category, mode, qaHistory } = req.body || {};
 
   if (!Array.isArray(qaHistory) || qaHistory.length === 0) {
     return res.status(400).json({ error: "qaHistory is required" });
   }
+
+  // Defaults to "true" for backward compatibility with older app builds
+  // that don't send a mode yet.
+  const systemPrompt = mode === "legend" ? LEGEND_SYSTEM_PROMPT : TRUE_SYSTEM_PROMPT;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -72,7 +91,7 @@ module.exports = async (req, res) => {
       body: JSON.stringify({
         model: "claude-sonnet-5",
         max_tokens: 200,
-        system: SYSTEM_PROMPT,
+        system: systemPrompt,
         messages: [
           {
             role: "user",

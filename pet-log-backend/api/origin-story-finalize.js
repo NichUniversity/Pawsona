@@ -5,10 +5,10 @@
 //
 // Writes the final Origin Story backstory (Daily Paw Log tab) from a
 // completed interview.
-//   Request:  { petName: string, category: string, qaHistory: { question: string, answer: string }[] }
+//   Request:  { petName: string, category: string, mode: "true" | "legend", qaHistory: { question: string, answer: string }[] }
 //   Response: { backstory: string }
 
-const SYSTEM_PROMPT = `You are a warm, imaginative storyteller writing a pet's origin story/backstory for a family pet-bonding app. You'll be given an owner's answers from a short interview about their pet.
+const TRUE_SYSTEM_PROMPT = `You are a warm, imaginative storyteller writing a pet's origin story/backstory for a family pet-bonding app. You'll be given an owner's answers from a short interview about their pet.
 
 Write a backstory that:
 - Is EXACTLY 4 paragraphs, separated by a single blank line (\\n\\n between paragraphs, no other formatting, no markdown, no headers, no bullet points).
@@ -16,6 +16,20 @@ Write a backstory that:
 - Each paragraph is roughly 60-100 words.
 - Is written in third person about the pet, suitable for a family audience of all ages.
 - Reads as a cohesive narrative arc: where/how the bond began, what the pet is like, a meaningful shared moment, and what makes their bond special going forward.
+
+Respond with ONLY a JSON object, no markdown fences, no extra text, in exactly this shape:
+{"backstory": "string with \\n\\n between paragraphs"}`;
+
+const LEGEND_SYSTEM_PROMPT = `You are a whimsical storyteller writing a pet's secret "past life" legend for a family pet-bonding app — the owner has imagined their pet secretly lived an extraordinary past life (as a ruler, warrior, explorer, magical creature, etc.) before becoming their everyday companion. You'll be given the owner's imaginative answers from a short interview.
+
+Write a legend that:
+- Is EXACTLY 4 paragraphs, separated by a single blank line (\\n\\n between paragraphs, no other formatting, no markdown, no headers, no bullet points).
+- Is playful, epic, and a little tongue-in-cheek in tone — like a beloved storybook myth, never scary or dark.
+- Weaves in the SPECIFIC imaginative details the owner gave (their pet's role, world, allies, feats) rather than generic fantasy filler.
+- Each paragraph is roughly 60-100 words.
+- Is written in third person, suitable for a family audience of all ages.
+- Reads as a cohesive myth arc: their legendary rise, their reign or greatest feat, how it all came to an end (leading to their "rebirth" as today's pet), and a fun wink at how their old legendary traits still show up in daily life today.
+- Keeps the setting an ORIGINAL, generic fantasy world — never real historical figures, real countries/nations, or existing copyrighted fictional worlds or characters.
 
 Respond with ONLY a JSON object, no markdown fences, no extra text, in exactly this shape:
 {"backstory": "string with \\n\\n between paragraphs"}`;
@@ -38,11 +52,15 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { petName, category, qaHistory } = req.body || {};
+  const { petName, category, mode, qaHistory } = req.body || {};
 
   if (!Array.isArray(qaHistory) || qaHistory.length === 0) {
     return res.status(400).json({ error: "qaHistory is required" });
   }
+
+  // Defaults to "true" for backward compatibility with older app builds
+  // that don't send a mode yet.
+  const systemPrompt = mode === "legend" ? LEGEND_SYSTEM_PROMPT : TRUE_SYSTEM_PROMPT;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -70,7 +88,7 @@ module.exports = async (req, res) => {
       body: JSON.stringify({
         model: "claude-sonnet-5",
         max_tokens: 900,
-        system: SYSTEM_PROMPT,
+        system: systemPrompt,
         messages: [
           {
             role: "user",
