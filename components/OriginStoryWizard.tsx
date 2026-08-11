@@ -1,17 +1,17 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Animated,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Animated,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 
 import { usePets } from "../context/PetInformation";
@@ -26,9 +26,9 @@ const PARCHMENT = "#F6E8C6";
 const GOLD = "#D9A441";
 
 // Total questions in the interview, including the fixed opener below.
-// Each answer feeds into generating the next question, and all five feed
+// Each answer feeds into generating the next question, and all four feed
 // into the final backstory.
-const TOTAL_QUESTIONS = 5;
+const TOTAL_QUESTIONS = 4;
 
 // The first "Write it differently" is free per completed interview. Every
 // regenerate after that costs coins — sized similarly to the cheapest
@@ -40,13 +40,23 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
 // Used if the "next question" request fails, so a hiccup on one question
 // doesn't stall the whole interview. Cycled through in order, skipping any
 // that would repeat a question already asked.
-const FALLBACK_QUESTIONS = [
+const FALLBACK_QUESTIONS_TRUE = [
   "What's one word you'd use to describe their personality?",
   "Is there a funny habit or quirk that's just so 'them'?",
   "What's a small moment together that always makes you smile?",
   "What do they do that makes you feel most loved?",
   "If they could talk, what do you think they'd say most often?",
 ];
+
+const FALLBACK_QUESTIONS_LEGEND = [
+  "What title do you imagine they held back then — ruler, warrior, wizard, something else?",
+  "Who might have been loyal to them, or stood by their side?",
+  "What legendary feat are they remembered for?",
+  "What finally led to their tale becoming... an ordinary pet?",
+  "What's one trait they've clearly carried over from that past life?",
+];
+
+type OriginStoryMode = "true" | "legend";
 
 type QAPair = { question: string; answer: string };
 
@@ -70,7 +80,12 @@ function categoryLabel(category: PetCategory | null): string {
   return PET_CATEGORIES.find((c) => c.key === category)?.label ?? "pet";
 }
 
-function firstQuestion(name: string): string {
+function firstQuestion(mode: OriginStoryMode, name: string): string {
+  if (mode === "legend") {
+    return `If ${
+      name || "your pet"
+    } secretly lived an epic past life, what kind of world do you imagine — a royal kingdom, ancient wilderness, distant galaxy, something else?`;
+  }
   return `In a few words, how did ${
     name || "your pet"
   } first come into your life?`;
@@ -86,6 +101,7 @@ export default function OriginStoryWizard({
   const { coins, spendCoins } = usePets();
 
   const [step, setStep] = useState<WizardStep>("intro");
+  const [mode, setMode] = useState<OriginStoryMode | null>(null);
   const [qaHistory, setQaHistory] = useState<QAPair[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState("");
   const [answerText, setAnswerText] = useState("");
@@ -102,6 +118,7 @@ export default function OriginStoryWizard({
   useEffect(() => {
     if (visible) {
       setStep("intro");
+      setMode(null);
       setQaHistory([]);
       setCurrentQuestion("");
       setAnswerText("");
@@ -118,8 +135,9 @@ export default function OriginStoryWizard({
     }
   }, [visible, fadeAnim]);
 
-  const startInterview = () => {
-    setCurrentQuestion(firstQuestion(petName));
+  const startInterview = (selectedMode: OriginStoryMode) => {
+    setMode(selectedMode);
+    setCurrentQuestion(firstQuestion(selectedMode, petName));
     setStep("question");
   };
 
@@ -135,6 +153,7 @@ export default function OriginStoryWizard({
           body: JSON.stringify({
             petName: petName || "your pet",
             category: categoryLabel(petCategory),
+            mode,
             qaHistory: history,
           }),
         }
@@ -162,10 +181,12 @@ export default function OriginStoryWizard({
   };
 
   const pickFallbackQuestion = (history: QAPair[]) => {
+    const pool =
+      mode === "legend" ? FALLBACK_QUESTIONS_LEGEND : FALLBACK_QUESTIONS_TRUE;
     const askedAlready = new Set(history.map((qa) => qa.question));
     return (
-      FALLBACK_QUESTIONS.find((q) => !askedAlready.has(q)) ??
-      FALLBACK_QUESTIONS[history.length % FALLBACK_QUESTIONS.length]
+      pool.find((q) => !askedAlready.has(q)) ??
+      pool[history.length % pool.length]
     );
   };
 
@@ -182,6 +203,7 @@ export default function OriginStoryWizard({
           body: JSON.stringify({
             petName: petName || "your pet",
             category: categoryLabel(petCategory),
+            mode,
             qaHistory: history,
           }),
         }
@@ -297,11 +319,32 @@ export default function OriginStoryWizard({
               </Text>
               <Text style={styles.bodyText}>
                 Answer a few quick questions and we'll weave them into a
-                heartfelt backstory for {petName || "your pet"} — something
-                that captures how the two of you found each other.
+                backstory for {petName || "your pet"}. Which kind of story do
+                you want to tell?
               </Text>
-              <Pressable style={styles.primaryButton} onPress={startInterview}>
-                <Text style={styles.primaryButtonText}>Let's begin</Text>
+
+              <Pressable
+                style={styles.modeCard}
+                onPress={() => startInterview("true")}
+              >
+                <Text style={styles.modeCardEmoji}>📸</Text>
+                <Text style={styles.modeCardTitle}>True Story</Text>
+                <Text style={styles.modeCardSubtitle}>
+                  A heartfelt story about how you two actually found each
+                  other.
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={styles.modeCard}
+                onPress={() => startInterview("legend")}
+              >
+                <Text style={styles.modeCardEmoji}>👑</Text>
+                <Text style={styles.modeCardTitle}>Secret Legend</Text>
+                <Text style={styles.modeCardSubtitle}>
+                  A whimsical myth about the epic past life {petName || "your pet"}{" "}
+                  secretly lived before becoming your pet.
+                </Text>
               </Pressable>
             </View>
           )}
@@ -384,7 +427,13 @@ export default function OriginStoryWizard({
           {step === "result" && backstory && (
             <View>
               <Text style={styles.title}>
-                {petName ? `${petName}'s Story` : "The Story"}
+                {mode === "legend"
+                  ? petName
+                    ? `${petName}'s Legend`
+                    : "The Legend"
+                  : petName
+                  ? `${petName}'s Story`
+                  : "The Story"}
               </Text>
 
               <ScrollView style={styles.resultScroll}>
@@ -520,6 +569,36 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: "#E3CFA0",
+  },
+
+  modeCard: {
+    width: "100%",
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: "#E3CFA0",
+    padding: 16,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+
+  modeCardEmoji: {
+    fontSize: 28,
+    marginBottom: 6,
+  },
+
+  modeCardTitle: {
+    color: WOOD_DARK,
+    fontWeight: "800",
+    fontSize: 16,
+    marginBottom: 4,
+  },
+
+  modeCardSubtitle: {
+    color: "#6B4A28",
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: "center",
   },
 
   primaryButton: {
