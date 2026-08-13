@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 
 import { AvatarDisplay, findAvatarOption } from '../../components/ui/AvatarDisplay';
+import { PawPatternBackground } from '../../components/ui/PawPatternBackground';
 import {
   AttributeRatings,
   EMPTY_RATINGS,
@@ -203,13 +204,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.fullScreenBackgroundWrap}>
-        <Image
-          source={require('../../assets/images/spring_day.png')}
-          style={styles.fullScreenBackground}
-          resizeMode="contain"
-        />
-      </View>
+      <PawPatternBackground backgroundColor="#2E86DE" />
 
       <ScrollView
         contentContainerStyle={[
@@ -596,16 +591,6 @@ const styles = StyleSheet.create({
 
   scrollContent: {
     flexGrow: 1,
-  },
-
-  fullScreenBackgroundWrap: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#5FBEFC',
-  },
-
-  fullScreenBackground: {
-    width: '100%',
-    height: '100%',
   },
 
   container: {

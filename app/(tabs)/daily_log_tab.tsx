@@ -13,6 +13,7 @@ import {
 
 import OriginStoryWizard from "../../components/OriginStoryWizard";
 import { AvatarDisplay, findAvatarOption } from "../../components/ui/AvatarDisplay";
+import { PawPatternBackground } from "../../components/ui/PawPatternBackground";
 import { PetEntry, usePets } from "../../context/PetInformation";
 import { useTabBarClearance } from "../../hooks/useTabBarClearance";
 
@@ -180,10 +181,13 @@ export default function DailyPawLog() {
   );
 
   return (
-    <>
+    <View style={{ flex: 1 }}>
+      <PawPatternBackground backgroundColor={WOOD_DARK} />
+
       <ScrollView
         contentContainerStyle={[
           styles.container,
+          styles.containerTransparent,
           { paddingBottom: tabBarClearance },
         ]}
       >
@@ -406,7 +410,7 @@ export default function DailyPawLog() {
           onComplete={(story) => updateBackstory(selectedPet.id, story)}
         />
       )}
-    </>
+    </View>
   );
 }
 
@@ -421,6 +425,10 @@ const styles = StyleSheet.create({
     backgroundColor: WOOD_DARK,
     padding: 14,
     paddingTop: 52,
+  },
+
+  containerTransparent: {
+    backgroundColor: "transparent",
   },
 
   headerRow: {

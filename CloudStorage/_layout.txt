@@ -74,7 +74,7 @@ export default function TabLayout() {
         animationEnabled: true,
         
         tabBarShowIcon: true,
-        tabBarShowLabel: false,
+        tabBarShowLabel: true,
         tabBarIndicatorStyle: { height: 0 },
         tabBarPressColor: 'transparent',
         tabBarPressOpacity: 1,
@@ -89,6 +89,12 @@ export default function TabLayout() {
           alignItems: 'center',
           height: '100%',
         },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+          textTransform: 'none',
+          marginTop: 2,
+        },
         tabBarStyle: {
           ...PILL_TAB_BAR_STYLE,
           bottom: insets.bottom > 0 ? insets.bottom + 8 : 16,
@@ -100,7 +106,7 @@ export default function TabLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color }) => (
-            <PawsonaTabIcon name="home" color={color} size={32} />
+            <PawsonaTabIcon name="home" color={color} size={26} />
           ),
         }}
       />
@@ -110,7 +116,7 @@ export default function TabLayout() {
         options={{
           title: 'Daily Paw Log',
           tabBarIcon: ({ color }) => (
-            <PawsonaTabIcon name="daily-log" color={color} size={32} />
+            <PawsonaTabIcon name="daily-log" color={color} size={26} />
           ),
         }}
       />
@@ -120,7 +126,7 @@ export default function TabLayout() {
         options={{
           title: 'Mini Games',
           tabBarIcon: ({ color }) => (
-            <PawsonaTabIcon name="minigames" color={color} size={32} />
+            <PawsonaTabIcon name="minigames" color={color} size={26} />
           ),
         }}
       />
@@ -130,7 +136,7 @@ export default function TabLayout() {
         options={{
           title: 'Paw Shop',
           tabBarIcon: ({ color }) => (
-            <PawsonaTabIcon name="store" color={color} size={32} />
+            <PawsonaTabIcon name="store" color={color} size={26} />
           ),
         }}
       />
@@ -140,7 +146,7 @@ export default function TabLayout() {
         options={{
           title: 'Adventure',
           tabBarIcon: ({ color }) => (
-            <PawsonaTabIcon name="adventure" color={color} size={32} />
+            <PawsonaTabIcon name="adventure" color={color} size={26} />
           ),
         }}
       />

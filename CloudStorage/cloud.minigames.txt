@@ -9,7 +9,9 @@ import {
   View,
 } from "react-native";
 
+import { ScrollingLayer } from "../../components/ui/ScrollingLayer";
 import { usePets } from "../../context/PetInformation";
+import { useTabBarClearance } from "../../hooks/useTabBarClearance";
 
 type GameId = "simon" | "minesweeper" | "parkour" | "parkourFP";
 
@@ -53,9 +55,15 @@ const GAMES: {
 export default function Minigames() {
   const { coins } = usePets();
   const [activeGame, setActiveGame] = useState<GameId | "menu">("menu");
+  const tabBarClearance = useTabBarClearance();
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView
+      contentContainerStyle={[
+        styles.container,
+        { paddingBottom: tabBarClearance },
+      ]}
+    >
       <Text style={styles.title}>🎮 Mini Games</Text>
 
       <View style={styles.coinBadge}>
@@ -906,6 +914,11 @@ const FP_MAX_RATE = 1.15;
 const FP_RATE_RAMP_PER_POINT = 0.003;
 const FP_SCORE_PER_PROGRESS = 30;
 
+// Parallax scenery layers — aspect ratio matches the generated PNGs
+// (far_treeline.png is 512x110, near_bushes.png is 384x74).
+const FP_FAR_LAYER_HEIGHT = Math.round(FP_TRACK_WIDTH * (110 / 512));
+const FP_NEAR_LAYER_HEIGHT = Math.round(FP_TRACK_WIDTH * (74 / 384));
+
 type FPObstacle = {
   id: number;
   type: "hurdle" | "barrier";
@@ -1237,6 +1250,26 @@ function PupParkourFPGame({ onExit }: { onExit: () => void }) {
               <View style={styles.fpFogFar} />
               <View style={styles.fpFogNear} />
               <View style={styles.fpHorizonLine} />
+
+              <View style={styles.fpFarLayer}>
+                <ScrollingLayer
+                  source={require("../../assets/backgrounds/far_treeline.png")}
+                  width={FP_TRACK_WIDTH}
+                  height={FP_FAR_LAYER_HEIGHT}
+                  speed={18}
+                  running={gameState === "playing"}
+                />
+              </View>
+
+              <View style={styles.fpNearLayer}>
+                <ScrollingLayer
+                  source={require("../../assets/backgrounds/near_bushes.png")}
+                  width={FP_TRACK_WIDTH}
+                  height={FP_NEAR_LAYER_HEIGHT}
+                  speed={52}
+                  running={gameState === "playing"}
+                />
+              </View>
 
               <View
                 style={lineBetween(
@@ -1764,6 +1797,18 @@ const styles = StyleSheet.create({
     width: FP_TRACK_WIDTH,
     height: 2,
     backgroundColor: "#5C9A45",
+  },
+
+  fpFarLayer: {
+    position: "absolute",
+    left: 0,
+    top: FP_HORIZON_Y - FP_FAR_LAYER_HEIGHT * 0.6,
+  },
+
+  fpNearLayer: {
+    position: "absolute",
+    left: 0,
+    top: FP_HORIZON_Y + 30,
   },
 
   fpHurdle: {
