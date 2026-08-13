@@ -4,7 +4,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Image,
-  ImageBackground,
   Modal,
   PanResponder,
   Pressable,
@@ -15,6 +14,7 @@ import {
   View,
 } from 'react-native';
 
+import { AvatarDisplay, findAvatarOption } from '../../components/ui/AvatarDisplay';
 import {
   AttributeRatings,
   EMPTY_RATINGS,
@@ -28,6 +28,7 @@ import {
   PET_CATEGORIES,
   PetCategory,
 } from '../../data/petcategories';
+import { useTabBarClearance } from '../../hooks/useTabBarClearance';
 
 const ATTRIBUTES = [
   { key: 'intelligence', label: 'Intelligence' },
@@ -54,17 +55,6 @@ function categoryMeta(category: PetCategory) {
   return PET_CATEGORIES.find((c) => c.key === category)!;
 }
 
-function findAvatarOption(
-  category: PetCategory | null,
-  emoji: string | null,
-  color: string | null
-): AvatarOption | undefined {
-  if (!category || !emoji) return undefined;
-  return AVATAR_OPTIONS[category].find(
-    (opt) => opt.emoji === emoji && opt.color === color
-  );
-}
-
 function PawRating({ value }: { value: number }) {
   return (
     <View style={styles.pawsRow}>
@@ -82,6 +72,7 @@ function PawRating({ value }: { value: number }) {
 
 export default function HomeScreen() {
   const { pets: entries, setPets: setEntries } = usePets();
+  const tabBarClearance = useTabBarClearance();
 
   const [categoryModalId, setCategoryModalId] = useState<string | null>(null);
   const [avatarModalState, setAvatarModalState] = useState<{
@@ -212,14 +203,19 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.screen}>
-      <ImageBackground
-        source={require('../../assets/images/paw-background.png')}
-        style={StyleSheet.absoluteFillObject}
-        resizeMode="cover"
-      />
+      <View style={styles.fullScreenBackgroundWrap}>
+        <Image
+          source={require('../../assets/images/spring_day.png')}
+          style={styles.fullScreenBackground}
+          resizeMode="contain"
+        />
+      </View>
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: tabBarClearance },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.container}>
@@ -262,9 +258,12 @@ export default function HomeScreen() {
                           { backgroundColor: currentEntry.color ?? '#fff' },
                         ]}
                       >
-                        <Text style={styles.sideAvatarEmoji}>
-                          {currentEntry.selectedEmoji}
-                        </Text>
+                        <AvatarDisplay
+                          category={currentEntry.category}
+                          emoji={currentEntry.selectedEmoji}
+                          color={currentEntry.color}
+                          size={28}
+                        />
                       </View>
                     )}
 
@@ -314,8 +313,8 @@ export default function HomeScreen() {
                         styles.arrowButtonLeft,
                         currentIndex === 0 && styles.arrowButtonDisabled,
                       ]}
-                    >
-                      <MaterialCommunityIcons
+                      >
+                        <MaterialCommunityIcons
                         name="chevron-left"
                         size={22}
                         color="#fff"
@@ -415,10 +414,15 @@ export default function HomeScreen() {
                           },
                         ]}
                       >
-                        <Text style={styles.smallAvatarEmoji}>
-                          {currentEntry.selectedEmoji ??
-                            categoryMeta(currentEntry.category).emoji}
-                        </Text>
+                        <AvatarDisplay
+                          category={currentEntry.category}
+                          emoji={
+                            currentEntry.selectedEmoji ??
+                            categoryMeta(currentEntry.category).emoji
+                          }
+                          color={currentEntry.color}
+                          size={48}
+                        />
                       </View>
 
                       <View style={styles.dropdownWrapper}>
@@ -559,9 +563,12 @@ export default function HomeScreen() {
                               { backgroundColor: option.color },
                             ]}
                           >
-                            <Text style={styles.avatarSwatchEmoji}>
-                              {option.emoji}
-                            </Text>
+                            <AvatarDisplay
+                              category={avatarModalState.category}
+                              emoji={option.emoji}
+                              color={option.color}
+                              size={28}
+                            />
                           </View>
 
                           <Text style={styles.dropdownItemText}>
@@ -589,6 +596,16 @@ const styles = StyleSheet.create({
 
   scrollContent: {
     flexGrow: 1,
+  },
+
+  fullScreenBackgroundWrap: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#5FBEFC',
+  },
+
+  fullScreenBackground: {
+    width: '100%',
+    height: '100%',
   },
 
   container: {
