@@ -32,6 +32,7 @@ export type PetEntry = {
   selectedEmoji: string | null;
   color: string | null;
   name: string;
+  backstory: string;
   confirmed: boolean;
   ratings: AttributeRatings;
   logs: PawLogEntry[];
@@ -63,6 +64,7 @@ export const makeEmptyEntry = (): PetEntry => ({
   selectedEmoji: null,
   color: null,
   name: "",
+  backstory: "",
   confirmed: false,
   ratings: { ...EMPTY_RATINGS },
   logs: [],
