@@ -15,7 +15,6 @@ import {
 } from 'react-native';
 
 import { AvatarDisplay, findAvatarOption } from '../../components/ui/AvatarDisplay';
-import { PawPatternBackground } from '../../components/ui/PawPatternBackground';
 import {
   AttributeRatings,
   EMPTY_RATINGS,
@@ -204,7 +203,11 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.screen}>
-      <PawPatternBackground backgroundColor="#2E86DE" />
+      <Image
+        source={require('../../assets/images/home_paw_pattern.png')}
+        style={styles.homeBackground}
+        resizeMode="cover"
+      />
 
       <ScrollView
         contentContainerStyle={[
@@ -587,6 +590,13 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
+  },
+
+  // Full-bleed custom artwork behind the Home tab, cropped to cover the
+  // screen regardless of device size. Sits below the ScrollView, same as
+  // PawPatternBackground does on the other tabs.
+  homeBackground: {
+    ...StyleSheet.absoluteFillObject,
   },
 
   scrollContent: {
