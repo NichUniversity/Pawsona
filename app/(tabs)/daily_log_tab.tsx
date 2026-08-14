@@ -181,6 +181,11 @@ export default function DailyPawLog() {
 
   return (
     <View style={{ flex: 1 }}>
+      <Image
+        source={require("../../assets/images/pawprintbackground2.png")}
+        style={styles.background}
+        resizeMode="cover"
+      />
 
       <ScrollView
         contentContainerStyle={[
@@ -418,6 +423,10 @@ const PARCHMENT = "#F6E8C6";
 const GOLD = "#D9A441";
 
 const styles = StyleSheet.create({
+  background: {
+    ...StyleSheet.absoluteFillObject,
+  },
+
   container: {
     flexGrow: 1,
     backgroundColor: WOOD_DARK,

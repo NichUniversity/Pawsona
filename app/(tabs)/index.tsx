@@ -1,852 +1,936 @@
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
-  Dimensions,
   Image,
-  ImageSourcePropType,
+  Modal,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
-} from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+} from 'react-native';
 
-import { AvatarDisplay } from "../../components/ui/AvatarDisplay";
-import { PetEntry, usePets } from "../../context/PetInformation";
-import { ADVENTURES } from "../../data/adventure";
-import { PILL_TAB_BAR_STYLE } from "./_layout";
+import { AvatarDisplay, findAvatarOption } from '../../components/ui/AvatarDisplay';
+import { PawPatternBackground } from '../../components/ui/PawPatternBackground';
+import {
+  AttributeRatings,
+  EMPTY_RATINGS,
+  makeEmptyEntry,
+  PetEntry,
+  usePets
+} from '../../context/PetInformation';
+import {
+  AVATAR_OPTIONS,
+  AvatarOption,
+  PET_CATEGORIES,
+  PetCategory,
+} from '../../data/petcategories';
+import { useTabBarClearance } from '../../hooks/useTabBarClearance';
 
-type AreaName = keyof typeof ADVENTURES;
-
-const AREAS: { name: AreaName; emoji: string; price: number }[] = [
-  { name: "Magical Forest", emoji: "🌲", price: 0 },
-  { name: "Frostpaw Tundra", emoji: "❄️", price: 40 },
-  { name: "Crystal Caverns", emoji: "💎", price: 60 },
-  { name: "Bone Desert", emoji: "🦴", price: 80 },
+const ATTRIBUTES = [
+  { key: 'intelligence', label: 'Intelligence' },
+  { key: 'speed', label: 'Speed' },
+  { key: 'mischief', label: 'Mischief' },
+  { key: 'strength', label: 'Strength' },
+  { key: 'energy', label: 'Energy Level' },
 ];
 
-// Add an entry here whenever a new area gets its own custom background art.
-const AREA_BACKGROUNDS: Partial<Record<AreaName, ImageSourcePropType>> = {
-  "Magical Forest": require("../../assets/backgrounds/EnchantedForestCartoon.png"),
-};
+async function pickPetPhoto(): Promise<string | undefined> {
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'],
+    allowsEditing: true,
+    aspect: [1, 1],
+    quality: 0.8,
+  });
 
-const TRANSITION_FADE_IN_MS = 900;
-const TRANSITION_TEXT_SCALE_MS = 650;
-const TRANSITION_HOLD_MS = 950;
-const TRANSITION_FADE_OUT_MS = 850;
-
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
-const FIREFLY_COUNT = 12;
-
-type FireflyConfig = {
-  id: number;
-  left: number;
-  top: number;
-  size: number;
-  duration: number;
-  delay: number;
-  driftX: number;
-  driftY: number;
-};
-
-// Scatters fireflies across the screen with randomized size/timing/drift so
-// they don't all twinkle and float in unison.
-function buildFireflies(): FireflyConfig[] {
-  return Array.from({ length: FIREFLY_COUNT }).map((_, i) => ({
-    id: i,
-    left: Math.random() * SCREEN_WIDTH,
-    top: 100 + Math.random() * (SCREEN_HEIGHT - 220),
-    size: 3 + Math.random() * 4,
-    duration: 2000 + Math.random() * 2200,
-    delay: Math.random() * 2500,
-    driftX: (Math.random() - 0.5) * 36,
-    driftY: (Math.random() - 0.5) * 46,
-  }));
+  if (!result.canceled) {
+    return result.assets[0].uri;
+  }
 }
 
-// A single glowing dot that twinkles (fades in/out) and gently drifts,
-// looping forever. Purely decorative, so it ignores touches.
-function Firefly({ config }: { config: FireflyConfig }) {
-  const progress = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.delay(config.delay),
-        Animated.timing(progress, {
-          toValue: 1,
-          duration: config.duration,
-          useNativeDriver: true,
-        }),
-        Animated.timing(progress, {
-          toValue: 0,
-          duration: config.duration,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [config, progress]);
-
-  const opacity = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.1, 0.95],
-  });
-  const scale = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.7, 1.3],
-  });
-  const translateX = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, config.driftX],
-  });
-  const translateY = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, config.driftY],
-  });
-
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[
-        styles.firefly,
-        {
-          left: config.left,
-          top: config.top,
-          width: config.size,
-          height: config.size,
-          borderRadius: config.size / 2,
-          opacity,
-          transform: [{ translateX }, { translateY }, { scale }],
-        },
-      ]}
-    />
-  );
+function categoryMeta(category: PetCategory) {
+  return PET_CATEGORIES.find((c) => c.key === category)!;
 }
 
-// Renders a full-screen, non-interactive layer of fireflies over the
-// current area's background art.
-function FireflyField({ fireflies }: { fireflies: FireflyConfig[] }) {
+function PawRating({ value }: { value: number }) {
   return (
-    <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-      {fireflies.map((firefly) => (
-        <Firefly key={firefly.id} config={firefly} />
+    <View style={styles.pawsRow}>
+      {[1, 2, 3, 4, 5].map((paw) => (
+        <MaterialCommunityIcons
+          key={paw}
+          name={paw <= value ? 'paw' : 'paw-outline'}
+          size={18}
+          color={paw <= value ? '#fff' : 'rgba(255,255,255,0.35)'}
+        />
       ))}
     </View>
   );
 }
 
-export default function Adventure() {
-  const router = useRouter();
-  const navigation = useNavigation();
-  const insets = useSafeAreaInsets();
-  const { pets, coins, unlockedAreas, unlockArea, unlockStorybook } =
-    usePets();
+export default function HomeScreen() {
+  const { pets: entries, setPets: setEntries } = usePets();
+  const tabBarClearance = useTabBarClearance();
 
-  const [selectedPet, setSelectedPet] = useState<PetEntry | null>(null);
-  const [selectedArea, setSelectedArea] = useState<AreaName | null>(null);
-  const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
+  const [categoryModalId, setCategoryModalId] = useState<string | null>(null);
+  const [avatarModalState, setAvatarModalState] = useState<{
+    entryId: string;
+    category: PetCategory;
+  } | null>(null);
 
-  // Reset target for the tab bar — matches the "bottom" calculation in
-  // _layout.tsx's screenOptions exactly, so re-applying this looks
-  // identical to the bar's normal resting state instead of resetting to
-  // `undefined` (which drops the pill styling entirely and falls back to
-  // the default flat MaterialTopTabs bar anchored to the screen edge).
-  const restoredTabBarStyle = useMemo(
-    () => ({
-      ...PILL_TAB_BAR_STYLE,
-      bottom: insets.bottom > 0 ? insets.bottom + 8 : 16,
-    }),
-    [insets.bottom]
-  );
+  const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Drives a gradual fade instead of an instant show/hide. We can't just
-  // hand an Animated.Value straight to navigation.setOptions (tabBarStyle
-  // is read as a plain style object by the navigator, not passed through
-  // to an Animated component), so a JS-driven listener recomputes a plain
-  // numeric opacity every frame and re-applies it via setOptions.
-  const tabBarOpacity = useRef(new Animated.Value(1)).current;
+  const fadeAnim = useRef(new Animated.Value(1)).current;
 
+  // Keep currentIndex valid if entries shrink/grow.
   useEffect(() => {
-    const listenerId = tabBarOpacity.addListener(({ value }) => {
-      navigation.setOptions({
-        tabBarStyle: {
-          ...restoredTabBarStyle,
-          opacity: value,
-          // Only pull it out of layout/touch once it's essentially invisible,
-          // so the fade gets to finish instead of being cut off.
-          ...(value <= 0.01 ? { display: "none" } : null),
-        },
-      });
-    });
+    if (currentIndex > entries.length - 1) {
+      setCurrentIndex(Math.max(0, entries.length - 1));
+    }
+  }, [entries.length, currentIndex]);
 
-    return () => tabBarOpacity.removeListener(listenerId);
-  }, [navigation, restoredTabBarStyle, tabBarOpacity]);
-
-  // Hides the floating bottom tab bar only once the player has actually
-  // entered an area's story (selectedArea set), not just when the Adventure
-  // tab itself is focused — so swiping to the pet/area picker still shows
-  // the tab bar, and it fades out gradually once the adventure story begins.
+  // Quick fade whenever the active pet changes.
   useEffect(() => {
-    Animated.timing(tabBarOpacity, {
-      toValue: selectedArea ? 0 : 1,
-      duration: 350,
-      useNativeDriver: false, // driving a JS listener, not a native style prop
-    }).start();
-  }, [selectedArea, tabBarOpacity]);
-
-  // Safety net: always restore the tab bar instantly when leaving this tab
-  // entirely (e.g. swiping away mid-adventure), regardless of selectedArea
-  // state or any in-flight fade, since the screen stays mounted and its
-  // state persists across tab swaps. adventure_tab is a direct child screen
-  // of the Tabs navigator, so `navigation` here is already scoped to that
-  // Tabs navigator — no getParent() needed.
-  useFocusEffect(
-    useCallback(() => {
-      return () => {
-        tabBarOpacity.stopAnimation();
-        tabBarOpacity.setValue(1);
-        navigation.setOptions({ tabBarStyle: restoredTabBarStyle });
-      };
-    }, [navigation, restoredTabBarStyle, tabBarOpacity])
-  );
-
-  const [isTransitioning, setIsTransitioning] = useState(false);
-  const [transitionLabel, setTransitionLabel] = useState("");
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  // Starts the "Entering {areaName}..." text slightly small and scales it
-  // up to full size once the screen is fully black, so the label builds
-  // into place during the hold instead of just popping in at full size.
-  const transitionTextScale = useRef(new Animated.Value(0.82)).current;
-  const fireflies = useMemo(() => buildFireflies(), []);
-
-  const currentStory =
-    selectedArea && currentNodeId
-      ? ADVENTURES[selectedArea].nodes[currentNodeId]
-      : null;
-
-  const currentBackground = selectedArea
-    ? AREA_BACKGROUNDS[selectedArea]
-    : undefined;
-
-  // Fades a black overlay in with "Entering {areaName}..." text, swaps the
-  // underlying screen state while fully black (via onMidpoint), then fades
-  // the overlay back out to reveal the new area/background.
-  const runAreaTransition = (areaName: AreaName, onMidpoint: () => void) => {
-    setTransitionLabel(`Entering ${areaName}...`);
-    setIsTransitioning(true);
     fadeAnim.setValue(0);
-    transitionTextScale.setValue(0.82);
-
     Animated.timing(fadeAnim, {
       toValue: 1,
-      duration: TRANSITION_FADE_IN_MS,
+      duration: 200,
       useNativeDriver: true,
-    }).start(() => {
-      onMidpoint();
+    }).start();
+  }, [currentIndex, fadeAnim]);
 
-      Animated.timing(transitionTextScale, {
-        toValue: 1,
-        duration: TRANSITION_TEXT_SCALE_MS,
-        useNativeDriver: true,
-      }).start();
+  const currentEntry = entries[currentIndex];
 
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: TRANSITION_FADE_OUT_MS,
-        delay: TRANSITION_HOLD_MS,
-        useNativeDriver: true,
-      }).start(() => {
-        setIsTransitioning(false);
+  const goToIndex = (index: number) => {
+    const clamped = Math.max(0, Math.min(index, entries.length - 1));
+    setCurrentIndex(clamped);
+  };
+
+  const goLeft = () => goToIndex(currentIndex - 1);
+  const goRight = () => goToIndex(currentIndex + 1);
+
+  const panResponder = PanResponder.create({
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponder: (_evt, gestureState) =>
+      Math.abs(gestureState.dx) > 15 &&
+      Math.abs(gestureState.dx) > Math.abs(gestureState.dy),
+    onPanResponderRelease: (_evt, gestureState) => {
+      if (gestureState.dx < -50) {
+        goRight();
+      } else if (gestureState.dx > 50) {
+        goLeft();
+      }
+    },
+  });
+
+  const updateEntry = (
+    id: string,
+    patch: Partial<PetEntry>
+  ) => {
+    setEntries((prev) =>
+      prev.map((entry) =>
+        entry.id === id
+          ? { ...entry, ...patch }
+          : entry
+      )
+    );
+  };
+
+  const handleUpload = async (id: string) => {
+    const uri = await pickPetPhoto();
+
+    if (uri) {
+      updateEntry(id, {
+        photoUri: uri,
+        category: null,
+        selectedEmoji: null,
+        color: null,
+        confirmed: false,
+        ratings: { ...EMPTY_RATINGS },
       });
+    }
+  };
+
+  const handleSelectCategory = (id: string, category: PetCategory) => {
+    updateEntry(id, {
+      category,
+      selectedEmoji: null,
+      color: null,
+    });
+
+    setCategoryModalId(null);
+    setAvatarModalState({ entryId: id, category });
+  };
+
+  const handleChangeCategory = (id: string) => {
+    setCategoryModalId(id);
+  };
+
+  const handleSelectAvatar = (id: string, option: AvatarOption) => {
+    updateEntry(id, {
+      selectedEmoji: option.emoji,
+      color: option.color,
+    });
+
+    setAvatarModalState(null);
+  };
+
+  const handleConfirm = (id: string) => {
+    setEntries((prev) => {
+      const updated = prev.map((entry) =>
+        entry.id === id
+          ? {
+              ...entry,
+              confirmed: true,
+            }
+          : entry
+      );
+
+      const isLast =
+        prev[prev.length - 1]?.id === id;
+
+      if (isLast) {
+        updated.push(makeEmptyEntry());
+      }
+
+      return updated;
     });
   };
 
-  const chooseArea = (areaName: AreaName) => {
-    runAreaTransition(areaName, () => {
-      setSelectedArea(areaName);
-      setCurrentNodeId(ADVENTURES[areaName].start);
-    });
-  };
-
-  const handleAreaPress = (areaName: AreaName, price: number) => {
-    const isUnlocked = unlockedAreas.includes(areaName);
-
-    if (isUnlocked) {
-      chooseArea(areaName);
-      return;
-    }
-
-    const success = unlockArea(areaName, price);
-    if (success) {
-      chooseArea(areaName);
-    }
-  };
-
-  const handleChoice = (nextId: string) => {
-    if (!selectedArea) return;
-
-    setCurrentNodeId(nextId);
-
-    const nextNode = ADVENTURES[selectedArea].nodes[nextId];
-    if (nextNode?.givesBook) {
-      unlockStorybook();
-    }
-  };
-
-  // Resets adventure state and returns to the pet/area picker within this tab.
-  const resetAdventureState = () => {
-    setSelectedArea(null);
-    setCurrentNodeId(null);
-  };
-
-  // Fully leaves the Adventure flow and jumps back to the Home tab.
-  const endAdventure = () => {
-    setSelectedPet(null);
-    resetAdventureState();
-    router.push("/");
-  };
-
-  const changePet = () => {
-    setSelectedPet(null);
-    resetAdventureState();
-  };
-
-  const showEndAdventureButton = selectedPet !== null;
-
-  // Full-screen background art for the currently selected area (once one
-  // exists for it). Sits behind the ScrollView; the ScrollView's own
-  // background is made transparent whenever this is present so the art
-  // shows through everywhere, not just around the story card.
-  const showFullScreenBackground = Boolean(selectedArea && currentBackground);
+  const hasConfirmedPet = entries.some((e) => e.confirmed);
 
   return (
-    <View style={{ flex: 1 }}>
-      <Image
-        source={require("../../assets/images/pawprintbackground3.png")}
-        style={styles.background}
-        resizeMode="cover"
-      />
-
-      {showFullScreenBackground && (
-        <View style={styles.fullScreenBackgroundWrap}>
-          <Image
-            source={currentBackground}
-            style={styles.fullScreenBackground}
-            resizeMode="contain"
-          />
-        </View>
-      )}
-
-      {showFullScreenBackground && <FireflyField fireflies={fireflies} />}
+    <View style={styles.screen}>
+      <PawPatternBackground backgroundColor="#2E86DE" />
 
       <ScrollView
         contentContainerStyle={[
-          styles.container,
-          showFullScreenBackground && styles.containerTransparent,
+          styles.scrollContent,
+          { paddingBottom: tabBarClearance },
         ]}
-        style={showFullScreenBackground ? styles.transparentScroll : undefined}
+        showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.title}>🐾 Adventure</Text>
+        <View style={styles.container}>
 
-        <View style={styles.coinBadge}>
-          <Text style={styles.coinText}>🪙 {coins}</Text>
-        </View>
-
-        {showEndAdventureButton && (
-          <Pressable style={styles.endAdventureButton} onPress={endAdventure}>
-            <Text style={styles.endAdventureText}>← End Adventure</Text>
-          </Pressable>
-        )}
-
-        {!selectedPet && (
-          <>
-            <Text style={styles.header}>Choose your adventurer</Text>
-
-            {pets
-              .filter((pet) => pet.confirmed)
-              .map((pet) => (
-                <Pressable
-                  key={pet.id}
-                  style={styles.card}
-                  onPress={() => setSelectedPet(pet)}
-                >
-                  <View style={{ marginRight: 20 }}>
-                    <AvatarDisplay
-                      category={pet.category}
-                      emoji={pet.selectedEmoji}
-                      color={pet.color}
-                      size={36}
-                    />
-                  </View>
-
-                  <Text style={styles.name}>{pet.name || "Unnamed Pet"}</Text>
-                </Pressable>
-              ))}
-          </>
-        )}
-
-        {selectedPet && !selectedArea && (
-          <>
-            <Text style={styles.header}>
-              Where should {selectedPet.name} explore?
+          <View style={styles.header}>
+            <Text style={styles.title}>Pawsona</Text>
+            <Text style={styles.subtitle}>
+              {hasConfirmedPet
+                ? 'Your pet pals, ready for adventure 🐾'
+                : 'Upload a photo to bring your pet to life'}
             </Text>
+          </View>
 
-            {AREAS.map((area) => {
-              const isUnlocked = unlockedAreas.includes(area.name);
-              const canAfford = coins >= area.price;
+          {currentEntry && (
+            <View style={styles.swiperArea}>
+              <View style={styles.topRow}>
 
-              return (
-                <Pressable
-                  key={area.name}
-                  style={[styles.card, !isUnlocked && styles.cardLocked]}
-                  onPress={() => handleAreaPress(area.name, area.price)}
-                  disabled={!isUnlocked && !canAfford}
-                >
-                  <Text style={styles.avatar}>
-                    {isUnlocked ? area.emoji : "🔒"}
-                  </Text>
+                <View style={styles.uploadColumn}>
 
-                  <View style={styles.areaTextWrap}>
-                    <Text style={styles.name}>{area.name}</Text>
+                  {currentEntry.confirmed && (
+                    <View style={styles.nameInputWrapper}>
+                      <TextInput
+                        style={styles.nameInput}
+                        placeholder="Pet's name"
+                        placeholderTextColor="#aaa"
+                        value={currentEntry.name}
+                        onChangeText={(text) =>
+                          updateEntry(currentEntry.id, { name: text })
+                        }
+                      />
+                    </View>
+                  )}
 
-                    {!isUnlocked && (
-                      <Text
+                  <View style={styles.uploadBoxWrapper}>
+
+                    {currentEntry.confirmed && currentEntry.selectedEmoji && (
+                      <View
                         style={[
-                          styles.priceTag,
-                          !canAfford && styles.priceTagDisabled,
+                          styles.avatarBadge,
+                          { backgroundColor: currentEntry.color ?? '#fff' },
                         ]}
                       >
-                        {canAfford
-                          ? `Unlock for 🪙 ${area.price}`
-                          : `Need 🪙 ${area.price}`}
-                      </Text>
+                        <AvatarDisplay
+                          category={currentEntry.category}
+                          emoji={currentEntry.selectedEmoji}
+                          color={currentEntry.color}
+                          size={28}
+                        />
+                      </View>
                     )}
+
+                    <Animated.View
+                      {...panResponder.panHandlers}
+                      style={[
+                        styles.uploadBoxShadow,
+                        { opacity: fadeAnim },
+                      ]}
+                    >
+                      <Pressable
+                        style={styles.uploadBox}
+                        onPress={() =>
+                          handleUpload(currentEntry.id)
+                        }
+                      >
+                        {currentEntry.photoUri ? (
+                          <Image
+                            source={{
+                              uri: currentEntry.photoUri,
+                            }}
+                            style={styles.uploadedImage}
+                          />
+                        ) : (
+                          <View style={styles.uploadEmptyState}>
+                            <MaterialCommunityIcons
+                              name="paw"
+                              size={32}
+                              color="#FFB067"
+                              style={styles.uploadIcon}
+                            />
+                            <Text style={styles.uploadText}>
+                              {currentIndex === 0
+                                ? 'Tap to upload a photo of your pet'
+                                : 'Tap to upload another photo'}
+                            </Text>
+                          </View>
+                        )}
+                      </Pressable>
+                    </Animated.View>
+
+                    <Pressable
+                      onPress={goLeft}
+                      disabled={currentIndex === 0}
+                      style={[
+                        styles.arrowButtonOverlay,
+                        styles.arrowButtonLeft,
+                        currentIndex === 0 && styles.arrowButtonDisabled,
+                      ]}
+                      >
+                        <MaterialCommunityIcons
+                        name="chevron-left"
+                        size={22}
+                        color="#fff"
+                      />
+                    </Pressable>
+
+                    <Pressable
+                      onPress={goRight}
+                      disabled={currentIndex === entries.length - 1}
+                      style={[
+                        styles.arrowButtonOverlay,
+                        styles.arrowButtonRight,
+                        currentIndex === entries.length - 1 &&
+                          styles.arrowButtonDisabled,
+                      ]}
+                    >
+                      <MaterialCommunityIcons
+                        name="chevron-right"
+                        size={22}
+                        color="#fff"
+                      />
+                    </Pressable>
+
                   </View>
-                </Pressable>
-              );
-            })}
 
-            <Pressable style={styles.changePetButton} onPress={changePet}>
-              <Text style={styles.changePetText}>Change Adventurer</Text>
-            </Pressable>
-          </>
-        )}
+                </View>
 
-        {currentStory && !currentStory.isEnding && (
-          <View
-            style={[
-              styles.storyBox,
-              showFullScreenBackground && styles.storyBoxThemed,
-            ]}
-          >
-            <Text
-              style={[
-                styles.storyText,
-                showFullScreenBackground && styles.storyTextThemed,
-              ]}
-            >
-              {currentStory.story}
-            </Text>
+                {currentEntry.confirmed && (
+                  <View style={styles.attributesSide}>
+                    {ATTRIBUTES.map((attr) => (
+                      <View
+                        key={attr.key}
+                        style={styles.attributeRowSide}
+                      >
+                        <Text style={styles.attributeLabelSide}>
+                          {attr.label}
+                        </Text>
 
-            {currentStory.choices.map((choice) => (
-              <Pressable
-                key={choice.text}
-                style={[
-                  styles.choiceButton,
-                  showFullScreenBackground && styles.choiceButtonThemed,
-                ]}
-                onPress={() => handleChoice(choice.next)}
-              >
-                <Text
-                  style={[
-                    styles.choiceText,
-                    showFullScreenBackground && styles.choiceTextThemed,
-                  ]}
-                >
-                  {choice.text}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
+                        <PawRating
+                          value={
+                            currentEntry.ratings[
+                              attr.key as keyof AttributeRatings
+                            ]
+                          }
+                        />
+                      </View>
+                    ))}
+                  </View>
+                )}
 
-        {currentStory && currentStory.isEnding && currentStory.givesBook && (
-          <View
-            style={[
-              styles.bookBox,
-              showFullScreenBackground && styles.storyBoxThemed,
-            ]}
-          >
-            <Text style={styles.bookEmoji}>🧙📖</Text>
-            <Text
-              style={[
-                styles.storyText,
-                showFullScreenBackground && styles.storyTextThemed,
-              ]}
-            >
-              {currentStory.story}
-            </Text>
+              </View>
 
-            <View
-              style={[
-                styles.bookBanner,
-                showFullScreenBackground && styles.bookBannerThemed,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.bookBannerText,
-                  showFullScreenBackground && styles.bookBannerTextThemed,
-                ]}
-              >
-                Storybook unlocked! You can now use the AI Pet Coach on the
-                Daily Paw Log tab.
-              </Text>
+              {entries.length > 1 && (
+                <View style={styles.dotsRow}>
+                  {entries.map((entry, i) => (
+                    <Pressable
+                      key={entry.id}
+                      onPress={() => goToIndex(i)}
+                      hitSlop={8}
+                    >
+                      <View
+                        style={[
+                          styles.dot,
+                          i === currentIndex && styles.dotActive,
+                        ]}
+                      />
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+
+              {currentEntry.photoUri && !currentEntry.confirmed && (
+                <View style={styles.pickerSection}>
+                  {!currentEntry.category ? (
+                    <Pressable
+                      style={styles.chooseTypeButton}
+                      onPress={() => setCategoryModalId(currentEntry.id)}
+                    >
+                      <Text style={styles.chooseTypeButtonText}>
+                        What kind of pet is this?
+                      </Text>
+                      <MaterialCommunityIcons
+                        name="chevron-down"
+                        size={20}
+                        color="#FF8C42"
+                      />
+                    </Pressable>
+                  ) : (
+                    <View style={styles.pickerRow}>
+                      <View
+                        style={[
+                          styles.smallAvatarBox,
+                          {
+                            backgroundColor:
+                              currentEntry.color ??
+                              'rgba(255,255,255,0.6)',
+                          },
+                        ]}
+                      >
+                        <AvatarDisplay
+                          category={currentEntry.category}
+                          emoji={
+                            currentEntry.selectedEmoji ??
+                            categoryMeta(currentEntry.category).emoji
+                          }
+                          color={currentEntry.color}
+                          size={48}
+                        />
+                      </View>
+
+                      <View style={styles.dropdownWrapper}>
+                        <Pressable
+                          style={styles.dropdownButton}
+                          onPress={() =>
+                            setAvatarModalState({
+                              entryId: currentEntry.id,
+                              category: currentEntry.category!,
+                            })
+                          }
+                        >
+                          <Text style={styles.dropdownButtonText}>
+                            {currentEntry.selectedEmoji
+                              ? findAvatarOption(
+                                  currentEntry.category,
+                                  currentEntry.selectedEmoji,
+                                  currentEntry.color
+                                )?.label ?? 'Choose your avatar'
+                              : `Choose your ${categoryMeta(
+                                  currentEntry.category
+                                ).label.toLowerCase()}`}
+                          </Text>
+
+                          <MaterialCommunityIcons
+                            name="chevron-down"
+                            size={20}
+                            color="#FF8C42"
+                          />
+                        </Pressable>
+
+                        <Pressable
+                          style={styles.changeTypeLink}
+                          onPress={() =>
+                            handleChangeCategory(currentEntry.id)
+                          }
+                        >
+                          <Text style={styles.changeTypeLinkText}>
+                            Change pet type
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {currentEntry.photoUri &&
+                !currentEntry.confirmed &&
+                currentEntry.selectedEmoji && (
+                  <Pressable
+                    style={styles.confirmButton}
+                    onPress={() =>
+                      handleConfirm(currentEntry.id)
+                    }
+                  >
+                    <Text style={styles.confirmButtonText}>
+                      Confirm Avatar
+                    </Text>
+                  </Pressable>
+                )}
+
             </View>
+          )}
 
-            <Pressable
-              style={[
-                styles.finishButton,
-                showFullScreenBackground && styles.choiceButtonThemed,
-              ]}
-              onPress={resetAdventureState}
-            >
-              <Text
-                style={[
-                  styles.finishButtonText,
-                  showFullScreenBackground && styles.choiceTextThemed,
-                ]}
-              >
-                Explore More
-              </Text>
-            </Pressable>
-          </View>
-        )}
-
-        {currentStory && currentStory.isEnding && !currentStory.givesBook && (
-          <View
-            style={[
-              styles.storyBox,
-              showFullScreenBackground && styles.storyBoxThemed,
-            ]}
+          {/* Category picker modal */}
+          <Modal
+            visible={categoryModalId !== null}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setCategoryModalId(null)}
           >
-            <Text
-              style={[
-                styles.storyText,
-                showFullScreenBackground && styles.storyTextThemed,
-              ]}
-            >
-              {currentStory.story}
-            </Text>
-
             <Pressable
-              style={[
-                styles.finishButton,
-                showFullScreenBackground && styles.choiceButtonThemed,
-              ]}
-              onPress={resetAdventureState}
+              style={styles.modalOverlay}
+              onPress={() => setCategoryModalId(null)}
             >
-              <Text
-                style={[
-                  styles.finishButtonText,
-                  showFullScreenBackground && styles.choiceTextThemed,
-                ]}
-              >
-                Explore More
-              </Text>
+              <View style={styles.dropdownMenu}>
+                <Text style={styles.modalTitle}>Choose pet type</Text>
+                <ScrollView>
+                  {PET_CATEGORIES.map((cat) => (
+                    <Pressable
+                      key={cat.key}
+                      style={styles.dropdownItem}
+                      onPress={() =>
+                        categoryModalId &&
+                        handleSelectCategory(categoryModalId, cat.key)
+                      }
+                    >
+                      <Text style={styles.dropdownItemEmoji}>
+                        {cat.emoji}
+                      </Text>
+
+                      <Text style={styles.dropdownItemText}>
+                        {cat.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
             </Pressable>
-          </View>
-        )}
+          </Modal>
+
+          {/* Avatar picker modal */}
+          <Modal
+            visible={avatarModalState !== null}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setAvatarModalState(null)}
+          >
+            <Pressable
+              style={styles.modalOverlay}
+              onPress={() => setAvatarModalState(null)}
+            >
+              <View style={styles.dropdownMenu}>
+                <Text style={styles.modalTitle}>
+                  {avatarModalState
+                    ? categoryMeta(avatarModalState.category).label
+                    : ''}{' '}
+                  avatars
+                </Text>
+                <ScrollView>
+                  {avatarModalState &&
+                    AVATAR_OPTIONS[avatarModalState.category].map(
+                      (option) => (
+                        <Pressable
+                          key={`${option.emoji}-${option.color}`}
+                          style={styles.dropdownItem}
+                          onPress={() =>
+                            handleSelectAvatar(
+                              avatarModalState.entryId,
+                              option
+                            )
+                          }
+                        >
+                          <View
+                            style={[
+                              styles.avatarSwatch,
+                              { backgroundColor: option.color },
+                            ]}
+                          >
+                            <AvatarDisplay
+                              category={avatarModalState.category}
+                              emoji={option.emoji}
+                              color={option.color}
+                              size={28}
+                            />
+                          </View>
+
+                          <Text style={styles.dropdownItemText}>
+                            {option.label}
+                          </Text>
+                        </Pressable>
+                      )
+                    )}
+                </ScrollView>
+              </View>
+            </Pressable>
+          </Modal>
+
+        </View>
       </ScrollView>
-
-      {isTransitioning && (
-        <Animated.View
-          pointerEvents="auto"
-          style={[styles.transitionOverlay, { opacity: fadeAnim }]}
-        >
-          <Animated.Text
-            style={[
-              styles.transitionText,
-              { transform: [{ scale: transitionTextScale }] },
-            ]}
-          >
-            {transitionLabel}
-          </Animated.Text>
-        </Animated.View>
-      )}
     </View>
   );
 }
 
+
 const styles = StyleSheet.create({
-  background: {
-    ...StyleSheet.absoluteFillObject,
+  screen: {
+    flex: 1,
+  },
+
+  scrollContent: {
+    flexGrow: 1,
   },
 
   container: {
-    flexGrow: 1,
-    backgroundColor: "transparent",
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
     padding: 20,
-    paddingTop: 80,
-  },
-
-  title: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: "#fff",
-    textAlign: "center",
-    marginBottom: 16,
-  },
-
-  coinBadge: {
-    alignSelf: "center",
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 18,
-    marginBottom: 16,
-  },
-
-  coinText: {
-    color: "#FF8C42",
-    fontWeight: "800",
-    fontSize: 16,
-  },
-
-  endAdventureButton: {
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(255,255,255,0.3)",
-    borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    marginBottom: 20,
-  },
-
-  endAdventureText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 13,
+    paddingTop: 70,
   },
 
   header: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#fff",
-    marginBottom: 20,
+    alignItems: 'center',
+    marginBottom: 36,
   },
 
-  card: {
-    backgroundColor: "#fff",
+  title: {
+    fontFamily: 'Fredoka_700Bold',
+    fontSize: 42,
+    color: '#fff',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0,0,0,0.15)',
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 0,
+  },
+
+  subtitle: {
+    fontFamily: 'Fredoka_400Regular',
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: 6,
+    textAlign: 'center',
+  },
+
+  swiperArea: {
+    alignItems: 'center',
+  },
+
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  arrowButtonOverlay: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -16,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 5,
+  },
+
+  arrowButtonLeft: {
+    left: 6,
+  },
+
+  arrowButtonRight: {
+    right: 6,
+  },
+
+  arrowButtonDisabled: {
+    opacity: 0.3,
+  },
+
+  uploadColumn: {
+    alignItems: 'center',
+    width: 170,
+  },
+
+  nameInputWrapper: {
+    width: '100%',
+    marginBottom: 10,
+  },
+
+  nameInput: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    fontFamily: 'Fredoka_600SemiBold',
+    fontSize: 14,
+    color: '#FF8C42',
+    textAlign: 'center',
+  },
+
+  uploadBoxWrapper: {
+    position: 'relative',
+  },
+
+  uploadBoxShadow: {
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+  },
+
+  uploadBox: {
+    width: 170,
+    height: 170,
+    borderRadius: 24,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    backgroundColor: '#fff',
+  },
+
+  uploadEmptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+
+  uploadIcon: {
+    marginBottom: 8,
+  },
+
+  uploadText: {
+    fontFamily: 'Fredoka_400Regular',
+    textAlign: 'center',
+    color: '#888',
+    paddingHorizontal: 10,
+  },
+
+  uploadedImage: {
+    width: '100%',
+    height: '100%',
+  },
+
+  avatarBadge: {
+    position: 'absolute',
+    top: -10,
+    left: -10,
+    zIndex: 6,
+    width: 40,
+    height: 40,
     borderRadius: 20,
-    padding: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 15,
-  },
-
-  cardLocked: {
-    backgroundColor: "rgba(255,255,255,0.55)",
-  },
-
-  avatar: {
-    fontSize: 40,
-    marginRight: 20,
-  },
-
-  areaTextWrap: {
-    flexShrink: 1,
-  },
-
-  name: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#333",
-  },
-
-  priceTag: {
-    marginTop: 4,
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#FF8C42",
-  },
-
-  priceTagDisabled: {
-    color: "#999",
-  },
-
-  changePetButton: {
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(255,255,255,0.3)",
-    borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    marginTop: 4,
-  },
-
-  changePetText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 13,
-  },
-
-  // Full-bleed area artwork, positioned behind the ScrollView. "contain"
-  // shows the whole image with no cropping/zoom; the wrap's backgroundColor
-  // fills any letterbox space so it doesn't show as transparent/orange.
-  fullScreenBackgroundWrap: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#1B3B2F",
-  },
-
-  fullScreenBackground: {
-    width: "100%",
-    height: "100%",
-  },
-
-  // Small glowing dot used by the Firefly component. Warm yellow-green with
-  // a soft shadow to fake a glow (Android needs elevation + shadow* both set
-  // for the glow to render at all).
-  firefly: {
-    position: "absolute",
-    backgroundColor: "#EFFFC2",
-    shadowColor: "#D9FF7A",
-    shadowOpacity: 0.9,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 0 },
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
     elevation: 4,
   },
 
-  // Lets the area art show through instead of the default orange fill.
-  transparentScroll: {
-    backgroundColor: "transparent",
-  },
-
-  containerTransparent: {
-    backgroundColor: "transparent",
-  },
-
-  storyBox: {
-    backgroundColor: "rgba(255,255,255,0.94)",
-    borderRadius: 20,
-    padding: 20,
-  },
-
-  // Applied over storyBox/bookBox whenever the area has its own background
-  // art, so the card reads as a mist-glass panel sitting in the scene
-  // instead of a plain white card.
-  storyBoxThemed: {
-    backgroundColor: "rgba(8, 24, 18, 0.68)",
-    borderWidth: 1.5,
-    borderColor: "rgba(168, 235, 195, 0.35)",
-    shadowColor: "#8CFFC2",
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 6,
-  },
-
-  storyText: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 20,
-  },
-
-  storyTextThemed: {
-    color: "#EAF7EE",
-    textShadowColor: "rgba(0,0,0,0.5)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-
-  choiceButton: {
-    backgroundColor: "#FF8C42",
-    borderRadius: 15,
-    padding: 15,
-    marginBottom: 12,
-  },
-
-  choiceButtonThemed: {
-    backgroundColor: "rgba(38, 84, 58, 0.85)",
-    borderWidth: 1,
-    borderColor: "rgba(168, 235, 195, 0.45)",
-  },
-
-  choiceText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 16,
-  },
-
-  choiceTextThemed: {
-    color: "#D9FFE6",
-  },
-
-  bookBox: {
-    backgroundColor: "rgba(255,255,255,0.94)",
-    borderRadius: 20,
-    padding: 20,
-    alignItems: "center",
-  },
-
-  bookEmoji: {
-    fontSize: 44,
-    marginBottom: 12,
-  },
-
-  bookBanner: {
-    backgroundColor: "#FFE3CC",
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 16,
-  },
-
-  bookBannerThemed: {
-    backgroundColor: "rgba(255, 216, 130, 0.18)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 216, 130, 0.5)",
-  },
-
-  bookBannerText: {
-    color: "#FF8C42",
-    fontWeight: "700",
-    fontSize: 14,
-    textAlign: "center",
-  },
-
-  bookBannerTextThemed: {
-    color: "#FFD873",
-  },
-
-  finishButton: {
-    backgroundColor: "#FF8C42",
-    borderRadius: 15,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-  },
-
-  finishButtonText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 15,
-  },
-
-  transitionOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#000",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 999,
-  },
-
-  transitionText: {
-    color: "#fff",
+  sideAvatarEmoji: {
     fontSize: 22,
-    fontWeight: "700",
-    letterSpacing: 0.5,
+  },
+
+  dotsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 18,
+  },
+
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+  },
+
+  dotActive: {
+    backgroundColor: '#fff',
+    width: 20,
+  },
+
+  attributesSide: {
+    marginLeft: 8,
+    gap: 10,
+    justifyContent: 'center',
+  },
+
+  attributeRowSide: {
+    alignItems: 'flex-start',
+    gap: 2,
+  },
+
+  attributeLabelSide: {
+    fontFamily: 'Fredoka_600SemiBold',
+    color: '#fff',
+    fontSize: 11,
+  },
+
+  pawsRow: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+
+  pickerSection: {
+    marginTop: 20,
+    width: '100%',
+    alignItems: 'center',
+  },
+
+  chooseTypeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#fff',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+  },
+
+  chooseTypeButtonText: {
+    fontFamily: 'Fredoka_600SemiBold',
+    color: '#FF8C42',
+    fontSize: 14,
+  },
+
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    width: '100%',
+  },
+
+  smallAvatarBox: {
+    width: 70,
+    height: 70,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  smallAvatarEmoji: {
+    fontSize: 36,
+  },
+
+  dropdownWrapper: {
+    flex: 1,
+  },
+
+  dropdownButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+  },
+
+  dropdownButtonText: {
+    fontFamily: 'Fredoka_600SemiBold',
+    color: '#FF8C42',
+    fontSize: 14,
+  },
+
+  changeTypeLink: {
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    marginLeft: 4,
+  },
+
+  changeTypeLinkText: {
+    fontFamily: 'Fredoka_600SemiBold',
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 12,
+    textDecorationLine: 'underline',
+  },
+
+  confirmButton: {
+    backgroundColor: '#fff',
+    paddingVertical: 10,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    marginTop: 16,
+    alignSelf: 'center',
+  },
+
+  confirmButtonText: {
+    fontFamily: 'Fredoka_700Bold',
+    color: '#FF8C42',
+    fontSize: 14,
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  dropdownMenu: {
+    width: '80%',
+    maxHeight: 380,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingVertical: 8,
+  },
+
+  modalTitle: {
+    fontFamily: 'Fredoka_700Bold',
+    fontSize: 15,
+    color: '#333',
+    textAlign: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+
+  dropdownItemEmoji: {
+    fontSize: 28,
+  },
+
+  dropdownItemText: {
+    fontFamily: 'Fredoka_600SemiBold',
+    fontSize: 15,
+    color: '#333',
+  },
+
+  avatarSwatch: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  avatarSwatchEmoji: {
+    fontSize: 20,
   },
 });

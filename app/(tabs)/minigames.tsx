@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
+  Image,
   PanResponder,
   Pressable,
   ScrollView,
@@ -58,12 +59,19 @@ export default function Minigames() {
   const tabBarClearance = useTabBarClearance();
 
   return (
-    <ScrollView
-      contentContainerStyle={[
-        styles.container,
-        { paddingBottom: tabBarClearance },
-      ]}
-    >
+    <View style={{ flex: 1 }}>
+      <Image
+        source={require("../../assets/images/pawprintbackground3.png")}
+        style={styles.background}
+        resizeMode="cover"
+      />
+
+      <ScrollView
+        contentContainerStyle={[
+          styles.container,
+          { paddingBottom: tabBarClearance },
+        ]}
+      >
       <Text style={styles.title}>🎮 Mini Games</Text>
 
       <View style={styles.coinBadge}>
@@ -107,7 +115,8 @@ export default function Minigames() {
       {activeGame === "parkourFP" && (
         <PupParkourFPGame onExit={() => setActiveGame("menu")} />
       )}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -1413,9 +1422,13 @@ function PupParkourFPGame({ onExit }: { onExit: () => void }) {
 /* ------------------------------------------------------------------ */
 
 const styles = StyleSheet.create({
+  background: {
+    ...StyleSheet.absoluteFillObject,
+  },
+
   container: {
     flexGrow: 1,
-    backgroundColor: "#FF8C42",
+    backgroundColor: "transparent",
     padding: 20,
     paddingTop: 80,
     alignItems: "center",

@@ -326,6 +326,12 @@ export default function Adventure() {
 
   return (
     <View style={{ flex: 1 }}>
+      <Image
+        source={require("../../assets/images/pawprintbackground5.png")}
+        style={styles.background}
+        resizeMode="cover"
+      />
+
       {showFullScreenBackground && (
         <View style={styles.fullScreenBackgroundWrap}>
           <Image
@@ -578,9 +584,13 @@ export default function Adventure() {
 }
 
 const styles = StyleSheet.create({
+  background: {
+    ...StyleSheet.absoluteFillObject,
+  },
+
   container: {
     flexGrow: 1,
-    backgroundColor: "#FF8C42",
+    backgroundColor: "transparent",
     padding: 20,
     paddingTop: 80,
   },
