@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import {
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -64,12 +65,19 @@ export default function StoreTab() {
   );
 
   return (
-    <ScrollView
-      contentContainerStyle={[
-        styles.container,
-        { paddingBottom: tabBarClearance },
-      ]}
-    >
+    <View style={{ flex: 1 }}>
+      <Image
+        source={require("../../assets/images/pawprintbackground4.png")}
+        style={styles.background}
+        resizeMode="cover"
+      />
+
+      <ScrollView
+        contentContainerStyle={[
+          styles.container,
+          { paddingBottom: tabBarClearance },
+        ]}
+      >
       <Text style={styles.title}>🛍️ Pet Store</Text>
 
       <View style={styles.coinBadge}>
@@ -210,14 +218,19 @@ export default function StoreTab() {
           )}
         </>
       )}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  background: {
+    ...StyleSheet.absoluteFillObject,
+  },
+
   container: {
     flexGrow: 1,
-    backgroundColor: "#FF8C42",
+    backgroundColor: "transparent",
     padding: 20,
     paddingTop: 80,
   },
