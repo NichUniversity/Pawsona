@@ -50,7 +50,10 @@ export function ScrollingLayer({
     loop();
 
     return () => anim.current?.stop();
-  }, [running, speed, width, direction]);
+    // `offset` is the .current of a useRef — stable across renders, so
+    // including it here doesn't cause extra effect runs, it just satisfies
+    // exhaustive-deps.
+  }, [running, speed, width, direction, offset]);
 
   return (
     <View style={[styles.clip, { width, height }]}>

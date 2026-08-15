@@ -1214,12 +1214,12 @@ function PupParkourFPGame({ onExit }: { onExit: () => void }) {
         <Text style={styles.exitButtonText}>← Back to Games</Text>
       </Pressable>
 
-      <Text style={styles.gameTitle}>👀 Dog's-Eye Dash</Text>
+      <Text style={styles.gameTitle}>👀 Dog&apos;s-Eye Dash</Text>
 
       {gameState === "idle" && (
         <>
           <Text style={styles.gameSubtitle}>
-            Same course as Pup Parkour, seen through your pup's eyes! Tap to
+            Same course as Pup Parkour, seen through your pup&apos;s eyes! Tap to
             hop over logs 🪵, swipe to duck through wall gaps 🧱. 🪙 1 per{" "}
             {COINS_PER_DISTANCE} distance.
           </Text>

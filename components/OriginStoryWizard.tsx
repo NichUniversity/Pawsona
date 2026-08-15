@@ -309,7 +309,7 @@ export default function OriginStoryWizard({
                 {petName ? `${petName}'s Origin Story` : "Your Pet's Origin Story"}
               </Text>
               <Text style={styles.bodyText}>
-                Answer a few quick questions and we'll weave them into a
+                Answer a few quick questions and we&apos;ll weave them into a
                 backstory for {petName || "your pet"}. Which kind of story do
                 you want to tell?
               </Text>
@@ -397,7 +397,7 @@ export default function OriginStoryWizard({
             <View style={styles.centeredContent}>
               <ActivityIndicator color={WOOD_DARK} size="large" />
               <Text style={styles.loadingText}>
-                Writing {petName || "your pet"}'s story...
+                Writing {petName || "your pet"}&apos;s story...
               </Text>
             </View>
           )}
