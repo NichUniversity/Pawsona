@@ -34,12 +34,7 @@ Write a legend that:
 Respond with ONLY a JSON object, no markdown fences, no extra text, in exactly this shape:
 {"backstory": "string with \\n\\n between paragraphs"}`;
 
-function setCors(res) {
-  // Loosen/tighten origin as needed once you know your app's web origin.
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-}
+const { setCors } = require("./_lib/cors");
 
 module.exports = async (req, res) => {
   setCors(res);

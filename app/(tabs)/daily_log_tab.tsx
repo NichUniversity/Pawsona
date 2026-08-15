@@ -13,6 +13,7 @@ import {
 
 import OriginStoryWizard from "../../components/OriginStoryWizard";
 import { AvatarDisplay, findAvatarOption } from "../../components/ui/AvatarDisplay";
+import { API_BASE_URL, GOLD, PARCHMENT, WOOD_DARK, WOOD_MID } from "../../constants/pet-log-theme";
 import { PetEntry, usePets } from "../../context/PetInformation";
 import { useTabBarClearance } from "../../hooks/useTabBarClearance";
 
@@ -41,11 +42,6 @@ const ATTRIBUTE_META: { key: AttributeKey; label: string; emoji: string }[] = [
 ];
 
 const MAX_RATING = 5;
-
-// Set this to your deployed server's URL for native (iOS/Android) builds,
-// e.g. via an EXPO_PUBLIC_API_BASE_URL env var. It can stay empty for web-only
-// testing, where a relative path works fine.
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
 
 export default function DailyPawLog() {
   const { pets, setPets, coins, earnCoins, hasStorybook } = usePets();
@@ -416,11 +412,6 @@ export default function DailyPawLog() {
     </View>
   );
 }
-
-const WOOD_DARK = "#3E2A18";
-const WOOD_MID = "#6B4A28";
-const PARCHMENT = "#F6E8C6";
-const GOLD = "#D9A441";
 
 const styles = StyleSheet.create({
   background: {

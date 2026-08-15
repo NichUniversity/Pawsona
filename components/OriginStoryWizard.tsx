@@ -14,16 +14,9 @@ import {
   View,
 } from "react-native";
 
+import { API_BASE_URL, GOLD, PARCHMENT, WOOD_DARK, WOOD_MID } from "../constants/pet-log-theme";
 import { usePets } from "../context/PetInformation";
 import { PET_CATEGORIES, PetCategory } from "../data/petcategories";
-
-// Matches the parchment/wood palette used on the Daily Paw Log almanac card,
-// so the wizard feels like part of the same storybook rather than a
-// separate, differently-themed screen.
-const WOOD_DARK = "#3E2A18";
-const WOOD_MID = "#6B4A28";
-const PARCHMENT = "#F6E8C6";
-const GOLD = "#D9A441";
 
 // Total questions in the interview, including the fixed opener below.
 // Each answer feeds into generating the next question, and all four feed
@@ -34,8 +27,6 @@ const TOTAL_QUESTIONS = 4;
 // regenerate after that costs coins — sized similarly to the cheapest
 // Adventure area unlock, so it's earnable but not trivial.
 const REDO_COST = 20;
-
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
 
 // Used if the "next question" request fails, so a hiccup on one question
 // doesn't stall the whole interview. Cycled through in order, skipping any
