@@ -75,7 +75,7 @@ type Props = {
   onClose: () => void;
   onComplete: (backstory: string) => void;
 };
-
+ 
 function categoryLabel(category: PetCategory | null): string {
   return PET_CATEGORIES.find((c) => c.key === category)?.label ?? "pet";
 }
