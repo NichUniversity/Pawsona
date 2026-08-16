@@ -13,8 +13,11 @@ import {
 
 import OriginStoryWizard from "../../components/OriginStoryWizard";
 import { AvatarDisplay, findAvatarOption } from "../../components/ui/AvatarDisplay";
+import { CoinIcon } from "../../components/ui/CoinIcon";
+import { TabBackground } from "../../components/ui/TabBackground";
 import { API_BASE_URL, GOLD, PARCHMENT, WOOD_DARK, WOOD_MID } from "../../constants/pet-log-theme";
 import { PetEntry, usePets } from "../../context/PetInformation";
+import { useTheme } from "../../context/ThemeContext";
 import { useTabBarClearance } from "../../hooks/useTabBarClearance";
 
 type AttributeKey =
@@ -45,6 +48,7 @@ const MAX_RATING = 5;
 
 export default function DailyPawLog() {
   const { pets, setPets, coins, earnCoins, hasStorybook } = usePets();
+  const { accentColor } = useTheme();
   const tabBarClearance = useTabBarClearance();
 
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
@@ -177,16 +181,17 @@ export default function DailyPawLog() {
 
   return (
     <View style={{ flex: 1 }}>
-      <Image
-        source={require("../../assets/images/pawprintbackground2.png")}
-        style={styles.background}
-        resizeMode="cover"
-      />
+      {/* Grey glossy background while picking a pet; once one's selected,
+          the almanac goes full-bleed wood-dark instead (no grey behind it). */}
+      {!selectedPet ? (
+        <TabBackground />
+      ) : (
+        <View style={[StyleSheet.absoluteFillObject, styles.almanacBackdrop]} />
+      )}
 
       <ScrollView
         contentContainerStyle={[
           styles.container,
-          styles.containerTransparent,
           { paddingBottom: tabBarClearance },
         ]}
       >
@@ -196,7 +201,8 @@ export default function DailyPawLog() {
         </View>
 
         <View style={styles.coinBadge}>
-          <Text style={styles.coinText}>🪙 {coins}</Text>
+          <CoinIcon size={16} />
+          <Text style={[styles.coinText, { color: accentColor }]}> {coins}</Text>
         </View>
       </View>
 
@@ -414,19 +420,14 @@ export default function DailyPawLog() {
 }
 
 const styles = StyleSheet.create({
-  background: {
-    ...StyleSheet.absoluteFillObject,
+  almanacBackdrop: {
+    backgroundColor: WOOD_DARK,
   },
 
   container: {
     flexGrow: 1,
-    backgroundColor: WOOD_DARK,
     padding: 14,
     paddingTop: 52,
-  },
-
-  containerTransparent: {
-    backgroundColor: "transparent",
   },
 
   headerRow: {
@@ -450,6 +451,9 @@ const styles = StyleSheet.create({
   },
 
   coinBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     backgroundColor: "#fff",
     borderRadius: 20,
     paddingVertical: 8,
@@ -470,18 +474,20 @@ const styles = StyleSheet.create({
   },
 
   petCard: {
-    backgroundColor: "#fff",
+    backgroundColor: "#1C1C1E",
     borderRadius: 20,
     padding: 20,
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 15,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
 
   petName: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#333",
+    color: "#F5F5F5",
   },
 
   // Fills whatever vertical space is left below the header, so the whole

@@ -1,24 +1,28 @@
 import React, { useState } from "react";
 import {
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  View,
+  View
 } from "react-native";
 
 import { AvatarDisplay } from "../../components/ui/AvatarDisplay";
+import { CoinIcon } from "../../components/ui/CoinIcon";
+import { TabBackground } from "../../components/ui/TabBackground";
 import { PetEntry, usePets } from "../../context/PetInformation";
+import { useTheme, withAlpha } from "../../context/ThemeContext";
 import {
   CATEGORY_LABELS,
   COSMETICS,
   CosmeticCategory,
 } from "../../data/cosmetics";
 import { useTabBarClearance } from "../../hooks/useTabBarClearance";
+cl
 
 export default function StoreTab() {
   const { pets, setPets, coins, spendCoins } = usePets();
+  const { accentColor } = useTheme();
   const tabBarClearance = useTabBarClearance();
 
   const [selectedPet, setSelectedPet] = useState<PetEntry | null>(null);
@@ -66,11 +70,7 @@ export default function StoreTab() {
 
   return (
     <View style={{ flex: 1 }}>
-      <Image
-        source={require("../../assets/images/pawprintbackground4.png")}
-        style={styles.background}
-        resizeMode="cover"
-      />
+      <TabBackground />
 
       <ScrollView
         contentContainerStyle={[
@@ -81,7 +81,8 @@ export default function StoreTab() {
       <Text style={styles.title}>🛍️ Pet Store</Text>
 
       <View style={styles.coinBadge}>
-        <Text style={styles.coinText}>🪙 {coins}</Text>
+        <CoinIcon size={16} />
+        <Text style={[styles.coinText, { color: accentColor }]}> {coins}</Text>
       </View>
 
       {confirmedPets.length === 0 ? (
@@ -104,7 +105,10 @@ export default function StoreTab() {
                 key={pet.id}
                 style={[
                   styles.petChip,
-                  selectedPet?.id === pet.id && styles.petChipActive,
+                  selectedPet?.id === pet.id && {
+                    backgroundColor: accentColor,
+                    borderColor: accentColor,
+                  },
                 ]}
                 onPress={() => setSelectedPet(pet)}
               >
@@ -136,7 +140,10 @@ export default function StoreTab() {
                     key={cat}
                     style={[
                       styles.categoryPill,
-                      activeCategory === cat && styles.categoryPillActive,
+                      activeCategory === cat && {
+                        backgroundColor: accentColor,
+                        borderColor: accentColor,
+                      },
                     ]}
                     onPress={() => setActiveCategory(cat)}
                   >
@@ -166,14 +173,16 @@ export default function StoreTab() {
                       key={item.id}
                       style={[
                         styles.itemCard,
-                        equipped && styles.itemCardEquipped,
+                        equipped && { borderWidth: 2, borderColor: accentColor },
                       ]}
                     >
                       <Text style={styles.itemEmoji}>{item.emoji}</Text>
                       <Text style={styles.itemName}>{item.name}</Text>
 
                       {!owned && (
-                        <Text style={styles.itemPrice}>🪙 {item.price}</Text>
+                        <Text style={[styles.itemPrice, { color: accentColor }]}>
+                          <CoinIcon size={13} /> {item.price}
+                        </Text>
                       )}
 
                       {owned ? (
@@ -181,15 +190,15 @@ export default function StoreTab() {
                           style={[
                             styles.actionButton,
                             equipped
-                              ? styles.equippedButton
-                              : styles.equipButton,
+                              ? { backgroundColor: withAlpha(accentColor, 0.15) }
+                              : { backgroundColor: accentColor },
                           ]}
                           onPress={() => handleEquip(item.id, item.category)}
                         >
                           <Text
                             style={[
                               styles.actionButtonText,
-                              equipped && styles.equippedButtonText,
+                              equipped && { color: accentColor },
                             ]}
                           >
                             {equipped ? "Equipped ✓" : "Equip"}
@@ -199,7 +208,7 @@ export default function StoreTab() {
                         <Pressable
                           style={[
                             styles.actionButton,
-                            styles.buyButton,
+                            { backgroundColor: accentColor },
                             !canAfford && styles.buyButtonDisabled,
                           ]}
                           disabled={!canAfford}
@@ -244,6 +253,9 @@ const styles = StyleSheet.create({
   },
 
   coinBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     alignSelf: "center",
     backgroundColor: "#fff",
     borderRadius: 20,
@@ -266,14 +278,16 @@ const styles = StyleSheet.create({
   },
 
   emptyCard: {
-    backgroundColor: "#fff",
+    backgroundColor: "#1C1C1E",
     borderRadius: 20,
     padding: 24,
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
 
   emptyText: {
-    color: "#333",
+    color: "#F5F5F5",
     fontSize: 16,
     fontWeight: "600",
     textAlign: "center",
@@ -285,16 +299,19 @@ const styles = StyleSheet.create({
   },
 
   petChip: {
-    backgroundColor: "rgba(255,255,255,0.25)",
+    backgroundColor: "#1C1C1E",
     borderRadius: 18,
     paddingVertical: 10,
     paddingHorizontal: 14,
     alignItems: "center",
     minWidth: 84,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
 
   petChipActive: {
-    backgroundColor: "#fff",
+    backgroundColor: "#FF8C42",
+    borderColor: "#FF8C42",
   },
 
   petChipEmoji: {
@@ -309,7 +326,7 @@ const styles = StyleSheet.create({
   },
 
   petChipNameActive: {
-    color: "#FF8C42",
+    color: "#fff",
   },
 
   categoryRow: {
@@ -320,14 +337,17 @@ const styles = StyleSheet.create({
   },
 
   categoryPill: {
-    backgroundColor: "rgba(255,255,255,0.25)",
+    backgroundColor: "#1C1C1E",
     borderRadius: 16,
     paddingVertical: 8,
     paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
 
   categoryPillActive: {
-    backgroundColor: "#fff",
+    backgroundColor: "#FF8C42",
+    borderColor: "#FF8C42",
   },
 
   categoryPillText: {
@@ -337,7 +357,7 @@ const styles = StyleSheet.create({
   },
 
   categoryPillTextActive: {
-    color: "#FF8C42",
+    color: "#fff",
   },
 
   grid: {
@@ -348,17 +368,18 @@ const styles = StyleSheet.create({
   },
 
   itemCard: {
-    backgroundColor: "#fff",
+    backgroundColor: "#1C1C1E",
     borderRadius: 20,
     padding: 16,
     width: "47%",
     alignItems: "center",
     marginBottom: 4,
-    borderWidth: 3,
-    borderColor: "transparent",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
 
   itemCardEquipped: {
+    borderWidth: 2,
     borderColor: "#FF8C42",
   },
 
@@ -370,7 +391,7 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#333",
+    color: "#F5F5F5",
     textAlign: "center",
     marginBottom: 6,
   },
@@ -394,7 +415,7 @@ const styles = StyleSheet.create({
   },
 
   buyButtonDisabled: {
-    backgroundColor: "#ccc",
+    backgroundColor: "#3A3A3C",
   },
 
   equipButton: {
@@ -402,7 +423,7 @@ const styles = StyleSheet.create({
   },
 
   equippedButton: {
-    backgroundColor: "#FFE3CC",
+    backgroundColor: "rgba(255,140,66,0.15)",
   },
 
   actionButtonText: {

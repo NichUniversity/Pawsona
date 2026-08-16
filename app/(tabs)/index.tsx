@@ -1,4 +1,6 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useIsFocused } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -13,9 +15,14 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AvatarDisplay, findAvatarOption } from '../../components/ui/AvatarDisplay';
-import { PawPatternBackground } from '../../components/ui/PawPatternBackground';
+import { SettingsMenu } from '../../components/ui/SettingsMenu';
+import { TabBackground } from '../../components/ui/TabBackground';
+import { ONBOARDING_STORAGE_KEY } from '../../constants/onboarding';
+import { useAuth } from '../../context/AuthContext';
+import { useOnboarding } from '../../context/OnboardingContext';
 import {
   AttributeRatings,
   EMPTY_RATINGS,
@@ -29,6 +36,7 @@ import {
   PET_CATEGORIES,
   PetCategory,
 } from '../../data/petcategories';
+import { ACCENT_COLORS, useTheme } from '../../context/ThemeContext';
 import { useTabBarClearance } from '../../hooks/useTabBarClearance';
 
 const ATTRIBUTES = [
@@ -73,8 +81,14 @@ function PawRating({ value }: { value: number }) {
 
 export default function HomeScreen() {
   const { pets: entries, setPets: setEntries } = usePets();
+  const { signOut } = useAuth();
+  const { replayOnboarding } = useOnboarding();
+  const { accentKey, accentColor, setAccentKey } = useTheme();
   const tabBarClearance = useTabBarClearance();
+  const insets = useSafeAreaInsets();
+  const isFocused = useIsFocused();
 
+  const [settingsVisible, setSettingsVisible] = useState(false);
   const [categoryModalId, setCategoryModalId] = useState<string | null>(null);
   const [avatarModalState, setAvatarModalState] = useState<{
     entryId: string;
@@ -84,6 +98,24 @@ export default function HomeScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
+
+  // The upload-box glow only plays the very first time the app is opened
+  // (same flag the onboarding walkthrough uses), so it doesn't nag on
+  // every launch once the user already knows where to tap.
+  const [isFirstLaunch, setIsFirstLaunch] = useState(false);
+  useEffect(() => {
+    (async () => {
+      try {
+        const done = await AsyncStorage.getItem(ONBOARDING_STORAGE_KEY);
+        if (!done) {
+          setIsFirstLaunch(true);
+        }
+      } catch {
+        // If storage isn't available, just skip the glow — no harm done.
+      }
+    })();
+  }, []);
 
   // Keep currentIndex valid if entries shrink/grow.
   useEffect(() => {
@@ -101,6 +133,42 @@ export default function HomeScreen() {
       useNativeDriver: true,
     }).start();
   }, [currentIndex, fadeAnim]);
+
+  // Slow pulsing glow behind the upload box — draws the eye to it before a
+  // photo has been added. Only rendered while there's no photo yet (see
+  // uploadBoxWrapper JSX below), and only kept running while this tab is
+  // actually focused — a background Animated.loop left running while the
+  // user has swiped away to another tab is one less thing competing with
+  // the swipe gesture for the native thread.
+  useEffect(() => {
+    if (!isFocused) return;
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, {
+          toValue: 1,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowAnim, {
+          toValue: 0,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [glowAnim, isFocused]);
+
+  const glowScale = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.06],
+  });
+  const glowOpacity = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.16, 0.4],
+  });
 
   const currentEntry = entries[currentIndex];
 
@@ -204,7 +272,14 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.screen}>
-      <PawPatternBackground backgroundColor="#2E86DE" />
+      <TabBackground />
+
+      <Pressable
+        style={[styles.settingsButton, { top: insets.top + 8 }]}
+        onPress={() => setSettingsVisible(true)}
+      >
+        <MaterialCommunityIcons name="cog" size={22} color="rgba(255,255,255,0.7)" />
+      </Pressable>
 
       <ScrollView
         contentContainerStyle={[
@@ -233,7 +308,7 @@ export default function HomeScreen() {
                   {currentEntry.confirmed && (
                     <View style={styles.nameInputWrapper}>
                       <TextInput
-                        style={styles.nameInput}
+                        style={[styles.nameInput, { color: accentColor }]}
                         placeholder="Pet's name"
                         placeholderTextColor="#aaa"
                         value={currentEntry.name}
@@ -245,6 +320,21 @@ export default function HomeScreen() {
                   )}
 
                   <View style={styles.uploadBoxWrapper}>
+
+                    {isFirstLaunch && !currentEntry.photoUri && (
+                      <Animated.View
+                        pointerEvents="none"
+                        style={[
+                          styles.uploadGlow,
+                          {
+                            backgroundColor: accentColor,
+                            shadowColor: accentColor,
+                            opacity: glowOpacity,
+                            transform: [{ scale: glowScale }],
+                          },
+                        ]}
+                      />
+                    )}
 
                     {currentEntry.confirmed && currentEntry.selectedEmoji && (
                       <View
@@ -300,39 +390,6 @@ export default function HomeScreen() {
                       </Pressable>
                     </Animated.View>
 
-                    <Pressable
-                      onPress={goLeft}
-                      disabled={currentIndex === 0}
-                      style={[
-                        styles.arrowButtonOverlay,
-                        styles.arrowButtonLeft,
-                        currentIndex === 0 && styles.arrowButtonDisabled,
-                      ]}
-                      >
-                        <MaterialCommunityIcons
-                        name="chevron-left"
-                        size={22}
-                        color="#fff"
-                      />
-                    </Pressable>
-
-                    <Pressable
-                      onPress={goRight}
-                      disabled={currentIndex === entries.length - 1}
-                      style={[
-                        styles.arrowButtonOverlay,
-                        styles.arrowButtonRight,
-                        currentIndex === entries.length - 1 &&
-                          styles.arrowButtonDisabled,
-                      ]}
-                    >
-                      <MaterialCommunityIcons
-                        name="chevron-right"
-                        size={22}
-                        color="#fff"
-                      />
-                    </Pressable>
-
                   </View>
 
                 </View>
@@ -363,21 +420,54 @@ export default function HomeScreen() {
               </View>
 
               {entries.length > 1 && (
-                <View style={styles.dotsRow}>
-                  {entries.map((entry, i) => (
-                    <Pressable
-                      key={entry.id}
-                      onPress={() => goToIndex(i)}
-                      hitSlop={8}
-                    >
-                      <View
-                        style={[
-                          styles.dot,
-                          i === currentIndex && styles.dotActive,
-                        ]}
-                      />
-                    </Pressable>
-                  ))}
+                <View style={styles.carouselControls}>
+                  <Pressable
+                    onPress={goLeft}
+                    disabled={currentIndex === 0}
+                    style={[
+                      styles.arrowButton,
+                      currentIndex === 0 && styles.arrowButtonDisabled,
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name="chevron-left"
+                      size={20}
+                      color="#fff"
+                    />
+                  </Pressable>
+
+                  <View style={styles.dotsRow}>
+                    {entries.map((entry, i) => (
+                      <Pressable
+                        key={entry.id}
+                        onPress={() => goToIndex(i)}
+                        hitSlop={8}
+                      >
+                        <View
+                          style={[
+                            styles.dot,
+                            i === currentIndex && styles.dotActive,
+                          ]}
+                        />
+                      </Pressable>
+                    ))}
+                  </View>
+
+                  <Pressable
+                    onPress={goRight}
+                    disabled={currentIndex === entries.length - 1}
+                    style={[
+                      styles.arrowButton,
+                      currentIndex === entries.length - 1 &&
+                        styles.arrowButtonDisabled,
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name="chevron-right"
+                      size={20}
+                      color="#fff"
+                    />
+                  </Pressable>
                 </View>
               )}
 
@@ -388,13 +478,13 @@ export default function HomeScreen() {
                       style={styles.chooseTypeButton}
                       onPress={() => setCategoryModalId(currentEntry.id)}
                     >
-                      <Text style={styles.chooseTypeButtonText}>
+                      <Text style={[styles.chooseTypeButtonText, { color: accentColor }]}>
                         What kind of pet is this?
                       </Text>
                       <MaterialCommunityIcons
                         name="chevron-down"
                         size={20}
-                        color="#FF8C42"
+                        color={accentColor}
                       />
                     </Pressable>
                   ) : (
@@ -430,7 +520,7 @@ export default function HomeScreen() {
                             })
                           }
                         >
-                          <Text style={styles.dropdownButtonText}>
+                          <Text style={[styles.dropdownButtonText, { color: accentColor }]}>
                             {currentEntry.selectedEmoji
                               ? findAvatarOption(
                                   currentEntry.category,
@@ -445,7 +535,7 @@ export default function HomeScreen() {
                           <MaterialCommunityIcons
                             name="chevron-down"
                             size={20}
-                            color="#FF8C42"
+                            color={accentColor}
                           />
                         </Pressable>
 
@@ -474,7 +564,7 @@ export default function HomeScreen() {
                       handleConfirm(currentEntry.id)
                     }
                   >
-                    <Text style={styles.confirmButtonText}>
+                    <Text style={[styles.confirmButtonText, { color: accentColor }]}>
                       Confirm Avatar
                     </Text>
                   </Pressable>
@@ -577,6 +667,29 @@ export default function HomeScreen() {
             </Pressable>
           </Modal>
 
+          <SettingsMenu
+            visible={settingsVisible}
+            onClose={() => setSettingsVisible(false)}
+            accentOptions={ACCENT_COLORS}
+            activeAccentKey={accentKey}
+            onSelectAccent={(key) => setAccentKey(key as typeof accentKey)}
+            options={[
+              {
+                key: 'replay-tutorial',
+                label: 'Replay Tutorial',
+                icon: 'play-circle-outline',
+                onPress: replayOnboarding,
+              },
+              {
+                key: 'logout',
+                label: 'Log Out',
+                icon: 'logout',
+                destructive: true,
+                onPress: signOut,
+              },
+            ]}
+          />
+
         </View>
       </ScrollView>
     </View>
@@ -604,6 +717,17 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     marginBottom: 36,
+  },
+
+  settingsButton: {
+    position: 'absolute',
+    right: 16,
+    zIndex: 20,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   title: {
@@ -634,25 +758,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  arrowButtonOverlay: {
-    position: 'absolute',
-    top: '50%',
-    marginTop: -16,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+  // Carousel controls now sit below the photo instead of overlaid on top
+  // of it — left arrow, page dots, right arrow, all in one row.
+  carouselControls: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 5,
+    gap: 14,
+    marginTop: 18,
   },
 
-  arrowButtonLeft: {
-    left: 6,
-  },
-
-  arrowButtonRight: {
-    right: 6,
+  arrowButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   arrowButtonDisabled: {
@@ -682,6 +804,21 @@ const styles = StyleSheet.create({
 
   uploadBoxWrapper: {
     position: 'relative',
+  },
+
+  uploadGlow: {
+    position: 'absolute',
+    top: -10,
+    left: -10,
+    width: 190,
+    height: 190,
+    borderRadius: 34,
+    backgroundColor: '#FF8C42',
+    shadowColor: '#FF8C42',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 16,
+    elevation: 8,
   },
 
   uploadBoxShadow: {
@@ -751,8 +888,8 @@ const styles = StyleSheet.create({
 
   dotsRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
-    marginTop: 18,
   },
 
   dot: {

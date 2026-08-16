@@ -10,8 +10,11 @@ import {
   View,
 } from "react-native";
 
+import { CoinIcon } from "../../components/ui/CoinIcon";
 import { ScrollingLayer } from "../../components/ui/ScrollingLayer";
+import { TabBackground } from "../../components/ui/TabBackground";
 import { usePets } from "../../context/PetInformation";
+import { useTheme } from "../../context/ThemeContext";
 import { useTabBarClearance } from "../../hooks/useTabBarClearance";
 
 type GameId = "simon" | "minesweeper" | "parkour" | "parkourFP";
@@ -55,16 +58,13 @@ const GAMES: {
 
 export default function Minigames() {
   const { coins } = usePets();
+  const { accentColor } = useTheme();
   const [activeGame, setActiveGame] = useState<GameId | "menu">("menu");
   const tabBarClearance = useTabBarClearance();
 
   return (
     <View style={{ flex: 1 }}>
-      <Image
-        source={require("../../assets/images/pawprintbackground3.png")}
-        style={styles.background}
-        resizeMode="cover"
-      />
+      <TabBackground />
 
       <ScrollView
         contentContainerStyle={[
@@ -75,7 +75,8 @@ export default function Minigames() {
       <Text style={styles.title}>🎮 Mini Games</Text>
 
       <View style={styles.coinBadge}>
-        <Text style={styles.coinText}>🪙 {coins}</Text>
+        <CoinIcon size={16} />
+        <Text style={[styles.coinText, { color: accentColor }]}> {coins}</Text>
       </View>
 
       {activeGame === "menu" && (
@@ -137,6 +138,7 @@ const GAP_DURATION = 250;
 
 function SimonSaysGame({ onExit }: { onExit: () => void }) {
   const { earnCoins } = usePets();
+  const { accentColor } = useTheme();
 
   const [sequence, setSequence] = useState<number[]>([]);
   const [playerIndex, setPlayerIndex] = useState(0);
@@ -237,7 +239,7 @@ function SimonSaysGame({ onExit }: { onExit: () => void }) {
   return (
     <View style={styles.gameBox}>
       <Pressable style={styles.exitButton} onPress={handleExit}>
-        <Text style={styles.exitButtonText}>← Back to Games</Text>
+        <Text style={[styles.exitButtonText, { color: accentColor }]}>← Back to Games</Text>
       </Pressable>
 
       <Text style={styles.gameTitle}>🐾 Paw Pattern</Text>
@@ -245,10 +247,10 @@ function SimonSaysGame({ onExit }: { onExit: () => void }) {
       {gameState === "idle" && (
         <>
           <Text style={styles.gameSubtitle}>
-            Watch the pattern, then repeat it back. Every round earns
-            🪙 {COINS_PER_ROUND}!
+            Watch the pattern, then repeat it back. Every round earns{" "}
+            <CoinIcon size={13} /> {COINS_PER_ROUND}!
           </Text>
-          <Pressable style={styles.primaryButton} onPress={startGame}>
+          <Pressable style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
             <Text style={styles.primaryButtonText}>Start Game</Text>
           </Pressable>
         </>
@@ -287,7 +289,7 @@ function SimonSaysGame({ onExit }: { onExit: () => void }) {
               <Text style={styles.gameOverText}>
                 You made it to round {round}! 🎉
               </Text>
-              <Pressable style={styles.primaryButton} onPress={startGame}>
+              <Pressable style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
                 <Text style={styles.primaryButtonText}>Play Again</Text>
               </Pressable>
             </>
@@ -381,6 +383,7 @@ function numberColor(n: number) {
 
 function PetMinesweeperGame({ onExit }: { onExit: () => void }) {
   const { earnCoins } = usePets();
+  const { accentColor } = useTheme();
 
   const [grid, setGrid] = useState<Cell[][]>(() => makeGrid());
   const [gameState, setGameState] = useState<"playing" | "won" | "lost">(
@@ -468,13 +471,13 @@ function PetMinesweeperGame({ onExit }: { onExit: () => void }) {
   return (
     <View style={styles.gameBox}>
       <Pressable style={styles.exitButton} onPress={onExit}>
-        <Text style={styles.exitButtonText}>← Back to Games</Text>
+        <Text style={[styles.exitButtonText, { color: accentColor }]}>← Back to Games</Text>
       </Pressable>
 
       <Text style={styles.gameTitle}>🦴 Sniff & Seek</Text>
       <Text style={styles.gameSubtitle}>
         Tap to dig. Long-press to mark a spot you think has a skunk 🦨. Clear
-        every safe square to earn 🪙 {WIN_REWARD}!
+        every safe square to earn <CoinIcon size={13} /> {WIN_REWARD}!
       </Text>
 
       <View style={styles.mineGrid}>
@@ -524,7 +527,7 @@ function PetMinesweeperGame({ onExit }: { onExit: () => void }) {
           <Text style={styles.gameOverText}>
             You found every bone! 🎉 +{WIN_REWARD} coins
           </Text>
-          <Pressable style={styles.primaryButton} onPress={resetGame}>
+          <Pressable style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={resetGame}>
             <Text style={styles.primaryButtonText}>Play Again</Text>
           </Pressable>
         </>
@@ -535,7 +538,7 @@ function PetMinesweeperGame({ onExit }: { onExit: () => void }) {
           <Text style={styles.gameOverText}>
             Uh oh, a skunk got startled! Try again.
           </Text>
-          <Pressable style={styles.primaryButton} onPress={resetGame}>
+          <Pressable style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={resetGame}>
             <Text style={styles.primaryButtonText}>Play Again</Text>
           </Pressable>
         </>
@@ -599,6 +602,7 @@ function spawnParkourObstacle(id: number): ParkourObstacle {
 
 function PupParkourGame({ onExit }: { onExit: () => void }) {
   const { earnCoins } = usePets();
+  const { accentColor } = useTheme();
 
   const [gameState, setGameState] = useState<"idle" | "playing" | "gameover">(
     "idle"
@@ -799,7 +803,7 @@ function PupParkourGame({ onExit }: { onExit: () => void }) {
   return (
     <View style={styles.gameBox}>
       <Pressable style={styles.exitButton} onPress={onExit}>
-        <Text style={styles.exitButtonText}>← Back to Games</Text>
+        <Text style={[styles.exitButtonText, { color: accentColor }]}>← Back to Games</Text>
       </Pressable>
 
       <Text style={styles.gameTitle}>🏃 Pup Parkour</Text>
@@ -808,10 +812,10 @@ function PupParkourGame({ onExit }: { onExit: () => void }) {
         <>
           <Text style={styles.gameSubtitle}>
             Tap to jump over logs 🪵. Swipe left or right to slip through
-            gaps in the walls 🧱. Every bit of distance earns coins — 🪙 1
-            per {COINS_PER_DISTANCE} distance!
+            gaps in the walls 🧱. Every bit of distance earns coins —{" "}
+            <CoinIcon size={13} /> 1 per {COINS_PER_DISTANCE} distance!
           </Text>
-          <Pressable style={styles.primaryButton} onPress={startGame}>
+          <Pressable style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
             <Text style={styles.primaryButtonText}>Start Run</Text>
           </Pressable>
         </>
@@ -885,7 +889,7 @@ function PupParkourGame({ onExit }: { onExit: () => void }) {
                 You made it {score}m! 🎉{" "}
                 {lastCoins > 0 ? `+${lastCoins} coins` : "Go a bit further next time!"}
               </Text>
-              <Pressable style={styles.primaryButton} onPress={startGame}>
+              <Pressable style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
                 <Text style={styles.primaryButtonText}>Run Again</Text>
               </Pressable>
             </>
@@ -988,6 +992,7 @@ function lineBetween(
 
 function PupParkourFPGame({ onExit }: { onExit: () => void }) {
   const { earnCoins } = usePets();
+  const { accentColor } = useTheme();
 
   const [gameState, setGameState] = useState<"idle" | "playing" | "gameover">(
     "idle"
@@ -1211,7 +1216,7 @@ function PupParkourFPGame({ onExit }: { onExit: () => void }) {
   return (
     <View style={styles.gameBox}>
       <Pressable style={styles.exitButton} onPress={onExit}>
-        <Text style={styles.exitButtonText}>← Back to Games</Text>
+        <Text style={[styles.exitButtonText, { color: accentColor }]}>← Back to Games</Text>
       </Pressable>
 
       <Text style={styles.gameTitle}>👀 Dog&apos;s-Eye Dash</Text>
@@ -1220,10 +1225,10 @@ function PupParkourFPGame({ onExit }: { onExit: () => void }) {
         <>
           <Text style={styles.gameSubtitle}>
             Same course as Pup Parkour, seen through your pup&apos;s eyes! Tap to
-            hop over logs 🪵, swipe to duck through wall gaps 🧱. 🪙 1 per{" "}
-            {COINS_PER_DISTANCE} distance.
+            hop over logs 🪵, swipe to duck through wall gaps 🧱.{" "}
+            <CoinIcon size={13} /> 1 per {COINS_PER_DISTANCE} distance.
           </Text>
-          <Pressable style={styles.primaryButton} onPress={startGame}>
+          <Pressable style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
             <Text style={styles.primaryButtonText}>Start Run</Text>
           </Pressable>
         </>
@@ -1406,7 +1411,7 @@ function PupParkourFPGame({ onExit }: { onExit: () => void }) {
                 You made it {score}m! 🎉{" "}
                 {lastCoins > 0 ? `+${lastCoins} coins` : "Go a bit further next time!"}
               </Text>
-              <Pressable style={styles.primaryButton} onPress={startGame}>
+              <Pressable style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
                 <Text style={styles.primaryButtonText}>Run Again</Text>
               </Pressable>
             </>
@@ -1443,6 +1448,9 @@ const styles = StyleSheet.create({
   },
 
   coinBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     alignSelf: "center",
     backgroundColor: "#fff",
     borderRadius: 20,
@@ -1466,15 +1474,17 @@ const styles = StyleSheet.create({
   },
 
   gameCard: {
-    backgroundColor: "#fff",
+    backgroundColor: "#1C1C1E",
     borderRadius: 20,
     padding: 18,
     width: "47%",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
 
   gameCardLocked: {
-    backgroundColor: "rgba(255,255,255,0.55)",
+    opacity: 0.4,
   },
 
   gameEmoji: {
@@ -1485,7 +1495,7 @@ const styles = StyleSheet.create({
   gameName: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#333",
+    color: "#F5F5F5",
     textAlign: "center",
     marginBottom: 4,
   },
@@ -1493,25 +1503,29 @@ const styles = StyleSheet.create({
   gameDescription: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#888",
+    color: "#8E8E93",
     textAlign: "center",
   },
 
   gameBox: {
-    backgroundColor: "#fff",
+    backgroundColor: "#1C1C1E",
     borderRadius: 20,
     padding: 20,
     width: "100%",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
 
   exitButton: {
     alignSelf: "flex-start",
-    backgroundColor: "#FFE3CC",
+    backgroundColor: "#1C1C1E",
     borderRadius: 12,
     paddingVertical: 8,
     paddingHorizontal: 14,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
 
   exitButtonText: {
@@ -1523,14 +1537,14 @@ const styles = StyleSheet.create({
   gameTitle: {
     fontSize: 22,
     fontWeight: "800",
-    color: "#333",
+    color: "#F5F5F5",
     marginBottom: 10,
   },
 
   gameSubtitle: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#666",
+    color: "#8E8E93",
     textAlign: "center",
     marginBottom: 20,
   },
@@ -1552,14 +1566,14 @@ const styles = StyleSheet.create({
   roundText: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#333",
+    color: "#F5F5F5",
     marginBottom: 2,
   },
 
   roundSubtext: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#999",
+    color: "#8E8E93",
     marginBottom: 20,
   },
 
@@ -1591,7 +1605,7 @@ const styles = StyleSheet.create({
   gameOverText: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#333",
+    color: "#F5F5F5",
     textAlign: "center",
     marginTop: 18,
   },
@@ -1637,13 +1651,13 @@ const styles = StyleSheet.create({
   scoreText: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#333",
+    color: "#F5F5F5",
   },
 
   bestScoreText: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#999",
+    color: "#8E8E93",
     alignSelf: "flex-end",
   },
 
@@ -1741,7 +1755,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 12,
     fontWeight: "600",
-    color: "#999",
+    color: "#8E8E93",
     textAlign: "center",
   },
 

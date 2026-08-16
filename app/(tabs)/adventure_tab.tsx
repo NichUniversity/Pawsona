@@ -1,5 +1,5 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
@@ -15,7 +15,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AvatarDisplay } from "../../components/ui/AvatarDisplay";
+import { CoinIcon } from "../../components/ui/CoinIcon";
+import { TabBackground } from "../../components/ui/TabBackground";
 import { PetEntry, usePets } from "../../context/PetInformation";
+import { useTheme, withAlpha } from "../../context/ThemeContext";
 import { ADVENTURES } from "../../data/adventure";
 import { PILL_TAB_BAR_STYLE } from "./_layout";
 
@@ -141,25 +144,27 @@ function FireflyField({ fireflies }: { fireflies: FireflyConfig[] }) {
 }
 
 export default function Adventure() {
-  const router = useRouter();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { pets, coins, unlockedAreas, unlockArea, unlockStorybook } =
     usePets();
+  const { accentColor } = useTheme();
 
   const [selectedPet, setSelectedPet] = useState<PetEntry | null>(null);
   const [selectedArea, setSelectedArea] = useState<AreaName | null>(null);
   const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
 
-  // Reset target for the tab bar — matches the "bottom" calculation in
-  // _layout.tsx's screenOptions exactly, so re-applying this looks
-  // identical to the bar's normal resting state instead of resetting to
-  // `undefined` (which drops the pill styling entirely and falls back to
-  // the default flat MaterialTopTabs bar anchored to the screen edge).
+  // Reset target for the tab bar — matches the height/paddingBottom
+  // calculation in _layout.tsx's screenOptions exactly, so re-applying
+  // this looks identical to the bar's normal resting state instead of
+  // resetting to `undefined` (which drops this styling entirely and
+  // falls back to the default flat MaterialTopTabs bar anchored to the
+  // screen edge).
   const restoredTabBarStyle = useMemo(
     () => ({
       ...PILL_TAB_BAR_STYLE,
-      bottom: insets.bottom > 0 ? insets.bottom + 8 : 16,
+      height: 58 + insets.bottom,
+      paddingBottom: insets.bottom,
     }),
     [insets.bottom]
   );
@@ -304,11 +309,10 @@ export default function Adventure() {
     setCurrentNodeId(null);
   };
 
-  // Fully leaves the Adventure flow and jumps back to the Home tab.
+  // Leaves the current story and returns to the area-select screen for the
+  // same pet (unlike changePet, this keeps selectedPet set).
   const endAdventure = () => {
-    setSelectedPet(null);
     resetAdventureState();
-    router.push("/");
   };
 
   const changePet = () => {
@@ -316,7 +320,10 @@ export default function Adventure() {
     resetAdventureState();
   };
 
-  const showEndAdventureButton = selectedPet !== null;
+  // Only relevant once the user is actually inside a story — not just on
+  // the area-select screen — since ending an adventure now returns there
+  // instead of leaving the tab.
+  const showEndAdventureButton = selectedArea !== null;
 
   // Full-screen background art for the currently selected area (once one
   // exists for it). Sits behind the ScrollView; the ScrollView's own
@@ -326,11 +333,7 @@ export default function Adventure() {
 
   return (
     <View style={{ flex: 1 }}>
-      <Image
-        source={require("../../assets/images/pawprintbackground5.png")}
-        style={styles.background}
-        resizeMode="cover"
-      />
+      <TabBackground />
 
       {showFullScreenBackground && (
         <View style={styles.fullScreenBackgroundWrap}>
@@ -354,7 +357,8 @@ export default function Adventure() {
         <Text style={styles.title}>🐾 Adventure</Text>
 
         <View style={styles.coinBadge}>
-          <Text style={styles.coinText}>🪙 {coins}</Text>
+          <CoinIcon size={16} />
+          <Text style={[styles.coinText, { color: accentColor }]}> {coins}</Text>
         </View>
 
         {showEndAdventureButton && (
@@ -392,6 +396,15 @@ export default function Adventure() {
 
         {selectedPet && !selectedArea && (
           <>
+            <Pressable style={styles.changePetPill} onPress={changePet}>
+              <MaterialCommunityIcons
+                name="swap-horizontal"
+                size={14}
+                color="#fff"
+              />
+              <Text style={styles.changePetPillText}>Change Pet</Text>
+            </Pressable>
+
             <Text style={styles.header}>
               Where should {selectedPet.name} explore?
             </Text>
@@ -418,22 +431,25 @@ export default function Adventure() {
                       <Text
                         style={[
                           styles.priceTag,
+                          { color: accentColor },
                           !canAfford && styles.priceTagDisabled,
                         ]}
                       >
-                        {canAfford
-                          ? `Unlock for 🪙 ${area.price}`
-                          : `Need 🪙 ${area.price}`}
+                        {canAfford ? (
+                          <>
+                            Unlock for <CoinIcon size={13} /> {area.price}
+                          </>
+                        ) : (
+                          <>
+                            Need <CoinIcon size={13} /> {area.price}
+                          </>
+                        )}
                       </Text>
                     )}
                   </View>
                 </Pressable>
               );
             })}
-
-            <Pressable style={styles.changePetButton} onPress={changePet}>
-              <Text style={styles.changePetText}>Change Adventurer</Text>
-            </Pressable>
           </>
         )}
 
@@ -458,6 +474,7 @@ export default function Adventure() {
                 key={choice.text}
                 style={[
                   styles.choiceButton,
+                  !showFullScreenBackground && { backgroundColor: accentColor },
                   showFullScreenBackground && styles.choiceButtonThemed,
                 ]}
                 onPress={() => handleChoice(choice.next)}
@@ -495,12 +512,14 @@ export default function Adventure() {
             <View
               style={[
                 styles.bookBanner,
+                !showFullScreenBackground && { backgroundColor: withAlpha(accentColor, 0.15) },
                 showFullScreenBackground && styles.bookBannerThemed,
               ]}
             >
               <Text
                 style={[
                   styles.bookBannerText,
+                  !showFullScreenBackground && { color: accentColor },
                   showFullScreenBackground && styles.bookBannerTextThemed,
                 ]}
               >
@@ -512,6 +531,7 @@ export default function Adventure() {
             <Pressable
               style={[
                 styles.finishButton,
+                !showFullScreenBackground && { backgroundColor: accentColor },
                 showFullScreenBackground && styles.choiceButtonThemed,
               ]}
               onPress={resetAdventureState}
@@ -547,6 +567,7 @@ export default function Adventure() {
             <Pressable
               style={[
                 styles.finishButton,
+                !showFullScreenBackground && { backgroundColor: accentColor },
                 showFullScreenBackground && styles.choiceButtonThemed,
               ]}
               onPress={resetAdventureState}
@@ -604,6 +625,9 @@ const styles = StyleSheet.create({
   },
 
   coinBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     alignSelf: "center",
     backgroundColor: "#fff",
     borderRadius: 20,
@@ -620,11 +644,13 @@ const styles = StyleSheet.create({
 
   endAdventureButton: {
     alignSelf: "flex-start",
-    backgroundColor: "rgba(255,255,255,0.3)",
+    backgroundColor: "#1C1C1E",
     borderRadius: 12,
     paddingVertical: 8,
     paddingHorizontal: 14,
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
 
   endAdventureText: {
@@ -641,16 +667,18 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: "#1C1C1E",
     borderRadius: 20,
     padding: 20,
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 15,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
 
   cardLocked: {
-    backgroundColor: "rgba(255,255,255,0.55)",
+    opacity: 0.4,
   },
 
   avatar: {
@@ -665,7 +693,7 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#333",
+    color: "#F5F5F5",
   },
 
   priceTag: {
@@ -676,22 +704,28 @@ const styles = StyleSheet.create({
   },
 
   priceTagDisabled: {
-    color: "#999",
+    color: "#8E8E93",
   },
 
-  changePetButton: {
+  // Matches the Change Pet pill used on Daily Paw Log's almanac page.
+  changePetPill: {
     alignSelf: "flex-start",
-    backgroundColor: "rgba(255,255,255,0.3)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#1C1C1E",
     borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    marginTop: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
 
-  changePetText: {
+  changePetPillText: {
     color: "#fff",
     fontWeight: "700",
-    fontSize: 13,
+    fontSize: 12,
   },
 
   // Full-bleed area artwork, positioned behind the ScrollView. "contain"
@@ -730,9 +764,11 @@ const styles = StyleSheet.create({
   },
 
   storyBox: {
-    backgroundColor: "rgba(255,255,255,0.94)",
+    backgroundColor: "rgba(28,28,30,0.92)",
     borderRadius: 20,
     padding: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
 
   // Applied over storyBox/bookBox whenever the area has its own background
@@ -752,7 +788,7 @@ const styles = StyleSheet.create({
   storyText: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#333",
+    color: "#F5F5F5",
     marginBottom: 20,
   },
 
@@ -787,10 +823,12 @@ const styles = StyleSheet.create({
   },
 
   bookBox: {
-    backgroundColor: "rgba(255,255,255,0.94)",
+    backgroundColor: "rgba(28,28,30,0.92)",
     borderRadius: 20,
     padding: 20,
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
 
   bookEmoji: {
@@ -799,7 +837,7 @@ const styles = StyleSheet.create({
   },
 
   bookBanner: {
-    backgroundColor: "#FFE3CC",
+    backgroundColor: "rgba(255,140,66,0.15)",
     borderRadius: 14,
     padding: 14,
     marginBottom: 16,
