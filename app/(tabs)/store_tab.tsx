@@ -18,7 +18,6 @@ import {
   CosmeticCategory,
 } from "../../data/cosmetics";
 import { useTabBarClearance } from "../../hooks/useTabBarClearance";
-cl
 
 export default function StoreTab() {
   const { pets, setPets, coins, spendCoins } = usePets();

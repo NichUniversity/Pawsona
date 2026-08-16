@@ -13,8 +13,9 @@ import {
 import { CoinIcon } from "../../components/ui/CoinIcon";
 import { ScrollingLayer } from "../../components/ui/ScrollingLayer";
 import { TabBackground } from "../../components/ui/TabBackground";
-import { usePets } from "../../context/PetInformation";
+import { PetEntry, usePets } from "../../context/PetInformation";
 import { useTheme } from "../../context/ThemeContext";
+import { COSMETICS } from "../../data/cosmetics";
 import { useTabBarClearance } from "../../hooks/useTabBarClearance";
 
 type GameId = "simon" | "minesweeper" | "parkour" | "parkourFP";
@@ -80,25 +81,30 @@ export default function Minigames() {
       </View>
 
       {activeGame === "menu" && (
-        <View style={styles.grid}>
-          {GAMES.map((game) => (
-            <Pressable
-              key={game.id}
-              style={[
-                styles.gameCard,
-                !game.available && styles.gameCardLocked,
-              ]}
-              onPress={() => game.available && setActiveGame(game.id)}
-              disabled={!game.available}
-            >
-              <Text style={styles.gameEmoji}>
-                {game.available ? game.emoji : "🔒"}
-              </Text>
-              <Text style={styles.gameName}>{game.name}</Text>
-              <Text style={styles.gameDescription}>{game.description}</Text>
-            </Pressable>
-          ))}
-        </View>
+        <>
+          <PassiveActivitiesSection />
+
+          <Text style={styles.sectionHeading}>🎮 Games</Text>
+          <View style={styles.grid}>
+            {GAMES.map((game) => (
+              <Pressable
+                key={game.id}
+                style={[
+                  styles.gameCard,
+                  !game.available && styles.gameCardLocked,
+                ]}
+                onPress={() => game.available && setActiveGame(game.id)}
+                disabled={!game.available}
+              >
+                <Text style={styles.gameEmoji}>
+                  {game.available ? game.emoji : "🔒"}
+                </Text>
+                <Text style={styles.gameName}>{game.name}</Text>
+                <Text style={styles.gameDescription}>{game.description}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </>
       )}
 
       {activeGame === "simon" && (
@@ -117,6 +123,223 @@ export default function Minigames() {
         <PupParkourFPGame onExit={() => setActiveGame("menu")} />
       )}
       </ScrollView>
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Passive Coins (idle-clicker style activities)                       */
+/*                                                                      */
+/* Each activity has its own 30s cooldown per pet, a small random coin */
+/* payout, and a chance to dig up a cosmetic the selected pet doesn't  */
+/* already own. Cooldowns live in a ref (not state) since they don't   */
+/* need to trigger a render themselves — a 1s ticker forces re-renders */
+/* so the countdown text stays live and buttons re-enable on time.     */
+/* ------------------------------------------------------------------ */
+
+const ACTIVITY_COOLDOWN_MS = 30 * 1000;
+
+type ActivityId = "dig" | "walk" | "swim";
+
+const ACTIVITIES: {
+  id: ActivityId;
+  name: string;
+  emoji: string;
+  description: string;
+  coinRange: [number, number];
+  cosmeticChance: number;
+}[] = [
+  {
+    id: "dig",
+    name: "Dig",
+    emoji: "⛏️",
+    description: "Let your pet dig around for buried coins.",
+    coinRange: [2, 8],
+    cosmeticChance: 0.12,
+  },
+  {
+    id: "walk",
+    name: "Walk",
+    emoji: "🐾",
+    description: "Take your pet for a stroll to sniff out spare change.",
+    coinRange: [3, 9],
+    cosmeticChance: 0.07,
+  },
+  {
+    id: "swim",
+    name: "Swim",
+    emoji: "🏊",
+    description: "Splash around and see what washes up.",
+    coinRange: [3, 10],
+    cosmeticChance: 0.09,
+  },
+];
+
+function cooldownKey(activityId: ActivityId, petId: string) {
+  return `${activityId}:${petId}`;
+}
+
+function PassiveActivitiesSection() {
+  const { pets, setPets, earnCoins } = usePets();
+  const { accentColor } = useTheme();
+
+  const confirmedPets = pets.filter((pet) => pet.confirmed);
+  const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
+  const [resultText, setResultText] = useState<Record<string, string>>({});
+  const [, setTick] = useState(0);
+
+  const readyAtRef = useRef<Record<string, number>>({});
+
+  useEffect(() => {
+    if (confirmedPets.length === 0) {
+      if (selectedPetId !== null) setSelectedPetId(null);
+      return;
+    }
+    if (!selectedPetId || !confirmedPets.some((p) => p.id === selectedPetId)) {
+      setSelectedPetId(confirmedPets[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [confirmedPets.map((p) => p.id).join(","), selectedPetId]);
+
+  useEffect(() => {
+    const interval = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const updatePet = (id: string, patch: Partial<PetEntry>) => {
+    setPets((prev) =>
+      prev.map((pet) => (pet.id === id ? { ...pet, ...patch } : pet))
+    );
+  };
+
+  const handleActivity = (activity: (typeof ACTIVITIES)[number]) => {
+    if (!selectedPetId) return;
+
+    const key = cooldownKey(activity.id, selectedPetId);
+    const now = Date.now();
+    const readyAt = readyAtRef.current[key] ?? 0;
+    if (now < readyAt) return;
+
+    readyAtRef.current[key] = now + ACTIVITY_COOLDOWN_MS;
+    setTick((t) => t + 1);
+
+    const [minCoins, maxCoins] = activity.coinRange;
+    const coinsEarned =
+      Math.floor(Math.random() * (maxCoins - minCoins + 1)) + minCoins;
+    earnCoins(coinsEarned);
+
+    let message = `+${coinsEarned} coins`;
+
+    if (Math.random() < activity.cosmeticChance) {
+      const pet = pets.find((p) => p.id === selectedPetId);
+      const unowned = COSMETICS.filter(
+        (item) => !pet?.ownedCosmetics.includes(item.id)
+      );
+      if (pet && unowned.length > 0) {
+        const found = unowned[Math.floor(Math.random() * unowned.length)];
+        updatePet(pet.id, {
+          ownedCosmetics: [...pet.ownedCosmetics, found.id],
+        });
+        message = `+${coinsEarned} coins & found ${found.emoji} ${found.name}!`;
+      }
+    }
+
+    setResultText((prev) => ({ ...prev, [activity.id]: message }));
+  };
+
+  return (
+    <View style={styles.activitiesSection}>
+      <Text style={styles.sectionHeading}>🪙 Passive Coins</Text>
+      <Text style={styles.activitiesSubtitle}>
+        Check in every 30 seconds to earn a few coins — and sometimes a
+        cosmetic!
+      </Text>
+
+      {confirmedPets.length === 0 ? (
+        <View style={styles.activitiesEmptyCard}>
+          <Text style={styles.activitiesEmptyText}>
+            Confirm a pet on the Home tab to start earning passive coins!
+          </Text>
+        </View>
+      ) : (
+        <>
+          {confirmedPets.length > 1 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.activityPetRow}
+            >
+              {confirmedPets.map((pet) => (
+                <Pressable
+                  key={pet.id}
+                  style={[
+                    styles.activityPetChip,
+                    selectedPetId === pet.id && {
+                      backgroundColor: accentColor,
+                      borderColor: accentColor,
+                    },
+                  ]}
+                  onPress={() => setSelectedPetId(pet.id)}
+                >
+                  <Text style={styles.activityPetChipName}>
+                    {pet.name || "Unnamed Pet"}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
+
+          {ACTIVITIES.map((activity) => {
+            const key = selectedPetId
+              ? cooldownKey(activity.id, selectedPetId)
+              : "";
+            const readyAt = readyAtRef.current[key] ?? 0;
+            const remainingMs = Math.max(0, readyAt - Date.now());
+            const onCooldown = remainingMs > 0;
+            const remainingSec = Math.ceil(remainingMs / 1000);
+
+            return (
+              <View key={activity.id} style={styles.activityCard}>
+                <View style={styles.activityCardHeader}>
+                  <Text style={styles.activityEmoji}>{activity.emoji}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.activityName}>{activity.name}</Text>
+                    <Text style={styles.activityDescription}>
+                      {activity.description}
+                    </Text>
+                  </View>
+                </View>
+
+                <Pressable
+                  style={[
+                    styles.activityButton,
+                    onCooldown
+                      ? styles.activityButtonDisabled
+                      : { backgroundColor: accentColor },
+                  ]}
+                  disabled={onCooldown}
+                  onPress={() => handleActivity(activity)}
+                >
+                  <Text
+                    style={[
+                      styles.activityButtonText,
+                      onCooldown && styles.activityButtonTextDisabled,
+                    ]}
+                  >
+                    {onCooldown ? `Ready in ${remainingSec}s` : `Let's go!`}
+                  </Text>
+                </Pressable>
+
+                {resultText[activity.id] && (
+                  <Text style={[styles.activityResultText, { color: accentColor }]}>
+                    {resultText[activity.id]}
+                  </Text>
+                )}
+              </View>
+            );
+          })}
+        </>
+      )}
     </View>
   );
 }
@@ -1463,6 +1686,123 @@ const styles = StyleSheet.create({
     color: "#FF8C42",
     fontWeight: "800",
     fontSize: 16,
+  },
+
+  sectionHeading: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#fff",
+    alignSelf: "flex-start",
+    marginBottom: 12,
+    marginTop: 4,
+  },
+
+  activitiesSection: {
+    width: "100%",
+    marginBottom: 28,
+  },
+
+  activitiesSubtitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#8E8E93",
+    marginBottom: 16,
+  },
+
+  activitiesEmptyCard: {
+    backgroundColor: "#1C1C1E",
+    borderRadius: 20,
+    padding: 20,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+
+  activitiesEmptyText: {
+    color: "#F5F5F5",
+    fontSize: 14,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+
+  activityPetRow: {
+    gap: 10,
+    paddingBottom: 14,
+  },
+
+  activityPetChip: {
+    backgroundColor: "#1C1C1E",
+    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+
+  activityPetChipName: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#fff",
+  },
+
+  activityCard: {
+    backgroundColor: "#1C1C1E",
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+
+  activityCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 12,
+  },
+
+  activityEmoji: {
+    fontSize: 32,
+  },
+
+  activityName: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#F5F5F5",
+    marginBottom: 2,
+  },
+
+  activityDescription: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#8E8E93",
+  },
+
+  activityButton: {
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+
+  activityButtonDisabled: {
+    backgroundColor: "#3A3A3C",
+  },
+
+  activityButtonText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 14,
+  },
+
+  activityButtonTextDisabled: {
+    color: "#8E8E93",
+  },
+
+  activityResultText: {
+    fontSize: 13,
+    fontWeight: "700",
+    textAlign: "center",
+    marginTop: 10,
   },
 
   grid: {

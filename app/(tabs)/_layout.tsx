@@ -26,10 +26,10 @@ const { Navigator } = createMaterialTopTabNavigator();
 // we give the native pager a beat to fully finish before accepting input
 // again. Tune this down for snappier feel / up if the glitch reappears —
 // just don't drop it too far below the pager's own settle time (~250ms)
-// or the bug has room to sneak back in. We're already close to that floor
-// here, so if swiping starts glitching again, this is the first thing to
-// raise back up.
-const TRANSITION_LOCK_MS = 220;
+// or the bug has room to sneak back in. We're now BELOW that settle-time
+// floor purely to keep things snappy — if the partial-swipe glitch comes
+// back, raise this toward 220-250 first before changing anything else.
+const TRANSITION_LOCK_MS = 160;
 
 // Shared with adventure_tab.tsx: whenever a screen needs to reset the tab
 // bar back to its normal resting look via navigation.setOptions, it must
