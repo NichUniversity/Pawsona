@@ -27,6 +27,12 @@ type Props = {
   color?: string | null;
   size?: number;
   style?: StyleProp<ViewStyle> | StyleProp<TextStyle>;
+  /**
+   * "face" = close-up art for avatar-picker/selection UI, falling back to
+   * `image` when an option has no dedicated face art.
+   * "full" (default) = the normal full-body art shown everywhere else.
+   */
+  variant?: "face" | "full";
 };
 
 /**
@@ -34,10 +40,19 @@ type Props = {
  * backdrop so transparent PNGs stand out) when the matched option has one,
  * otherwise the emoji. Falls back to a paw emoji if nothing matches.
  */
-export function AvatarDisplay({ category, emoji, color, size = 40, style }: Props) {
+export function AvatarDisplay({
+  category,
+  emoji,
+  color,
+  size = 40,
+  style,
+  variant = "full",
+}: Props) {
   const option = findAvatarOption(category, emoji, color);
+  const source =
+    variant === "face" ? option?.faceImage ?? option?.image : option?.image;
 
-  if (option?.image) {
+  if (source) {
     return (
       <View
         style={[
@@ -54,7 +69,7 @@ export function AvatarDisplay({ category, emoji, color, size = 40, style }: Prop
         ]}
       >
         <Image
-          source={option.image}
+          source={source}
           style={{ width: size * 0.82, height: size * 0.82 }}
           resizeMode="contain"
         />

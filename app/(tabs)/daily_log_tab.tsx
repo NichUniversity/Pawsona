@@ -15,9 +15,11 @@ import OriginStoryWizard from "../../components/OriginStoryWizard";
 import { AvatarDisplay, findAvatarOption } from "../../components/ui/AvatarDisplay";
 import { CoinIcon } from "../../components/ui/CoinIcon";
 import { TabBackground } from "../../components/ui/TabBackground";
+import { WalkingSprite } from "../../components/ui/WalkingSprite";
 import { API_BASE_URL, GOLD, PARCHMENT, WOOD_DARK, WOOD_MID } from "../../constants/pet-log-theme";
 import { PetEntry, usePets } from "../../context/PetInformation";
 import { useTheme } from "../../context/ThemeContext";
+import { findWalkFrames } from "../../data/walkAnimations";
 import { useTabBarClearance } from "../../hooks/useTabBarClearance";
 
 type AttributeKey =
@@ -54,12 +56,21 @@ export default function DailyPawLog() {
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
   const selectedPet =
     pets.find((pet) => pet.id === selectedPetId) ?? null;
+  // Looked up once per render so both the hidden preloader below and the
+  // avatar's hold-to-walk logic use the exact same frames.
+  const walkFrames = selectedPet
+    ? findWalkFrames(selectedPet.selectedEmoji)
+    : undefined;
 
   const [logText, setLogText] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiFeedback, setAiFeedback] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
   const [isOriginStoryVisible, setIsOriginStoryVisible] = useState(false);
+  // Held down on the almanac avatar? Plays that pet's walk cycle instead of
+  // the static avatar art (only pets with a WALK_ANIMATIONS entry animate;
+  // everyone else just sits there as before).
+  const [isAvatarWalking, setIsAvatarWalking] = useState(false);
 
   const handleAiSubmit = async () => {
     if (!selectedPet || !logText.trim() || isAnalyzing) return;
@@ -140,6 +151,7 @@ export default function DailyPawLog() {
     setAiFeedback(null);
     setAiError(null);
     setIsOriginStoryVisible(false);
+    setIsAvatarWalking(false);
   };
 
   const updateBackstory = (petId: string, text: string) => {
@@ -270,13 +282,42 @@ export default function DailyPawLog() {
                 )}
               </View>
 
-              <View style={styles.avatarFrame}>
+              <Pressable
+                style={styles.avatarFrame}
+                onPressIn={() => setIsAvatarWalking(true)}
+                onPressOut={() => setIsAvatarWalking(false)}
+              >
+                {/* Off-screen decode pass: mounting these as soon as the
+                    pet is selected means each walk frame is already
+                    decoded/cached by the time the user holds the avatar,
+                    instead of decoding on first use (which showed up as a
+                    black flash for the first cycle or two). */}
+                {walkFrames && (
+                  <View
+                    style={{ position: "absolute", width: 1, height: 1, opacity: 0 }}
+                    pointerEvents="none"
+                  >
+                    {walkFrames.map((frame, i) => (
+                      <Image key={i} source={frame} style={{ width: 1, height: 1 }} />
+                    ))}
+                  </View>
+                )}
+
                 {(() => {
                   const avatarOption = findAvatarOption(
                     selectedPet.category,
                     selectedPet.selectedEmoji,
                     selectedPet.color
                   );
+
+                  if (isAvatarWalking && walkFrames) {
+                    return (
+                      <WalkingSprite
+                        frames={walkFrames}
+                        style={{ width: "100%", height: "100%" }}
+                      />
+                    );
+                  }
 
                   return avatarOption?.image ? (
                     <Image
@@ -290,7 +331,7 @@ export default function DailyPawLog() {
                     </Text>
                   );
                 })()}
-              </View>
+              </Pressable>
             </View>
 
             <View style={styles.namePlaque}>

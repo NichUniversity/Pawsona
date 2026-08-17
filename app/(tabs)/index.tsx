@@ -653,6 +653,7 @@ export default function HomeScreen() {
                               emoji={option.emoji}
                               color={option.color}
                               size={28}
+                              variant="face"
                             />
                           </View>
 

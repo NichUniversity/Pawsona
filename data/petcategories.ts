@@ -13,6 +13,7 @@ export type AvatarOption = {
   emoji: string; // unique key for this option — doesn't have to be a real emoji for image avatars
   color: string; // tint for the avatar's badge/circle
   image?: ImageSourcePropType; // when set, this avatar renders as a custom image instead of the emoji
+  faceImage?: ImageSourcePropType; // optional close-up face art shown while picking this avatar; falls back to `image`
 };
 
 export const PET_CATEGORIES: CategoryOption[] = [
@@ -36,12 +37,14 @@ export const AVATAR_OPTIONS: Record<PetCategory, AvatarOption[]> = {
       emoji: "bulldog-myavatar",
       color: "#C9C9C9",
       image: require("../assets/avatars/bulldog.png"),
+      faceImage: require("../assets/avatars/bulldog_face.png"),
     },
     {
       label: "Golden Retriever",
       emoji: "golden-retriever-myavatar",
       color: "#E0B876",
       image: require("../assets/avatars/golden_retriever.png"),
+      faceImage: require("../assets/avatars/golden_retriever_face.png"),
     },
   ],
   cat: [
