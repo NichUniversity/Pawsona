@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { OnboardingTutorial } from '../../components/ui/OnboardingTutorial';
 import { PawsonaTabIcon } from '../../components/ui/pawsona-tab-icons';
 import { useOnboarding } from '../../context/OnboardingContext';
+import { ThemeDefinition, useTheme } from '../../context/ThemeContext';
 
 const { Navigator } = createMaterialTopTabNavigator();
 
@@ -33,26 +34,32 @@ const TRANSITION_LOCK_MS = 220;
 
 // Shared with adventure_tab.tsx: whenever a screen needs to reset the tab
 // bar back to its normal resting look via navigation.setOptions, it must
-// re-apply this object rather than passing `undefined` — undefined
-// clobbers this styling below instead of falling back to it.
+// re-apply this style rather than passing `undefined` — undefined clobbers
+// this styling below instead of falling back to it. Call this with the
+// current theme (from useTheme()) rather than reaching for a static
+// constant, so the reset always matches whatever theme is active instead
+// of snapping back to a hardcoded color.
 //
 // Instagram/Snapchat-style flat bar: edge-to-edge, flush against the
-// bottom of the screen, solid black with just a hairline top border
+// bottom of the screen, solid background with just a hairline top border
 // instead of the old floating rounded "pill" with a drop shadow. Height
-// and paddingBottom are added per-instance (see below) since they depend
-// on the device's safe-area inset.
-export const PILL_TAB_BAR_STYLE = {
-  position: 'absolute' as const,
-  left: 0,
-  right: 0,
-  bottom: 0,
-  borderRadius: 0,
-  backgroundColor: '#000000',
-  borderTopWidth: StyleSheet.hairlineWidth,
-  borderTopColor: 'rgba(255,255,255,0.12)',
-  shadowOpacity: 0,
-  elevation: 0,
-};
+// and paddingBottom depend on the device's safe-area inset.
+export function getTabBarStyle(theme: ThemeDefinition, bottomInset: number) {
+  return {
+    position: 'absolute' as const,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 0,
+    backgroundColor: theme.tabBar.background,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: theme.tabBar.border,
+    shadowOpacity: 0,
+    elevation: 0,
+    height: 58 + bottomInset,
+    paddingBottom: bottomInset,
+  };
+}
 
 export const Tabs = withLayoutContext <
   MaterialTopTabNavigationOptions,
@@ -64,6 +71,7 @@ export const Tabs = withLayoutContext <
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const screenWidth = Dimensions.get('window').width;
+  const { theme } = useTheme();
 
   // isTransitioningRef backs the synchronous tabPress check (refs don't
   // lag behind a render); swipeEnabled is the same lock mirrored into
@@ -90,7 +98,7 @@ export default function TabLayout() {
   return (
     <View style={{ flex: 1 }}>
     <Tabs
-      style={{ backgroundColor: '#000000' }}
+      style={{ backgroundColor: theme.tabBar.background }}
       tabBarPosition="bottom"
       initialLayout={{ width: screenWidth }}
       screenListeners={{
@@ -134,9 +142,11 @@ export default function TabLayout() {
         tabBarPressColor: 'transparent',
         tabBarPressOpacity: 1,
 
-        // Pure grey/white palette so icons read as black & white against the dark bar
-        tabBarActiveTintColor: '#FFFFFF',
-        tabBarInactiveTintColor: '#8d8d90',
+        // Tint colors follow the active theme so icons stay readable against
+        // whatever the tab bar's background is (white-on-black for Dark,
+        // accent-on-light for the color themes).
+        tabBarActiveTintColor: theme.tabBar.activeTint,
+        tabBarInactiveTintColor: theme.tabBar.inactiveTint,
 
         tabBarItemStyle: {
           flexDirection: 'column',
@@ -144,19 +154,15 @@ export default function TabLayout() {
           alignItems: 'center',
           height: '100%',
         },
-        tabBarStyle: {
-          ...PILL_TAB_BAR_STYLE,
-          height: 58 + insets.bottom,
-          paddingBottom: insets.bottom,
-        },
+        tabBarStyle: getTabBarStyle(theme, insets.bottom),
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => (
-            <PawsonaTabIcon name="home" color={color} size={32} />
+          tabBarIcon: ({ color, focused }) => (
+            <PawsonaTabIcon name="home" color={color} size={32} active={focused} />
           ),
         }}
       />
@@ -165,8 +171,8 @@ export default function TabLayout() {
         name="daily_log_tab"
         options={{
           title: 'Daily Paw Log',
-          tabBarIcon: ({ color }) => (
-            <PawsonaTabIcon name="daily-log" color={color} size={32} />
+          tabBarIcon: ({ color, focused }) => (
+            <PawsonaTabIcon name="daily-log" color={color} size={32} active={focused} />
           ),
         }}
       />
@@ -175,8 +181,8 @@ export default function TabLayout() {
         name="minigames"
         options={{
           title: 'Mini Games',
-          tabBarIcon: ({ color }) => (
-            <PawsonaTabIcon name="minigames" color={color} size={32} />
+          tabBarIcon: ({ color, focused }) => (
+            <PawsonaTabIcon name="minigames" color={color} size={32} active={focused} />
           ),
         }}
       />
@@ -185,8 +191,8 @@ export default function TabLayout() {
         name="store_tab"
         options={{
           title: 'Paw Shop',
-          tabBarIcon: ({ color }) => (
-            <PawsonaTabIcon name="store" color={color} size={32} />
+          tabBarIcon: ({ color, focused }) => (
+            <PawsonaTabIcon name="store" color={color} size={32} active={focused} />
           ),
         }}
       />
@@ -195,8 +201,8 @@ export default function TabLayout() {
         name="adventure_tab"
         options={{
           title: 'Adventure',
-          tabBarIcon: ({ color }) => (
-            <PawsonaTabIcon name="adventure" color={color} size={32} />
+          tabBarIcon: ({ color, focused }) => (
+            <PawsonaTabIcon name="adventure" color={color} size={32} active={focused} />
           ),
         }}
       />

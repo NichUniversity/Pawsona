@@ -6,7 +6,6 @@ import {
   Dimensions,
   Image,
   ImageSourcePropType,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,11 +15,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AvatarDisplay } from "../../components/ui/AvatarDisplay";
 import { CoinIcon } from "../../components/ui/CoinIcon";
+import { PressableScale } from "../../components/ui/PressableScale";
 import { TabBackground } from "../../components/ui/TabBackground";
 import { PetEntry, usePets } from "../../context/PetInformation";
 import { useTheme, withAlpha } from "../../context/ThemeContext";
 import { ADVENTURES } from "../../data/adventure";
-import { PILL_TAB_BAR_STYLE } from "./_layout";
+import { getTabBarStyle } from "./_layout";
 
 type AreaName = keyof typeof ADVENTURES;
 
@@ -148,7 +148,7 @@ export default function Adventure() {
   const insets = useSafeAreaInsets();
   const { pets, coins, unlockedAreas, unlockArea, unlockStorybook } =
     usePets();
-  const { accentColor } = useTheme();
+  const { accentColor, theme } = useTheme();
 
   const [selectedPet, setSelectedPet] = useState<PetEntry | null>(null);
   const [selectedArea, setSelectedArea] = useState<AreaName | null>(null);
@@ -161,12 +161,8 @@ export default function Adventure() {
   // falls back to the default flat MaterialTopTabs bar anchored to the
   // screen edge).
   const restoredTabBarStyle = useMemo(
-    () => ({
-      ...PILL_TAB_BAR_STYLE,
-      height: 58 + insets.bottom,
-      paddingBottom: insets.bottom,
-    }),
-    [insets.bottom]
+    () => getTabBarStyle(theme, insets.bottom),
+    [theme, insets.bottom]
   );
 
   // Drives a gradual fade instead of an instant show/hide. We can't just
@@ -354,7 +350,7 @@ export default function Adventure() {
         ]}
         style={showFullScreenBackground ? styles.transparentScroll : undefined}
       >
-        <Text style={styles.title}>🐾 Adventure</Text>
+        <Text style={[styles.title, { color: theme.text.primary }]}>🐾 Adventure</Text>
 
         <View style={styles.coinBadge}>
           <CoinIcon size={16} />
@@ -362,21 +358,30 @@ export default function Adventure() {
         </View>
 
         {showEndAdventureButton && (
-          <Pressable style={styles.endAdventureButton} onPress={endAdventure}>
-            <Text style={styles.endAdventureText}>← End Adventure</Text>
-          </Pressable>
+          <PressableScale
+            style={[
+              styles.endAdventureButton,
+              { backgroundColor: theme.card.background, borderColor: theme.card.border },
+            ]}
+            onPress={endAdventure}
+          >
+            <Text style={[styles.endAdventureText, { color: theme.text.primary }]}>← End Adventure</Text>
+          </PressableScale>
         )}
 
         {!selectedPet && (
           <>
-            <Text style={styles.header}>Choose your adventurer</Text>
+            <Text style={[styles.header, { color: theme.text.primary }]}>Choose your adventurer</Text>
 
             {pets
               .filter((pet) => pet.confirmed)
               .map((pet) => (
-                <Pressable
+                <PressableScale
                   key={pet.id}
-                  style={styles.card}
+                  style={[
+                    styles.card,
+                    { backgroundColor: theme.card.background, borderColor: theme.card.border },
+                  ]}
                   onPress={() => setSelectedPet(pet)}
                 >
                   <View style={{ marginRight: 20 }}>
@@ -388,24 +393,30 @@ export default function Adventure() {
                     />
                   </View>
 
-                  <Text style={styles.name}>{pet.name || "Unnamed Pet"}</Text>
-                </Pressable>
+                  <Text style={[styles.name, { color: theme.text.primary }]}>{pet.name || "Unnamed Pet"}</Text>
+                </PressableScale>
               ))}
           </>
         )}
 
         {selectedPet && !selectedArea && (
           <>
-            <Pressable style={styles.changePetPill} onPress={changePet}>
+            <PressableScale
+              style={[
+                styles.changePetPill,
+                { backgroundColor: theme.card.background, borderColor: theme.card.border },
+              ]}
+              onPress={changePet}
+            >
               <MaterialCommunityIcons
                 name="swap-horizontal"
                 size={14}
-                color="#fff"
+                color={theme.text.primary}
               />
-              <Text style={styles.changePetPillText}>Change Pet</Text>
-            </Pressable>
+              <Text style={[styles.changePetPillText, { color: theme.text.primary }]}>Change Pet</Text>
+            </PressableScale>
 
-            <Text style={styles.header}>
+            <Text style={[styles.header, { color: theme.text.primary }]}>
               Where should {selectedPet.name} explore?
             </Text>
 
@@ -414,9 +425,13 @@ export default function Adventure() {
               const canAfford = coins >= area.price;
 
               return (
-                <Pressable
+                <PressableScale
                   key={area.name}
-                  style={[styles.card, !isUnlocked && styles.cardLocked]}
+                  style={[
+                    styles.card,
+                    { backgroundColor: theme.card.background, borderColor: theme.card.border },
+                    !isUnlocked && styles.cardLocked,
+                  ]}
                   onPress={() => handleAreaPress(area.name, area.price)}
                   disabled={!isUnlocked && !canAfford}
                 >
@@ -425,14 +440,14 @@ export default function Adventure() {
                   </Text>
 
                   <View style={styles.areaTextWrap}>
-                    <Text style={styles.name}>{area.name}</Text>
+                    <Text style={[styles.name, { color: theme.text.primary }]}>{area.name}</Text>
 
                     {!isUnlocked && (
                       <Text
                         style={[
                           styles.priceTag,
                           { color: accentColor },
-                          !canAfford && styles.priceTagDisabled,
+                          !canAfford && { color: theme.text.secondary },
                         ]}
                       >
                         {canAfford ? (
@@ -447,7 +462,7 @@ export default function Adventure() {
                       </Text>
                     )}
                   </View>
-                </Pressable>
+                </PressableScale>
               );
             })}
           </>
@@ -470,7 +485,7 @@ export default function Adventure() {
             </Text>
 
             {currentStory.choices.map((choice) => (
-              <Pressable
+              <PressableScale
                 key={choice.text}
                 style={[
                   styles.choiceButton,
@@ -487,7 +502,7 @@ export default function Adventure() {
                 >
                   {choice.text}
                 </Text>
-              </Pressable>
+              </PressableScale>
             ))}
           </View>
         )}
@@ -528,7 +543,7 @@ export default function Adventure() {
               </Text>
             </View>
 
-            <Pressable
+            <PressableScale
               style={[
                 styles.finishButton,
                 !showFullScreenBackground && { backgroundColor: accentColor },
@@ -544,7 +559,7 @@ export default function Adventure() {
               >
                 Explore More
               </Text>
-            </Pressable>
+            </PressableScale>
           </View>
         )}
 
@@ -564,7 +579,7 @@ export default function Adventure() {
               {currentStory.story}
             </Text>
 
-            <Pressable
+            <PressableScale
               style={[
                 styles.finishButton,
                 !showFullScreenBackground && { backgroundColor: accentColor },
@@ -580,7 +595,7 @@ export default function Adventure() {
               >
                 Explore More
               </Text>
-            </Pressable>
+            </PressableScale>
           </View>
         )}
       </ScrollView>
@@ -617,9 +632,13 @@ const styles = StyleSheet.create({
   },
 
   title: {
+    fontFamily: "Fredoka_700Bold",
     fontSize: 32,
-    fontWeight: "800",
     color: "#fff",
+    letterSpacing: 0.5,
+    textShadowColor: "rgba(0,0,0,0.15)",
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 0,
     textAlign: "center",
     marginBottom: 16,
   },

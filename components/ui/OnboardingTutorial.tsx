@@ -1,8 +1,9 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, StyleSheet, Text, View } from "react-native";
 
 import { useTheme, withAlpha } from "../../context/ThemeContext";
+import { PressableScale } from "./PressableScale";
 
 type Step = {
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
@@ -43,7 +44,7 @@ type Props = {
 // component positions, so it stays lightweight and doesn't need to
 // measure the actual upload box or tab bar.
 export function OnboardingTutorial({ visible, onFinish }: Props) {
-  const { accentColor } = useTheme();
+  const { accentColor, theme } = useTheme();
   const [stepIndex, setStepIndex] = useState(0);
 
   if (!visible) return null;
@@ -67,13 +68,18 @@ export function OnboardingTutorial({ visible, onFinish }: Props) {
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
       <View style={styles.backdrop}>
-        <View style={styles.card}>
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: theme.card.background, borderColor: theme.card.border },
+          ]}
+        >
           <View style={[styles.iconBadge, { backgroundColor: withAlpha(accentColor, 0.15) }]}>
             <MaterialCommunityIcons name={step.icon} size={30} color={accentColor} />
           </View>
 
-          <Text style={styles.title}>{step.title}</Text>
-          <Text style={styles.body}>{step.body}</Text>
+          <Text style={[styles.title, { color: theme.text.primary }]}>{step.title}</Text>
+          <Text style={[styles.body, { color: theme.text.secondary }]}>{step.body}</Text>
 
           <View style={styles.dotsRow}>
             {STEPS.map((_, i) => (
@@ -81,23 +87,24 @@ export function OnboardingTutorial({ visible, onFinish }: Props) {
                 key={i}
                 style={[
                   styles.dot,
+                  { backgroundColor: withAlpha(theme.text.primary, 0.2) },
                   i === stepIndex && { backgroundColor: accentColor, width: 18 },
                 ]}
               />
             ))}
           </View>
 
-          <Pressable
+          <PressableScale
             style={[styles.primaryButton, { backgroundColor: accentColor }]}
             onPress={handleNext}
           >
             <Text style={styles.primaryButtonText}>{isLast ? "Let's Go!" : "Next"}</Text>
-          </Pressable>
+          </PressableScale>
 
           {!isLast && (
-            <Pressable style={styles.skipButton} onPress={finish}>
-              <Text style={styles.skipButtonText}>Skip</Text>
-            </Pressable>
+            <PressableScale style={styles.skipButton} onPress={finish}>
+              <Text style={[styles.skipButtonText, { color: theme.text.secondary }]}>Skip</Text>
+            </PressableScale>
           )}
         </View>
       </View>

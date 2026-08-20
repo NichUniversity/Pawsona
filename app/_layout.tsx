@@ -14,8 +14,7 @@ import { LoginScreen } from '../components/ui/LoginScreen';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { OnboardingProvider } from '../context/OnboardingContext';
 import { PetProvider } from '../context/PetInformation';
-import { ThemeProvider as AccentThemeProvider } from '../context/ThemeContext';
-import { useColorScheme } from '../hooks/use-color-scheme';
+import { ThemeProvider as AccentThemeProvider, useTheme } from '../context/ThemeContext';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -33,6 +32,18 @@ LogBox.ignoreLogs([
 ]);
 
 export default function RootLayout() {
+  // AccentThemeProvider wraps everything, including the font-loading gate
+  // below, so even that first flash of screen (before Fredoka is ready)
+  // uses the right background instead of a hardcoded color.
+  return (
+    <AccentThemeProvider>
+      <RootLayoutFonts />
+    </AccentThemeProvider>
+  );
+}
+
+function RootLayoutFonts() {
+  const { theme } = useTheme();
   const [fontsLoaded] = useFonts({
     Fredoka_400Regular,
     Fredoka_600SemiBold,
@@ -40,19 +51,17 @@ export default function RootLayout() {
   });
 
   if (!fontsLoaded) {
-    return <View style={{ flex: 1, backgroundColor: '#FF8C42' }} />;
+    return <View style={{ flex: 1, backgroundColor: theme.background.mid }} />;
   }
 
   return (
-    <AccentThemeProvider>
-      <AuthProvider>
-        <PetProvider>
-          <OnboardingProvider>
-            <RootLayoutGate />
-          </OnboardingProvider>
-        </PetProvider>
-      </AuthProvider>
-    </AccentThemeProvider>
+    <AuthProvider>
+      <PetProvider>
+        <OnboardingProvider>
+          <RootLayoutGate />
+        </OnboardingProvider>
+      </PetProvider>
+    </AuthProvider>
   );
 }
 
@@ -60,11 +69,11 @@ export default function RootLayout() {
 // while the stored session is being checked, the login screen if nobody's
 // signed in (or chosen guest) yet, and the normal tab stack once they have.
 function RootLayoutGate() {
-  const colorScheme = useColorScheme();
+  const { theme } = useTheme();
   const { isReady, user } = useAuth();
 
   if (!isReady) {
-    return <View style={{ flex: 1, backgroundColor: '#000000' }} />;
+    return <View style={{ flex: 1, backgroundColor: theme.background.mid }} />;
   }
 
   if (!user) {
@@ -72,10 +81,10 @@ function RootLayoutGate() {
   }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={theme.isDark ? DarkTheme : DefaultTheme}>
       <Stack
         screenOptions={{
-          contentStyle: { backgroundColor: '#FF8C42' },
+          contentStyle: { backgroundColor: theme.background.mid },
         }}
       >
         <Stack.Screen
@@ -84,7 +93,7 @@ function RootLayoutGate() {
         />
       </Stack>
 
-      <StatusBar style="auto" />
+      <StatusBar style={theme.statusBarStyle} />
     </ThemeProvider>
   );
 }

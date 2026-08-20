@@ -2,6 +2,9 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
+import { useTheme, withAlpha } from "../../context/ThemeContext";
+import { PressableScale } from "./PressableScale";
+
 export type SettingsOption = {
   key: string;
   label: string;
@@ -25,10 +28,24 @@ type Props = {
   onSelectAccent?: (key: string) => void;
 };
 
+// A pale swatch (e.g. the White theme's dot) needs a dark checkmark instead
+// of the usual white one, or it's invisible against its own fill.
+function checkColorFor(swatchHex: string): string {
+  const clean = swatchHex.replace("#", "");
+  if (clean.length !== 6) return "#fff";
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.75 ? "#1C1C1E" : "#fff";
+}
+
 // A bottom-sheet style settings menu, opened from the gear icon on the
 // Home tab. Takes a list of options (Log Out, Replay Tutorial, ...) plus
-// an optional row of accent-color swatches, so more of either can be
-// added later without touching the sheet itself.
+// an optional row of theme swatches, so more of either can be added later
+// without touching the sheet itself. The sheet's own colors follow the
+// active theme (see context/ThemeContext.tsx) — picking "White" here makes
+// the sheet itself go light too, not just the screen behind it.
 export function SettingsMenu({
   visible,
   onClose,
@@ -37,6 +54,8 @@ export function SettingsMenu({
   activeAccentKey,
   onSelectAccent,
 }: Props) {
+  const { theme } = useTheme();
+
   return (
     <Modal
       visible={visible}
@@ -45,18 +64,24 @@ export function SettingsMenu({
       onRequestClose={onClose}
     >
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-          <View style={styles.handle} />
-          <Text style={styles.title}>Settings</Text>
+        <Pressable
+          style={[
+            styles.sheet,
+            { backgroundColor: theme.card.background, borderColor: theme.card.border },
+          ]}
+          onPress={(e) => e.stopPropagation()}
+        >
+          <View style={[styles.handle, { backgroundColor: withAlpha(theme.text.primary, 0.2) }]} />
+          <Text style={[styles.title, { color: theme.text.secondary }]}>Settings</Text>
 
           {accentOptions && accentOptions.length > 0 && (
-            <View style={styles.themeSection}>
-              <Text style={styles.themeLabel}>Theme Color</Text>
+            <View style={[styles.themeSection, { borderBottomColor: theme.card.border }]}>
+              <Text style={[styles.themeLabel, { color: theme.text.primary }]}>Theme Color</Text>
               <View style={styles.swatchRow}>
                 {accentOptions.map((swatch) => {
                   const isActive = swatch.key === activeAccentKey;
                   return (
-                    <Pressable
+                    <PressableScale
                       key={swatch.key}
                       onPress={() => onSelectAccent?.(swatch.key)}
                       style={styles.swatchWrapper}
@@ -64,15 +89,24 @@ export function SettingsMenu({
                       <View
                         style={[
                           styles.swatch,
-                          { backgroundColor: swatch.value },
-                          isActive && styles.swatchActive,
+                          {
+                            backgroundColor: swatch.value,
+                            borderWidth: isActive ? 2 : 1,
+                            borderColor: isActive
+                              ? theme.text.primary
+                              : withAlpha(theme.text.primary, 0.15),
+                          },
                         ]}
                       >
                         {isActive && (
-                          <MaterialCommunityIcons name="check" size={16} color="#fff" />
+                          <MaterialCommunityIcons
+                            name="check"
+                            size={16}
+                            color={checkColorFor(swatch.value)}
+                          />
                         )}
                       </View>
-                    </Pressable>
+                    </PressableScale>
                   );
                 })}
               </View>
@@ -80,10 +114,11 @@ export function SettingsMenu({
           )}
 
           {options.map((option, index) => (
-            <Pressable
+            <PressableScale
               key={option.key}
               style={[
                 styles.optionRow,
+                { borderBottomColor: theme.card.border },
                 index === options.length - 1 && styles.optionRowLast,
               ]}
               onPress={() => {
@@ -94,23 +129,27 @@ export function SettingsMenu({
               <MaterialCommunityIcons
                 name={option.icon}
                 size={20}
-                color={option.destructive ? "#FF6B6B" : "#F5F5F5"}
+                color={option.destructive ? "#FF6B6B" : theme.text.primary}
                 style={styles.optionIcon}
               />
               <Text
                 style={[
                   styles.optionText,
+                  { color: theme.text.primary },
                   option.destructive && styles.optionTextDestructive,
                 ]}
               >
                 {option.label}
               </Text>
-            </Pressable>
+            </PressableScale>
           ))}
 
-          <Pressable style={styles.cancelButton} onPress={onClose}>
-            <Text style={styles.cancelButtonText}>Cancel</Text>
-          </Pressable>
+          <PressableScale
+            style={[styles.cancelButton, { backgroundColor: withAlpha(theme.text.primary, 0.06) }]}
+            onPress={onClose}
+          >
+            <Text style={[styles.cancelButtonText, { color: theme.text.primary }]}>Cancel</Text>
+          </PressableScale>
         </Pressable>
       </Pressable>
     </Modal>
@@ -125,14 +164,12 @@ const styles = StyleSheet.create({
   },
 
   sheet: {
-    backgroundColor: "#1C1C1E",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 34,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
     borderBottomWidth: 0,
   },
 
@@ -140,7 +177,6 @@ const styles = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.2)",
     alignSelf: "center",
     marginBottom: 14,
   },
@@ -148,7 +184,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#8E8E93",
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 10,
@@ -160,13 +195,11 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     marginBottom: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "rgba(255,255,255,0.08)",
   },
 
   themeLabel: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#F5F5F5",
     marginBottom: 12,
   },
 
@@ -187,18 +220,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  swatchActive: {
-    borderWidth: 2,
-    borderColor: "#fff",
-  },
-
   optionRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 14,
     paddingHorizontal: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "rgba(255,255,255,0.08)",
   },
 
   optionRowLast: {
@@ -212,7 +239,6 @@ const styles = StyleSheet.create({
   optionText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#F5F5F5",
   },
 
   optionTextDestructive: {
@@ -221,7 +247,6 @@ const styles = StyleSheet.create({
 
   cancelButton: {
     marginTop: 14,
-    backgroundColor: "rgba(255,255,255,0.06)",
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: "center",
@@ -230,6 +255,5 @@ const styles = StyleSheet.create({
   cancelButtonText: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#F5F5F5",
   },
 });

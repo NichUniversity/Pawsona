@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,6 +8,7 @@ import {
 
 import { AvatarDisplay } from "../../components/ui/AvatarDisplay";
 import { CoinIcon } from "../../components/ui/CoinIcon";
+import { PressableScale } from "../../components/ui/PressableScale";
 import { TabBackground } from "../../components/ui/TabBackground";
 import { PetEntry, usePets } from "../../context/PetInformation";
 import { useTheme, withAlpha } from "../../context/ThemeContext";
@@ -21,7 +21,7 @@ import { useTabBarClearance } from "../../hooks/useTabBarClearance";
 
 export default function StoreTab() {
   const { pets, setPets, coins, spendCoins } = usePets();
-  const { accentColor } = useTheme();
+  const { accentColor, theme } = useTheme();
   const tabBarClearance = useTabBarClearance();
 
   const [selectedPet, setSelectedPet] = useState<PetEntry | null>(null);
@@ -77,7 +77,7 @@ export default function StoreTab() {
           { paddingBottom: tabBarClearance },
         ]}
       >
-      <Text style={styles.title}>🛍️ Pet Store</Text>
+      <Text style={[styles.title, { color: theme.text.primary }]}>🛍️ Pet Store</Text>
 
       <View style={styles.coinBadge}>
         <CoinIcon size={16} />
@@ -85,14 +85,22 @@ export default function StoreTab() {
       </View>
 
       {confirmedPets.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>
+        <View
+          style={[
+            styles.emptyCard,
+            {
+              backgroundColor: theme.card.background,
+              borderColor: theme.card.border,
+            },
+          ]}
+        >
+          <Text style={[styles.emptyText, { color: theme.text.primary }]}>
             Confirm a pet on the Home tab before you go shopping!
           </Text>
         </View>
       ) : (
         <>
-          <Text style={styles.header}>Shopping for</Text>
+          <Text style={[styles.header, { color: theme.text.primary }]}>Shopping for</Text>
 
           <ScrollView
             horizontal
@@ -100,10 +108,14 @@ export default function StoreTab() {
             contentContainerStyle={styles.petRow}
           >
             {confirmedPets.map((pet) => (
-              <Pressable
+              <PressableScale
                 key={pet.id}
                 style={[
                   styles.petChip,
+                  {
+                    backgroundColor: theme.card.background,
+                    borderColor: theme.card.border,
+                  },
                   selectedPet?.id === pet.id && {
                     backgroundColor: accentColor,
                     borderColor: accentColor,
@@ -122,12 +134,15 @@ export default function StoreTab() {
                 <Text
                   style={[
                     styles.petChipName,
-                    selectedPet?.id === pet.id && styles.petChipNameActive,
+                    {
+                      color:
+                        selectedPet?.id === pet.id ? "#fff" : theme.text.primary,
+                    },
                   ]}
                 >
                   {pet.name || "Unnamed Pet"}
                 </Text>
-              </Pressable>
+              </PressableScale>
             ))}
           </ScrollView>
 
@@ -135,10 +150,14 @@ export default function StoreTab() {
             <>
               <View style={styles.categoryRow}>
                 {categories.map((cat) => (
-                  <Pressable
+                  <PressableScale
                     key={cat}
                     style={[
                       styles.categoryPill,
+                      {
+                        backgroundColor: theme.card.background,
+                        borderColor: theme.card.border,
+                      },
                       activeCategory === cat && {
                         backgroundColor: accentColor,
                         borderColor: accentColor,
@@ -149,14 +168,18 @@ export default function StoreTab() {
                     <Text
                       style={[
                         styles.categoryPillText,
-                        activeCategory === cat &&
-                          styles.categoryPillTextActive,
+                        {
+                          color:
+                            activeCategory === cat
+                              ? "#fff"
+                              : theme.text.primary,
+                        },
                       ]}
                     >
                       {CATEGORY_LABELS[cat].emoji}{" "}
                       {CATEGORY_LABELS[cat].label}
                     </Text>
-                  </Pressable>
+                  </PressableScale>
                 ))}
               </View>
 
@@ -172,11 +195,17 @@ export default function StoreTab() {
                       key={item.id}
                       style={[
                         styles.itemCard,
+                        {
+                          backgroundColor: theme.card.background,
+                          borderColor: theme.card.border,
+                        },
                         equipped && { borderWidth: 2, borderColor: accentColor },
                       ]}
                     >
                       <Text style={styles.itemEmoji}>{item.emoji}</Text>
-                      <Text style={styles.itemName}>{item.name}</Text>
+                      <Text style={[styles.itemName, { color: theme.text.primary }]}>
+                        {item.name}
+                      </Text>
 
                       {!owned && (
                         <Text style={[styles.itemPrice, { color: accentColor }]}>
@@ -185,7 +214,7 @@ export default function StoreTab() {
                       )}
 
                       {owned ? (
-                        <Pressable
+                        <PressableScale
                           style={[
                             styles.actionButton,
                             equipped
@@ -202,9 +231,9 @@ export default function StoreTab() {
                           >
                             {equipped ? "Equipped ✓" : "Equip"}
                           </Text>
-                        </Pressable>
+                        </PressableScale>
                       ) : (
-                        <Pressable
+                        <PressableScale
                           style={[
                             styles.actionButton,
                             { backgroundColor: accentColor },
@@ -216,7 +245,7 @@ export default function StoreTab() {
                           <Text style={styles.actionButtonText}>
                             {canAfford ? "Buy" : "Not enough"}
                           </Text>
-                        </Pressable>
+                        </PressableScale>
                       )}
                     </View>
                   );
@@ -244,9 +273,13 @@ const styles = StyleSheet.create({
   },
 
   title: {
+    fontFamily: "Fredoka_700Bold",
     fontSize: 32,
-    fontWeight: "800",
     color: "#fff",
+    letterSpacing: 0.5,
+    textShadowColor: "rgba(0,0,0,0.15)",
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 0,
     textAlign: "center",
     marginBottom: 16,
   },

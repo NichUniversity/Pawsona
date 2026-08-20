@@ -5,7 +5,6 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,6 +14,7 @@ import {
 
 import { useAuth } from "../../context/AuthContext";
 import { useTheme, withAlpha } from "../../context/ThemeContext";
+import { PressableScale } from "./PressableScale";
 import { TabBackground } from "./TabBackground";
 
 type Mode = "signIn" | "signUp";
@@ -22,7 +22,7 @@ type Mode = "signIn" | "signUp";
 export function LoginScreen() {
   const { signInWithApple, signInWithEmail, signUpWithEmail, continueAsGuest } =
     useAuth();
-  const { accentColor } = useTheme();
+  const { accentColor, theme } = useTheme();
 
   const [appleAvailable, setAppleAvailable] = useState(false);
   const [mode, setMode] = useState<Mode>("signIn");
@@ -99,8 +99,10 @@ export function LoginScreen() {
             <MaterialCommunityIcons name="paw" size={34} color={accentColor} />
           </View>
 
-          <Text style={styles.title}>Pawsona</Text>
-          <Text style={styles.subtitle}>Sign in to bring your pet to life</Text>
+          <Text style={[styles.title, { color: theme.text.primary }]}>Pawsona</Text>
+          <Text style={[styles.subtitle, { color: theme.text.secondary }]}>
+            Sign in to bring your pet to life
+          </Text>
 
           {appleAvailable && (
             <>
@@ -113,15 +115,26 @@ export function LoginScreen() {
               />
 
               <View style={styles.dividerRow}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>or continue with email</Text>
-                <View style={styles.dividerLine} />
+                <View
+                  style={[styles.dividerLine, { backgroundColor: withAlpha(theme.text.primary, 0.15) }]}
+                />
+                <Text style={[styles.dividerText, { color: theme.text.secondary }]}>
+                  or continue with email
+                </Text>
+                <View
+                  style={[styles.dividerLine, { backgroundColor: withAlpha(theme.text.primary, 0.15) }]}
+                />
               </View>
             </>
           )}
 
-          <View style={styles.modeRow}>
-            <Pressable
+          <View
+            style={[
+              styles.modeRow,
+              { backgroundColor: theme.card.background, borderColor: theme.card.border },
+            ]}
+          >
+            <PressableScale
               style={[
                 styles.modeTab,
                 mode === "signIn" && { backgroundColor: accentColor },
@@ -134,14 +147,15 @@ export function LoginScreen() {
               <Text
                 style={[
                   styles.modeTabText,
+                  { color: theme.text.secondary },
                   mode === "signIn" && styles.modeTabTextActive,
                 ]}
               >
                 Sign In
               </Text>
-            </Pressable>
+            </PressableScale>
 
-            <Pressable
+            <PressableScale
               style={[
                 styles.modeTab,
                 mode === "signUp" && { backgroundColor: accentColor },
@@ -154,19 +168,23 @@ export function LoginScreen() {
               <Text
                 style={[
                   styles.modeTabText,
+                  { color: theme.text.secondary },
                   mode === "signUp" && styles.modeTabTextActive,
                 ]}
               >
                 Sign Up
               </Text>
-            </Pressable>
+            </PressableScale>
           </View>
 
           {mode === "signUp" && (
             <TextInput
-              style={styles.input}
+              style={[
+                styles.input,
+                { backgroundColor: theme.card.background, color: theme.text.primary, borderColor: theme.card.border },
+              ]}
               placeholder="Name"
-              placeholderTextColor="#8E8E93"
+              placeholderTextColor={theme.text.secondary}
               value={name}
               onChangeText={setName}
               autoCapitalize="words"
@@ -174,9 +192,12 @@ export function LoginScreen() {
           )}
 
           <TextInput
-            style={styles.input}
+            style={[
+              styles.input,
+              { backgroundColor: theme.card.background, color: theme.text.primary, borderColor: theme.card.border },
+            ]}
             placeholder="Email"
-            placeholderTextColor="#8E8E93"
+            placeholderTextColor={theme.text.secondary}
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
@@ -185,9 +206,12 @@ export function LoginScreen() {
           />
 
           <TextInput
-            style={styles.input}
+            style={[
+              styles.input,
+              { backgroundColor: theme.card.background, color: theme.text.primary, borderColor: theme.card.border },
+            ]}
             placeholder="Password"
-            placeholderTextColor="#8E8E93"
+            placeholderTextColor={theme.text.secondary}
             value={password}
             onChangeText={setPassword}
             secureTextEntry
@@ -195,7 +219,7 @@ export function LoginScreen() {
 
           {error && <Text style={styles.errorText}>{error}</Text>}
 
-          <Pressable
+          <PressableScale
             style={[
               styles.primaryButton,
               { backgroundColor: accentColor },
@@ -211,11 +235,13 @@ export function LoginScreen() {
                 {mode === "signUp" ? "Create Account" : "Sign In"}
               </Text>
             )}
-          </Pressable>
+          </PressableScale>
 
-          <Pressable style={styles.guestButton} onPress={continueAsGuest}>
-            <Text style={styles.guestButtonText}>Continue as Guest</Text>
-          </Pressable>
+          <PressableScale style={styles.guestButton} onPress={continueAsGuest}>
+            <Text style={[styles.guestButtonText, { color: theme.text.secondary }]}>
+              Continue as Guest
+            </Text>
+          </PressableScale>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

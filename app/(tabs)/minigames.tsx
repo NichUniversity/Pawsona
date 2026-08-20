@@ -3,7 +3,6 @@ import {
   Animated,
   Image,
   PanResponder,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,6 +10,7 @@ import {
 } from "react-native";
 
 import { CoinIcon } from "../../components/ui/CoinIcon";
+import { PressableScale } from "../../components/ui/PressableScale";
 import { ScrollingLayer } from "../../components/ui/ScrollingLayer";
 import { TabBackground } from "../../components/ui/TabBackground";
 import { usePets } from "../../context/PetInformation";
@@ -58,7 +58,7 @@ const GAMES: {
 
 export default function Minigames() {
   const { coins } = usePets();
-  const { accentColor } = useTheme();
+  const { accentColor, theme } = useTheme();
   const [activeGame, setActiveGame] = useState<GameId | "menu">("menu");
   const tabBarClearance = useTabBarClearance();
 
@@ -72,7 +72,7 @@ export default function Minigames() {
           { paddingBottom: tabBarClearance },
         ]}
       >
-      <Text style={styles.title}>🎮 Mini Games</Text>
+      <Text style={[styles.title, { color: theme.text.primary }]}>🎮 Mini Games</Text>
 
       <View style={styles.coinBadge}>
         <CoinIcon size={16} />
@@ -82,10 +82,14 @@ export default function Minigames() {
       {activeGame === "menu" && (
         <View style={styles.grid}>
           {GAMES.map((game) => (
-            <Pressable
+            <PressableScale
               key={game.id}
               style={[
                 styles.gameCard,
+                {
+                  backgroundColor: theme.card.background,
+                  borderColor: theme.card.border,
+                },
                 !game.available && styles.gameCardLocked,
               ]}
               onPress={() => game.available && setActiveGame(game.id)}
@@ -94,9 +98,9 @@ export default function Minigames() {
               <Text style={styles.gameEmoji}>
                 {game.available ? game.emoji : "🔒"}
               </Text>
-              <Text style={styles.gameName}>{game.name}</Text>
-              <Text style={styles.gameDescription}>{game.description}</Text>
-            </Pressable>
+              <Text style={[styles.gameName, { color: theme.text.primary }]}>{game.name}</Text>
+              <Text style={[styles.gameDescription, { color: theme.text.secondary }]}>{game.description}</Text>
+            </PressableScale>
           ))}
         </View>
       )}
@@ -138,7 +142,7 @@ const GAP_DURATION = 250;
 
 function SimonSaysGame({ onExit }: { onExit: () => void }) {
   const { earnCoins } = usePets();
-  const { accentColor } = useTheme();
+  const { accentColor, theme } = useTheme();
 
   const [sequence, setSequence] = useState<number[]>([]);
   const [playerIndex, setPlayerIndex] = useState(0);
@@ -237,39 +241,50 @@ function SimonSaysGame({ onExit }: { onExit: () => void }) {
   };
 
   return (
-    <View style={styles.gameBox}>
-      <Pressable style={styles.exitButton} onPress={handleExit}>
+    <View
+      style={[
+        styles.gameBox,
+        { backgroundColor: theme.card.background, borderColor: theme.card.border },
+      ]}
+    >
+      <PressableScale
+        style={[
+          styles.exitButton,
+          { backgroundColor: theme.card.background, borderColor: theme.card.border },
+        ]}
+        onPress={handleExit}
+      >
         <Text style={[styles.exitButtonText, { color: accentColor }]}>← Back to Games</Text>
-      </Pressable>
+      </PressableScale>
 
-      <Text style={styles.gameTitle}>🐾 Paw Pattern</Text>
+      <Text style={[styles.gameTitle, { color: theme.text.primary }]}>🐾 Paw Pattern</Text>
 
       {gameState === "idle" && (
         <>
-          <Text style={styles.gameSubtitle}>
+          <Text style={[styles.gameSubtitle, { color: theme.text.secondary }]}>
             Watch the pattern, then repeat it back. Every round earns{" "}
             <CoinIcon size={13} /> {COINS_PER_ROUND}!
           </Text>
-          <Pressable style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
+          <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
             <Text style={styles.primaryButtonText}>Start Game</Text>
-          </Pressable>
+          </PressableScale>
         </>
       )}
 
       {gameState !== "idle" && (
         <>
-          <Text style={styles.roundText}>
+          <Text style={[styles.roundText, { color: theme.text.primary }]}>
             {gameState === "playing"
               ? isShowingSequence
                 ? "Watch closely..."
                 : "Your turn!"
               : "Game Over"}
           </Text>
-          <Text style={styles.roundSubtext}>Round {round}</Text>
+          <Text style={[styles.roundSubtext, { color: theme.text.secondary }]}>Round {round}</Text>
 
           <View style={styles.padGrid}>
             {PADS.map((pad) => (
-              <Pressable
+              <PressableScale
                 key={pad.id}
                 style={[
                   styles.pad,
@@ -280,18 +295,18 @@ function SimonSaysGame({ onExit }: { onExit: () => void }) {
                 disabled={gameState !== "playing" || isShowingSequence}
               >
                 <Text style={styles.padEmoji}>{pad.emoji}</Text>
-              </Pressable>
+              </PressableScale>
             ))}
           </View>
 
           {gameState === "gameover" && (
             <>
-              <Text style={styles.gameOverText}>
+              <Text style={[styles.gameOverText, { color: theme.text.primary }]}>
                 You made it to round {round}! 🎉
               </Text>
-              <Pressable style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
+              <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
                 <Text style={styles.primaryButtonText}>Play Again</Text>
-              </Pressable>
+              </PressableScale>
             </>
           )}
         </>
@@ -383,7 +398,7 @@ function numberColor(n: number) {
 
 function PetMinesweeperGame({ onExit }: { onExit: () => void }) {
   const { earnCoins } = usePets();
-  const { accentColor } = useTheme();
+  const { accentColor, theme } = useTheme();
 
   const [grid, setGrid] = useState<Cell[][]>(() => makeGrid());
   const [gameState, setGameState] = useState<"playing" | "won" | "lost">(
@@ -469,13 +484,24 @@ function PetMinesweeperGame({ onExit }: { onExit: () => void }) {
   };
 
   return (
-    <View style={styles.gameBox}>
-      <Pressable style={styles.exitButton} onPress={onExit}>
+    <View
+      style={[
+        styles.gameBox,
+        { backgroundColor: theme.card.background, borderColor: theme.card.border },
+      ]}
+    >
+      <PressableScale
+        style={[
+          styles.exitButton,
+          { backgroundColor: theme.card.background, borderColor: theme.card.border },
+        ]}
+        onPress={onExit}
+      >
         <Text style={[styles.exitButtonText, { color: accentColor }]}>← Back to Games</Text>
-      </Pressable>
+      </PressableScale>
 
-      <Text style={styles.gameTitle}>🦴 Sniff & Seek</Text>
-      <Text style={styles.gameSubtitle}>
+      <Text style={[styles.gameTitle, { color: theme.text.primary }]}>🦴 Sniff & Seek</Text>
+      <Text style={[styles.gameSubtitle, { color: theme.text.secondary }]}>
         Tap to dig. Long-press to mark a spot you think has a skunk 🦨. Clear
         every safe square to earn <CoinIcon size={13} /> {WIN_REWARD}!
       </Text>
@@ -501,7 +527,7 @@ function PetMinesweeperGame({ onExit }: { onExit: () => void }) {
               }
 
               return (
-                <Pressable
+                <PressableScale
                   key={c}
                   style={[
                     styles.mineCell,
@@ -515,7 +541,7 @@ function PetMinesweeperGame({ onExit }: { onExit: () => void }) {
                   <Text style={[styles.mineCellText, { color: textColor }]}>
                     {content}
                   </Text>
-                </Pressable>
+                </PressableScale>
               );
             })}
           </View>
@@ -524,23 +550,23 @@ function PetMinesweeperGame({ onExit }: { onExit: () => void }) {
 
       {gameState === "won" && (
         <>
-          <Text style={styles.gameOverText}>
+          <Text style={[styles.gameOverText, { color: theme.text.primary }]}>
             You found every bone! 🎉 +{WIN_REWARD} coins
           </Text>
-          <Pressable style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={resetGame}>
+          <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={resetGame}>
             <Text style={styles.primaryButtonText}>Play Again</Text>
-          </Pressable>
+          </PressableScale>
         </>
       )}
 
       {gameState === "lost" && (
         <>
-          <Text style={styles.gameOverText}>
+          <Text style={[styles.gameOverText, { color: theme.text.primary }]}>
             Uh oh, a skunk got startled! Try again.
           </Text>
-          <Pressable style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={resetGame}>
+          <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={resetGame}>
             <Text style={styles.primaryButtonText}>Play Again</Text>
-          </Pressable>
+          </PressableScale>
         </>
       )}
     </View>
@@ -602,7 +628,7 @@ function spawnParkourObstacle(id: number): ParkourObstacle {
 
 function PupParkourGame({ onExit }: { onExit: () => void }) {
   const { earnCoins } = usePets();
-  const { accentColor } = useTheme();
+  const { accentColor, theme } = useTheme();
 
   const [gameState, setGameState] = useState<"idle" | "playing" | "gameover">(
     "idle"
@@ -801,31 +827,42 @@ function PupParkourGame({ onExit }: { onExit: () => void }) {
   ).current;
 
   return (
-    <View style={styles.gameBox}>
-      <Pressable style={styles.exitButton} onPress={onExit}>
+    <View
+      style={[
+        styles.gameBox,
+        { backgroundColor: theme.card.background, borderColor: theme.card.border },
+      ]}
+    >
+      <PressableScale
+        style={[
+          styles.exitButton,
+          { backgroundColor: theme.card.background, borderColor: theme.card.border },
+        ]}
+        onPress={onExit}
+      >
         <Text style={[styles.exitButtonText, { color: accentColor }]}>← Back to Games</Text>
-      </Pressable>
+      </PressableScale>
 
-      <Text style={styles.gameTitle}>🏃 Pup Parkour</Text>
+      <Text style={[styles.gameTitle, { color: theme.text.primary }]}>🏃 Pup Parkour</Text>
 
       {gameState === "idle" && (
         <>
-          <Text style={styles.gameSubtitle}>
+          <Text style={[styles.gameSubtitle, { color: theme.text.secondary }]}>
             Tap to jump over logs 🪵. Swipe left or right to slip through
             gaps in the walls 🧱. Every bit of distance earns coins —{" "}
             <CoinIcon size={13} /> 1 per {COINS_PER_DISTANCE} distance!
           </Text>
-          <Pressable style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
+          <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
             <Text style={styles.primaryButtonText}>Start Run</Text>
-          </Pressable>
+          </PressableScale>
         </>
       )}
 
       {gameState !== "idle" && (
         <>
           <View style={styles.scoreRow}>
-            <Text style={styles.scoreText}>🐾 {score}</Text>
-            <Text style={styles.bestScoreText}>Best {Math.max(best, score)}</Text>
+            <Text style={[styles.scoreText, { color: theme.text.primary }]}>🐾 {score}</Text>
+            <Text style={[styles.bestScoreText, { color: theme.text.secondary }]}>Best {Math.max(best, score)}</Text>
           </View>
 
           <View
@@ -878,20 +915,20 @@ function PupParkourGame({ onExit }: { onExit: () => void }) {
           </View>
 
           {gameState === "playing" && (
-            <Text style={styles.instructionsText}>
+            <Text style={[styles.instructionsText, { color: theme.text.secondary }]}>
               Tap to jump · Swipe to dodge
             </Text>
           )}
 
           {gameState === "gameover" && (
             <>
-              <Text style={styles.gameOverText}>
+              <Text style={[styles.gameOverText, { color: theme.text.primary }]}>
                 You made it {score}m! 🎉{" "}
                 {lastCoins > 0 ? `+${lastCoins} coins` : "Go a bit further next time!"}
               </Text>
-              <Pressable style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
+              <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
                 <Text style={styles.primaryButtonText}>Run Again</Text>
-              </Pressable>
+              </PressableScale>
             </>
           )}
         </>
@@ -992,7 +1029,7 @@ function lineBetween(
 
 function PupParkourFPGame({ onExit }: { onExit: () => void }) {
   const { earnCoins } = usePets();
-  const { accentColor } = useTheme();
+  const { accentColor, theme } = useTheme();
 
   const [gameState, setGameState] = useState<"idle" | "playing" | "gameover">(
     "idle"
@@ -1214,31 +1251,42 @@ function PupParkourFPGame({ onExit }: { onExit: () => void }) {
   const laneBoundary2X = FP_LANE_WIDTH * 2;
 
   return (
-    <View style={styles.gameBox}>
-      <Pressable style={styles.exitButton} onPress={onExit}>
+    <View
+      style={[
+        styles.gameBox,
+        { backgroundColor: theme.card.background, borderColor: theme.card.border },
+      ]}
+    >
+      <PressableScale
+        style={[
+          styles.exitButton,
+          { backgroundColor: theme.card.background, borderColor: theme.card.border },
+        ]}
+        onPress={onExit}
+      >
         <Text style={[styles.exitButtonText, { color: accentColor }]}>← Back to Games</Text>
-      </Pressable>
+      </PressableScale>
 
-      <Text style={styles.gameTitle}>👀 Dog&apos;s-Eye Dash</Text>
+      <Text style={[styles.gameTitle, { color: theme.text.primary }]}>👀 Dog&apos;s-Eye Dash</Text>
 
       {gameState === "idle" && (
         <>
-          <Text style={styles.gameSubtitle}>
+          <Text style={[styles.gameSubtitle, { color: theme.text.secondary }]}>
             Same course as Pup Parkour, seen through your pup&apos;s eyes! Tap to
             hop over logs 🪵, swipe to duck through wall gaps 🧱.{" "}
             <CoinIcon size={13} /> 1 per {COINS_PER_DISTANCE} distance.
           </Text>
-          <Pressable style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
+          <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
             <Text style={styles.primaryButtonText}>Start Run</Text>
-          </Pressable>
+          </PressableScale>
         </>
       )}
 
       {gameState !== "idle" && (
         <>
           <View style={styles.scoreRow}>
-            <Text style={styles.scoreText}>🐾 {score}</Text>
-            <Text style={styles.bestScoreText}>Best {Math.max(best, score)}</Text>
+            <Text style={[styles.scoreText, { color: theme.text.primary }]}>🐾 {score}</Text>
+            <Text style={[styles.bestScoreText, { color: theme.text.secondary }]}>Best {Math.max(best, score)}</Text>
           </View>
 
           <View style={styles.fpScene} {...panResponder.panHandlers}>
@@ -1400,20 +1448,20 @@ function PupParkourFPGame({ onExit }: { onExit: () => void }) {
           </View>
 
           {gameState === "playing" && (
-            <Text style={styles.instructionsText}>
+            <Text style={[styles.instructionsText, { color: theme.text.secondary }]}>
               Tap to jump · Swipe to dodge
             </Text>
           )}
 
           {gameState === "gameover" && (
             <>
-              <Text style={styles.gameOverText}>
+              <Text style={[styles.gameOverText, { color: theme.text.primary }]}>
                 You made it {score}m! 🎉{" "}
                 {lastCoins > 0 ? `+${lastCoins} coins` : "Go a bit further next time!"}
               </Text>
-              <Pressable style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
+              <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
                 <Text style={styles.primaryButtonText}>Run Again</Text>
-              </Pressable>
+              </PressableScale>
             </>
           )}
         </>
@@ -1440,9 +1488,13 @@ const styles = StyleSheet.create({
   },
 
   title: {
+    fontFamily: "Fredoka_700Bold",
     fontSize: 32,
-    fontWeight: "800",
     color: "#fff",
+    letterSpacing: 0.5,
+    textShadowColor: "rgba(0,0,0,0.15)",
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 0,
     textAlign: "center",
     marginBottom: 16,
   },

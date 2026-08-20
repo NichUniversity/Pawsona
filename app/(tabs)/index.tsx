@@ -18,6 +18,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AvatarDisplay, findAvatarOption } from '../../components/ui/AvatarDisplay';
+import { PressableScale } from '../../components/ui/PressableScale';
 import { SettingsMenu } from '../../components/ui/SettingsMenu';
 import { TabBackground } from '../../components/ui/TabBackground';
 import { ONBOARDING_STORAGE_KEY } from '../../constants/onboarding';
@@ -36,7 +37,7 @@ import {
   PET_CATEGORIES,
   PetCategory,
 } from '../../data/petcategories';
-import { ACCENT_COLORS, useTheme } from '../../context/ThemeContext';
+import { ACCENT_COLORS, useTheme, withAlpha } from '../../context/ThemeContext';
 import { useTabBarClearance } from '../../hooks/useTabBarClearance';
 
 const ATTRIBUTES = [
@@ -65,6 +66,7 @@ function categoryMeta(category: PetCategory) {
 }
 
 function PawRating({ value }: { value: number }) {
+  const { theme } = useTheme();
   return (
     <View style={styles.pawsRow}>
       {[1, 2, 3, 4, 5].map((paw) => (
@@ -72,7 +74,7 @@ function PawRating({ value }: { value: number }) {
           key={paw}
           name={paw <= value ? 'paw' : 'paw-outline'}
           size={18}
-          color={paw <= value ? '#fff' : 'rgba(255,255,255,0.35)'}
+          color={paw <= value ? theme.text.primary : withAlpha(theme.text.primary, 0.35)}
         />
       ))}
     </View>
@@ -83,7 +85,7 @@ export default function HomeScreen() {
   const { pets: entries, setPets: setEntries } = usePets();
   const { signOut } = useAuth();
   const { replayOnboarding } = useOnboarding();
-  const { accentKey, accentColor, setAccentKey } = useTheme();
+  const { accentKey, accentColor, setAccentKey, theme } = useTheme();
   const tabBarClearance = useTabBarClearance();
   const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
@@ -274,12 +276,12 @@ export default function HomeScreen() {
     <View style={styles.screen}>
       <TabBackground />
 
-      <Pressable
+      <PressableScale
         style={[styles.settingsButton, { top: insets.top + 8 }]}
         onPress={() => setSettingsVisible(true)}
       >
-        <MaterialCommunityIcons name="cog" size={22} color="rgba(255,255,255,0.7)" />
-      </Pressable>
+        <MaterialCommunityIcons name="cog" size={22} color={withAlpha(theme.text.primary, 0.7)} />
+      </PressableScale>
 
       <ScrollView
         contentContainerStyle={[
@@ -291,8 +293,8 @@ export default function HomeScreen() {
         <View style={styles.container}>
 
           <View style={styles.header}>
-            <Text style={styles.title}>Pawsona</Text>
-            <Text style={styles.subtitle}>
+            <Text style={[styles.title, { color: theme.text.primary }]}>Pawsona</Text>
+            <Text style={[styles.subtitle, { color: withAlpha(theme.text.primary, 0.85) }]}>
               {hasConfirmedPet
                 ? 'Your pet pals, ready for adventure 🐾'
                 : 'Upload a photo to bring your pet to life'}
@@ -359,7 +361,7 @@ export default function HomeScreen() {
                         { opacity: fadeAnim },
                       ]}
                     >
-                      <Pressable
+                      <PressableScale
                         style={styles.uploadBox}
                         onPress={() =>
                           handleUpload(currentEntry.id)
@@ -387,7 +389,7 @@ export default function HomeScreen() {
                             </Text>
                           </View>
                         )}
-                      </Pressable>
+                      </PressableScale>
                     </Animated.View>
 
                   </View>
@@ -401,7 +403,7 @@ export default function HomeScreen() {
                         key={attr.key}
                         style={styles.attributeRowSide}
                       >
-                        <Text style={styles.attributeLabelSide}>
+                        <Text style={[styles.attributeLabelSide, { color: theme.text.primary }]}>
                           {attr.label}
                         </Text>
 
@@ -421,7 +423,7 @@ export default function HomeScreen() {
 
               {entries.length > 1 && (
                 <View style={styles.carouselControls}>
-                  <Pressable
+                  <PressableScale
                     onPress={goLeft}
                     disabled={currentIndex === 0}
                     style={[
@@ -432,13 +434,13 @@ export default function HomeScreen() {
                     <MaterialCommunityIcons
                       name="chevron-left"
                       size={20}
-                      color="#fff"
+                      color={theme.text.primary}
                     />
-                  </Pressable>
+                  </PressableScale>
 
                   <View style={styles.dotsRow}>
                     {entries.map((entry, i) => (
-                      <Pressable
+                      <PressableScale
                         key={entry.id}
                         onPress={() => goToIndex(i)}
                         hitSlop={8}
@@ -446,14 +448,16 @@ export default function HomeScreen() {
                         <View
                           style={[
                             styles.dot,
+                            { backgroundColor: withAlpha(theme.text.primary, 0.35) },
                             i === currentIndex && styles.dotActive,
+                            i === currentIndex && { backgroundColor: theme.text.primary },
                           ]}
                         />
-                      </Pressable>
+                      </PressableScale>
                     ))}
                   </View>
 
-                  <Pressable
+                  <PressableScale
                     onPress={goRight}
                     disabled={currentIndex === entries.length - 1}
                     style={[
@@ -465,16 +469,16 @@ export default function HomeScreen() {
                     <MaterialCommunityIcons
                       name="chevron-right"
                       size={20}
-                      color="#fff"
+                      color={theme.text.primary}
                     />
-                  </Pressable>
+                  </PressableScale>
                 </View>
               )}
 
               {currentEntry.photoUri && !currentEntry.confirmed && (
                 <View style={styles.pickerSection}>
                   {!currentEntry.category ? (
-                    <Pressable
+                    <PressableScale
                       style={styles.chooseTypeButton}
                       onPress={() => setCategoryModalId(currentEntry.id)}
                     >
@@ -486,7 +490,7 @@ export default function HomeScreen() {
                         size={20}
                         color={accentColor}
                       />
-                    </Pressable>
+                    </PressableScale>
                   ) : (
                     <View style={styles.pickerRow}>
                       <View
@@ -511,7 +515,7 @@ export default function HomeScreen() {
                       </View>
 
                       <View style={styles.dropdownWrapper}>
-                        <Pressable
+                        <PressableScale
                           style={styles.dropdownButton}
                           onPress={() =>
                             setAvatarModalState({
@@ -537,18 +541,18 @@ export default function HomeScreen() {
                             size={20}
                             color={accentColor}
                           />
-                        </Pressable>
+                        </PressableScale>
 
-                        <Pressable
+                        <PressableScale
                           style={styles.changeTypeLink}
                           onPress={() =>
                             handleChangeCategory(currentEntry.id)
                           }
                         >
-                          <Text style={styles.changeTypeLinkText}>
+                          <Text style={[styles.changeTypeLinkText, { color: withAlpha(theme.text.primary, 0.85) }]}>
                             Change pet type
                           </Text>
-                        </Pressable>
+                        </PressableScale>
                       </View>
                     </View>
                   )}
@@ -558,7 +562,7 @@ export default function HomeScreen() {
               {currentEntry.photoUri &&
                 !currentEntry.confirmed &&
                 currentEntry.selectedEmoji && (
-                  <Pressable
+                  <PressableScale
                     style={styles.confirmButton}
                     onPress={() =>
                       handleConfirm(currentEntry.id)
@@ -567,7 +571,7 @@ export default function HomeScreen() {
                     <Text style={[styles.confirmButtonText, { color: accentColor }]}>
                       Confirm Avatar
                     </Text>
-                  </Pressable>
+                  </PressableScale>
                 )}
 
             </View>
@@ -588,7 +592,7 @@ export default function HomeScreen() {
                 <Text style={styles.modalTitle}>Choose pet type</Text>
                 <ScrollView>
                   {PET_CATEGORIES.map((cat) => (
-                    <Pressable
+                    <PressableScale
                       key={cat.key}
                       style={styles.dropdownItem}
                       onPress={() =>
@@ -603,7 +607,7 @@ export default function HomeScreen() {
                       <Text style={styles.dropdownItemText}>
                         {cat.label}
                       </Text>
-                    </Pressable>
+                    </PressableScale>
                   ))}
                 </ScrollView>
               </View>
@@ -632,7 +636,7 @@ export default function HomeScreen() {
                   {avatarModalState &&
                     AVATAR_OPTIONS[avatarModalState.category].map(
                       (option) => (
-                        <Pressable
+                        <PressableScale
                           key={`${option.emoji}-${option.color}`}
                           style={styles.dropdownItem}
                           onPress={() =>
@@ -660,7 +664,7 @@ export default function HomeScreen() {
                           <Text style={styles.dropdownItemText}>
                             {option.label}
                           </Text>
-                        </Pressable>
+                        </PressableScale>
                       )
                     )}
                 </ScrollView>

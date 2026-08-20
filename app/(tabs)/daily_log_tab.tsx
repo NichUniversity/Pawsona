@@ -3,7 +3,6 @@ import React, { useState } from "react";
 import {
     ActivityIndicator,
     Image,
-    Pressable,
     ScrollView,
     StyleSheet,
     Text,
@@ -14,6 +13,7 @@ import {
 import OriginStoryWizard from "../../components/OriginStoryWizard";
 import { AvatarDisplay, findAvatarOption } from "../../components/ui/AvatarDisplay";
 import { CoinIcon } from "../../components/ui/CoinIcon";
+import { PressableScale } from "../../components/ui/PressableScale";
 import { TabBackground } from "../../components/ui/TabBackground";
 import { WalkingSprite } from "../../components/ui/WalkingSprite";
 import { API_BASE_URL, GOLD, PARCHMENT, WOOD_DARK, WOOD_MID } from "../../constants/pet-log-theme";
@@ -50,7 +50,7 @@ const MAX_RATING = 5;
 
 export default function DailyPawLog() {
   const { pets, setPets, coins, earnCoins, hasStorybook } = usePets();
-  const { accentColor } = useTheme();
+  const { accentColor, theme } = useTheme();
   const tabBarClearance = useTabBarClearance();
 
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
@@ -225,9 +225,15 @@ export default function DailyPawLog() {
           {pets
             .filter((pet) => pet.confirmed)
             .map((pet) => (
-              <Pressable
+              <PressableScale
                 key={pet.id}
-                style={styles.petCard}
+                style={[
+                  styles.petCard,
+                  {
+                    backgroundColor: theme.card.background,
+                    borderColor: theme.card.border,
+                  },
+                ]}
                 onPress={() => changePet(pet)}
               >
                 <View style={{ marginRight: 20 }}>
@@ -239,16 +245,16 @@ export default function DailyPawLog() {
                   />
                 </View>
 
-                <Text style={styles.petName}>
+                <Text style={[styles.petName, { color: theme.text.primary }]}>
                   {pet.name || "Unnamed Pet"}
                 </Text>
-              </Pressable>
+              </PressableScale>
             ))}
         </>
       ) : (
         <View style={styles.pageBody}>
           <View style={styles.almanacPage}>
-            <Pressable
+            <PressableScale
               style={styles.changePetPill}
               onPress={() => changePet(null)}
             >
@@ -258,7 +264,7 @@ export default function DailyPawLog() {
                 color={PARCHMENT}
               />
               <Text style={styles.changePetPillText}>Change Pet</Text>
-            </Pressable>
+            </PressableScale>
 
             <View style={styles.mediaRow}>
               <View style={styles.photoFrame}>
@@ -282,7 +288,7 @@ export default function DailyPawLog() {
                 )}
               </View>
 
-              <Pressable
+              <PressableScale
                 style={styles.avatarFrame}
                 onPressIn={() => setIsAvatarWalking(true)}
                 onPressOut={() => setIsAvatarWalking(false)}
@@ -331,7 +337,7 @@ export default function DailyPawLog() {
                     </Text>
                   );
                 })()}
-              </Pressable>
+              </PressableScale>
             </View>
 
             <View style={styles.namePlaque}>
@@ -354,7 +360,7 @@ export default function DailyPawLog() {
                 onChangeText={(text) => updateBackstory(selectedPet.id, text)}
               />
 
-              <Pressable
+              <PressableScale
                 style={styles.originStoryButton}
                 onPress={() => setIsOriginStoryVisible(true)}
               >
@@ -368,7 +374,7 @@ export default function DailyPawLog() {
                     ? "Rewrite with the Origin Story wizard"
                     : "Create with the Origin Story wizard"}
                 </Text>
-              </Pressable>
+              </PressableScale>
             </View>
 
             <View style={styles.statsSection}>
@@ -400,7 +406,7 @@ export default function DailyPawLog() {
                     editable={!isAnalyzing}
                   />
 
-                  <Pressable
+                  <PressableScale
                     style={[
                       styles.coachSubmitButton,
                       (!logText.trim() || isAnalyzing) &&
@@ -416,7 +422,7 @@ export default function DailyPawLog() {
                         Ask the Bond Keeper
                       </Text>
                     )}
-                  </Pressable>
+                  </PressableScale>
 
                   {aiError && (
                     <Text style={styles.coachError}>{aiError}</Text>
@@ -481,14 +487,14 @@ const styles = StyleSheet.create({
   pageLabelPill: {
     backgroundColor: PARCHMENT,
     borderRadius: 16,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingVertical: 9,
+    paddingHorizontal: 18,
   },
 
   pageLabelPillText: {
     color: WOOD_DARK,
     fontWeight: "800",
-    fontSize: 14,
+    fontSize: 18,
   },
 
   coinBadge: {
