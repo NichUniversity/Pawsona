@@ -10,6 +10,11 @@ import { ImageSourcePropType } from "react-native";
  * keep that alignment if you add more frame sets.
  */
 export const WALK_ANIMATIONS: Record<string, ImageSourcePropType[]> = {
+  // Golden Retriever now plays an actual video clip on hold instead of a
+  // sprite loop — see data/walkVideos.ts and WalkingVideo.tsx. This sprite
+  // set stays as-is (unused by that breed for now) so any future pet that
+  // doesn't have a video can still fall back to frame-based playback the
+  // same way the Bulldog below does.
   "golden-retriever-myavatar": [
     require("../assets/animations/golden_retriever_walk_0.png"),
     require("../assets/animations/golden_retriever_walk_1.png"),

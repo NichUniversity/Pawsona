@@ -72,7 +72,7 @@ export default function Minigames() {
           { paddingBottom: tabBarClearance },
         ]}
       >
-      <Text style={[styles.title, { color: theme.text.primary }]}>🎮 Mini Games</Text>
+      <Text style={[styles.title, { color: theme.text.primary }]}>Mini Games</Text>
 
       <View style={styles.coinBadge}>
         <CoinIcon size={16} />

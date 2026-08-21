@@ -16,10 +16,12 @@ import { CoinIcon } from "../../components/ui/CoinIcon";
 import { PressableScale } from "../../components/ui/PressableScale";
 import { TabBackground } from "../../components/ui/TabBackground";
 import { WalkingSprite } from "../../components/ui/WalkingSprite";
+import { WalkingVideo } from "../../components/ui/WalkingVideo";
 import { API_BASE_URL, GOLD, PARCHMENT, WOOD_DARK, WOOD_MID } from "../../constants/pet-log-theme";
 import { PetEntry, usePets } from "../../context/PetInformation";
 import { useTheme } from "../../context/ThemeContext";
 import { findWalkFrames } from "../../data/walkAnimations";
+import { findWalkVideo } from "../../data/walkVideos";
 import { useTabBarClearance } from "../../hooks/useTabBarClearance";
 
 type AttributeKey =
@@ -60,6 +62,12 @@ export default function DailyPawLog() {
   // avatar's hold-to-walk logic use the exact same frames.
   const walkFrames = selectedPet
     ? findWalkFrames(selectedPet.selectedEmoji)
+    : undefined;
+  // A real video clip takes priority over the sprite frames above when
+  // both exist for a pet (see data/walkVideos.ts) — walkFrames stays as
+  // the fallback for any pet that doesn't have one.
+  const walkVideo = selectedPet
+    ? findWalkVideo(selectedPet.selectedEmoji)
     : undefined;
 
   const [logText, setLogText] = useState("");
@@ -209,7 +217,7 @@ export default function DailyPawLog() {
       >
       <View style={styles.headerRow}>
         <View style={styles.pageLabelPill}>
-          <Text style={styles.pageLabelPillText}>📖 Daily Paw Log</Text>
+          <Text style={styles.pageLabelPillText}>Daily Paw Log</Text>
         </View>
 
         <View style={styles.coinBadge}>
@@ -242,6 +250,7 @@ export default function DailyPawLog() {
                     emoji={pet.selectedEmoji}
                     color={pet.color}
                     size={35}
+                    transparentBackdrop
                   />
                 </View>
 
@@ -293,12 +302,14 @@ export default function DailyPawLog() {
                 onPressIn={() => setIsAvatarWalking(true)}
                 onPressOut={() => setIsAvatarWalking(false)}
               >
-                {/* Off-screen decode pass: mounting these as soon as the
-                    pet is selected means each walk frame is already
-                    decoded/cached by the time the user holds the avatar,
-                    instead of decoding on first use (which showed up as a
-                    black flash for the first cycle or two). */}
-                {walkFrames && (
+                {/* Off-screen decode pass for sprite-based pets: mounting
+                    these as soon as the pet is selected means each walk
+                    frame is already decoded/cached by the time the user
+                    holds the avatar, instead of decoding on first use
+                    (which showed up as a black flash for the first cycle
+                    or two). Skipped for pets with a video clip — WalkingVideo
+                    below handles its own warm-up by staying mounted. */}
+                {walkFrames && !walkVideo && (
                   <View
                     style={{ position: "absolute", width: 1, height: 1, opacity: 0 }}
                     pointerEvents="none"
@@ -316,16 +327,7 @@ export default function DailyPawLog() {
                     selectedPet.color
                   );
 
-                  if (isAvatarWalking && walkFrames) {
-                    return (
-                      <WalkingSprite
-                        frames={walkFrames}
-                        style={{ width: "100%", height: "100%" }}
-                      />
-                    );
-                  }
-
-                  return avatarOption?.image ? (
+                  const staticAvatar = avatarOption?.image ? (
                     <Image
                       source={avatarOption.image}
                       style={styles.avatarFrameImage}
@@ -336,6 +338,51 @@ export default function DailyPawLog() {
                       {avatarOption?.emoji ?? selectedPet.selectedEmoji ?? "🐾"}
                     </Text>
                   );
+
+                  if (walkVideo) {
+                    // WalkingVideo stays mounted at all times (just
+                    // opacity-swapped with the static avatar) instead of
+                    // being mounted fresh on every hold, so the player is
+                    // already warmed up and there's no decode/buffer lag
+                    // once the hold starts — only the very first hold of
+                    // the session pays that startup cost.
+                    return (
+                      <>
+                        <View
+                          style={[
+                            StyleSheet.absoluteFillObject,
+                            { opacity: isAvatarWalking ? 0 : 1 },
+                          ]}
+                        >
+                          {staticAvatar}
+                        </View>
+                        <View
+                          style={[
+                            StyleSheet.absoluteFillObject,
+                            { opacity: isAvatarWalking ? 1 : 0 },
+                          ]}
+                          pointerEvents="none"
+                        >
+                          <WalkingVideo
+                            source={walkVideo}
+                            playing={isAvatarWalking}
+                            style={{ width: "100%", height: "100%" }}
+                          />
+                        </View>
+                      </>
+                    );
+                  }
+
+                  if (isAvatarWalking && walkFrames) {
+                    return (
+                      <WalkingSprite
+                        frames={walkFrames}
+                        style={{ width: "100%", height: "100%" }}
+                      />
+                    );
+                  }
+
+                  return staticAvatar;
                 })()}
               </PressableScale>
             </View>

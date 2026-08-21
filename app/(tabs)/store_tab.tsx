@@ -77,7 +77,7 @@ export default function StoreTab() {
           { paddingBottom: tabBarClearance },
         ]}
       >
-      <Text style={[styles.title, { color: theme.text.primary }]}>🛍️ Pet Store</Text>
+      <Text style={[styles.title, { color: theme.text.primary }]}>Pet Store</Text>
 
       <View style={styles.coinBadge}>
         <CoinIcon size={16} />

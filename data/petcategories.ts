@@ -14,6 +14,19 @@ export type AvatarOption = {
   color: string; // tint for the avatar's badge/circle
   image?: ImageSourcePropType; // when set, this avatar renders as a custom image instead of the emoji
   faceImage?: ImageSourcePropType; // optional close-up face art shown while picking this avatar; falls back to `image`
+  // Options that share the same `variantGroup` are alternate "looks" of the
+  // same avatar (e.g. a black vs. sable German Shepherd). Once a pet's
+  // avatar is confirmed, tapping its badge only lets the user switch among
+  // options with a matching variantGroup, instead of reopening the full
+  // species picker. Options with no variantGroup are treated as their own
+  // single-item group (no alternate looks yet).
+  variantGroup?: string;
+  // When true, this option is left out of the main species-wide picker
+  // (initial setup / "choose a different animal entirely") and is only
+  // reachable as an alternate look via getAvatarVariants — i.e. someone
+  // has to first pick another option in its variantGroup, then switch to
+  // this one from the confirmed-pet "Choose a look" menu.
+  hiddenFromMainPicker?: boolean;
 };
 
 export const PET_CATEGORIES: CategoryOption[] = [
@@ -45,6 +58,23 @@ export const AVATAR_OPTIONS: Record<PetCategory, AvatarOption[]> = {
       color: "#E0B876",
       image: require("../assets/avatars/golden_retriever.png"),
       faceImage: require("../assets/avatars/golden_retriever_face.png"),
+    },
+    {
+      label: "German Shepherd (Black)",
+      emoji: "german-shepherd-myavatar",
+      color: "#B5B5B5",
+      image: require("../assets/avatars/german_shepherd.png"),
+      faceImage: require("../assets/avatars/german_shepherd_face.png"),
+      variantGroup: "german-shepherd",
+    },
+    {
+      label: "German Shepherd (Sable)",
+      emoji: "german-shepherd-sable-myavatar",
+      color: "#B5793A",
+      image: require("../assets/avatars/german_shepherd_sable.png"),
+      faceImage: require("../assets/avatars/german_shepherd_sable_face.png"),
+      variantGroup: "german-shepherd",
+      hiddenFromMainPicker: true,
     },
   ],
   cat: [
@@ -80,3 +110,33 @@ export const AVATAR_OPTIONS: Record<PetCategory, AvatarOption[]> = {
     { label: "Horse", emoji: "🐴", color: "#A9713F" },
   ],
 };
+
+/**
+ * The options to show in the main species-wide avatar picker (initial
+ * setup / "choose a different animal entirely") — everything except
+ * options marked `hiddenFromMainPicker` (alternate looks reachable only
+ * via getAvatarVariants).
+ */
+export function getMainPickerOptions(category: PetCategory): AvatarOption[] {
+  return AVATAR_OPTIONS[category].filter((o) => !o.hiddenFromMainPicker);
+}
+
+/**
+ * All avatar options in `category` that are alternate looks of `option` —
+ * itself included. Falls back to just `[option]` when it has no group,
+ * since it has no other looks defined yet.
+ */
+export function getAvatarVariants(
+  category: PetCategory,
+  option: Pick<AvatarOption, "emoji" | "variantGroup">
+): AvatarOption[] {
+  if (!option.variantGroup) {
+    const self = AVATAR_OPTIONS[category].find(
+      (o) => o.emoji === option.emoji
+    );
+    return self ? [self] : [];
+  }
+  return AVATAR_OPTIONS[category].filter(
+    (o) => o.variantGroup === option.variantGroup
+  );
+}

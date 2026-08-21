@@ -350,7 +350,7 @@ export default function Adventure() {
         ]}
         style={showFullScreenBackground ? styles.transparentScroll : undefined}
       >
-        <Text style={[styles.title, { color: theme.text.primary }]}>🐾 Adventure</Text>
+        <Text style={[styles.title, { color: theme.text.primary }]}>Adventure</Text>
 
         <View style={styles.coinBadge}>
           <CoinIcon size={16} />
