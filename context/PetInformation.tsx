@@ -18,16 +18,9 @@ export type PawLogEntry = {
   date: string;
 };
 
-// Kept as an alias so any existing `import { CosmeticCategory } from
-// ".../PetInformation"` (if one ever creeps back in) still resolves — the
-// real source of truth is data/cosmetics.ts, which the Store tab already
-// imports from directly.
 export type { CosmeticCategory };
 
-// One equipped-item slot per cosmetic category, built from the same
-// category list the Store uses — adding a new category to
-// data/cosmetics.ts (e.g. a future "toy" or "bed" slot) only needs to
-// happen in one place instead of being kept in sync by hand here too.
+// One equipped-item slot per cosmetic category from data/cosmetics.ts.
 export type EquippedCosmetics = Record<CosmeticCategory, string | null>;
 
 export type PetEntry = {
@@ -77,12 +70,9 @@ export const makeEmptyEntry = (): PetEntry => ({
   equippedCosmetics: { ...EMPTY_EQUIPPED },
 });
 
-// --- Daily streak + reward -------------------------------------------
-//
-// Coins grow the longer the streak runs (day 1 is the smallest reward,
-// day 7 the biggest), then the schedule repeats — so week 2's day-1
-// reward matches week 1's, rather than growing forever. Missing a full
-// calendar day resets the streak back to day 1.
+// --- Daily streak + reward ---
+// Reward grows through day 7, then the schedule repeats. Missing a full
+// calendar day resets the streak to day 1.
 export const DAILY_REWARD_SCHEDULE = [10, 15, 20, 25, 30, 40, 60];
 
 function rewardForStreak(streakDay: number): number {
@@ -90,9 +80,7 @@ function rewardForStreak(streakDay: number): number {
   return DAILY_REWARD_SCHEDULE[index];
 }
 
-// YYYY-MM-DD in the device's local calendar — two people who open the app
-// at 11:59pm and 12:01am on the same night should see different "days",
-// which a UTC-based key would get wrong for anyone west of Greenwich.
+// YYYY-MM-DD in the device's local calendar.
 function localDateKey(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -100,17 +88,14 @@ function localDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-// Whole-day gap between two YYYY-MM-DD keys, computed at UTC noon so nothing
-// near a DST boundary rounds to the wrong number of days.
+// Whole-day gap between two YYYY-MM-DD keys.
 function daysBetweenKeys(from: string, to: string): number {
   const a = new Date(`${from}T12:00:00Z`).getTime();
   const b = new Date(`${to}T12:00:00Z`).getTime();
   return Math.round((b - a) / 86_400_000);
 }
 
-// The streak value claiming *right now* would produce, given the last
-// claimed day. Pure — used both to preview "Day N" in the UI before
-// tapping claim, and by claimDailyReward itself so the two can't drift.
+// The streak value claiming right now would produce.
 function nextStreakValue(
   lastClaimDate: string | null,
   currentStreak: number,
@@ -180,15 +165,9 @@ export function PetProvider({
   const [longestStreak, setLongestStreak] = useState<number>(0);
   const [lastClaimDate, setLastClaimDate] = useState<string | null>(null);
 
-  // Guards the save effect below from firing with default state before the
-  // load effect has had a chance to run — without this, a fresh mount
-  // would briefly write STARTING_COINS etc. over whatever was actually
-  // saved, racing the load and sometimes winning.
+  // Guards the save effect from firing with default state before load runs.
   const hydrated = useRef(false);
-  // A real (re-render-triggering) mirror of the ref above, exposed to
-  // consumers as `isHydrated` — the Home tab's daily-reward popup waits on
-  // this so it doesn't flash open based on default state (streak 0, no
-  // last-claim date) for the instant before the saved values load in.
+  // Re-render-triggering mirror of the ref above, exposed as `isHydrated`.
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
@@ -208,7 +187,7 @@ export function PetProvider({
           if (saved.lastClaimDate) setLastClaimDate(saved.lastClaimDate);
         }
       } catch {
-        // Fall back to the defaults already set above.
+        // Keep the defaults already set above.
       } finally {
         hydrated.current = true;
         setIsHydrated(true);
@@ -228,11 +207,10 @@ export function PetProvider({
       longestStreak,
       lastClaimDate,
     };
-    AsyncStorage.setItem(PET_STATE_STORAGE_KEY, JSON.stringify(snapshot)).catch(
-      () => {
-        // Worst case this round of changes doesn't survive a relaunch.
-      }
-    );
+    AsyncStorage.setItem(
+      PET_STATE_STORAGE_KEY,
+      JSON.stringify(snapshot)
+    ).catch(() => {});
   }, [pets, coins, unlockedAreas, hasStorybook, streak, longestStreak, lastClaimDate]);
 
   const earnCoins = (amount: number) => {

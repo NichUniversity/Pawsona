@@ -58,14 +58,10 @@ export default function DailyPawLog() {
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
   const selectedPet =
     pets.find((pet) => pet.id === selectedPetId) ?? null;
-  // Looked up once per render so both the hidden preloader below and the
-  // avatar's hold-to-walk logic use the exact same frames.
   const walkFrames = selectedPet
     ? findWalkFrames(selectedPet.selectedEmoji)
     : undefined;
-  // A real video clip takes priority over the sprite frames above when
-  // both exist for a pet (see data/walkVideos.ts) — walkFrames stays as
-  // the fallback for any pet that doesn't have one.
+  // Video takes priority over sprite frames when both exist for a pet.
   const walkVideo = selectedPet
     ? findWalkVideo(selectedPet.selectedEmoji)
     : undefined;
@@ -75,9 +71,6 @@ export default function DailyPawLog() {
   const [aiFeedback, setAiFeedback] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
   const [isOriginStoryVisible, setIsOriginStoryVisible] = useState(false);
-  // Held down on the almanac avatar? Plays that pet's walk cycle instead of
-  // the static avatar art (only pets with a WALK_ANIMATIONS entry animate;
-  // everyone else just sits there as before).
   const [isAvatarWalking, setIsAvatarWalking] = useState(false);
 
   const handleAiSubmit = async () => {
@@ -340,12 +333,7 @@ export default function DailyPawLog() {
                   );
 
                   if (walkVideo) {
-                    // WalkingVideo stays mounted at all times (just
-                    // opacity-swapped with the static avatar) instead of
-                    // being mounted fresh on every hold, so the player is
-                    // already warmed up and there's no decode/buffer lag
-                    // once the hold starts — only the very first hold of
-                    // the session pays that startup cost.
+                    // Stays mounted, just opacity-swapped with the static avatar.
                     return (
                       <>
                         <View
@@ -584,13 +572,11 @@ const styles = StyleSheet.create({
     color: "#F5F5F5",
   },
 
-  // Fills whatever vertical space is left below the header, so the whole
-  // screen reads as one full page rather than a card floating at the top.
   pageBody: {
     flex: 1,
   },
 
-  // --- Almanac page: one continuous parchment page filling the tab ---
+  // --- Almanac page ---
 
   almanacPage: {
     flex: 1,
@@ -652,9 +638,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
-  // Fills edge-to-edge, same as photoFrame — avatar art (or a large emoji
-  // fallback) takes up the whole box instead of sitting as a small centered
-  // icon with empty space around it.
   avatarFrame: {
     flex: 1,
     height: 260,

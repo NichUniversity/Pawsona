@@ -108,9 +108,7 @@ export default function HomeScreen() {
   const [avatarModalState, setAvatarModalState] = useState<{
     entryId: string;
     category: PetCategory;
-    // true when this modal should only offer alternate "looks" of the
-    // pet's current avatar (tapped from the confirmed avatar badge),
-    // rather than the full species-wide avatar picker.
+    // True to show only alternate looks of the current avatar.
     variantsOnly?: boolean;
   } | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -120,9 +118,7 @@ export default function HomeScreen() {
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
 
-  // The upload-box glow only plays the very first time the app is opened
-  // (same flag the onboarding walkthrough uses), so it doesn't nag on
-  // every launch once the user already knows where to tap.
+  // Only glow on the very first app open.
   const [isFirstLaunch, setIsFirstLaunch] = useState(false);
   useEffect(() => {
     (async () => {
@@ -132,22 +128,17 @@ export default function HomeScreen() {
           setIsFirstLaunch(true);
         }
       } catch {
-        // If storage isn't available, just skip the glow — no harm done.
+        // Skip the glow if storage isn't available.
       }
     })();
   }, []);
 
-  // The daily-reward popup, shown once the first time Home opens on a new
-  // calendar day. Gated on isHydrated so it doesn't flash open based on
-  // default (pre-load) state before the real saved streak/date come back
-  // from AsyncStorage — see PetInformation.tsx.
+  // Daily-reward popup, shown once per calendar day once hydrated.
   const [rewardModalVisible, setRewardModalVisible] = useState(false);
   useEffect(() => {
     if (isHydrated && canClaimDailyReward) {
       setRewardModalVisible(true);
     }
-    // Only meant to fire once, right after hydration settles — not every
-    // time canClaimDailyReward flips (e.g. right after claiming).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isHydrated]);
 
@@ -173,12 +164,7 @@ export default function HomeScreen() {
     }).start();
   }, [currentIndex, fadeAnim]);
 
-  // Slow pulsing glow behind the upload box — draws the eye to it before a
-  // photo has been added. Only rendered while there's no photo yet (see
-  // uploadBoxWrapper JSX below), and only kept running while this tab is
-  // actually focused — a background Animated.loop left running while the
-  // user has swiped away to another tab is one less thing competing with
-  // the swipe gesture for the native thread.
+  // Pulsing glow behind the empty upload box, only while this tab is focused.
   useEffect(() => {
     if (!isFocused) return;
 
@@ -307,19 +293,12 @@ export default function HomeScreen() {
     });
   };
 
-  // Opens the in-app delete-confirm modal for this entry (see
-  // deleteConfirmId below). Native Alert.alert's multi-button dialogs
-  // don't render reliably on the web preview this app is built/tested
-  // through, so this uses a plain in-app Modal instead — it also matches
-  // the app's own look rather than an OS-native popup.
+  // Opens the delete-confirm modal for this entry.
   const handleDeleteEntry = (id: string) => {
     setDeleteConfirmId(id);
   };
 
-  // Permanently removes a pet's photo/profile/stats — used for both
-  // "start over" on an in-progress (unconfirmed) pet and deleting a
-  // confirmed one. Always leaves at least one (empty) entry behind so the
-  // carousel/upload flow has something to land on.
+  // Removes a pet's photo/profile/stats, always leaving at least one entry.
   const confirmDeleteEntry = () => {
     if (!deleteConfirmId) return;
     const id = deleteConfirmId;
@@ -334,9 +313,7 @@ export default function HomeScreen() {
 
   const hasConfirmedPet = entries.some((e) => e.confirmed);
 
-  // Options to list in the avatar picker modal — either the full
-  // species-wide list, or (when opened from a confirmed pet's badge)
-  // just the alternate "looks" of that pet's current avatar.
+  // Options to list in the avatar picker modal.
   const avatarModalOptions: AvatarOption[] = (() => {
     if (!avatarModalState) return [];
     const { category, variantsOnly, entryId } = avatarModalState;
@@ -1025,8 +1002,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // Carousel controls now sit below the photo instead of overlaid on top
-  // of it — left arrow, page dots, right arrow, all in one row.
   carouselControls: {
     flexDirection: 'row',
     alignItems: 'center',
