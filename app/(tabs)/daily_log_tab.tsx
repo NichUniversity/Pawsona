@@ -3,7 +3,6 @@ import React, { useState } from "react";
 import {
     ActivityIndicator,
     Image,
-    Pressable,
     ScrollView,
     StyleSheet,
     Text,
@@ -14,10 +13,15 @@ import {
 import OriginStoryWizard from "../../components/OriginStoryWizard";
 import { AvatarDisplay, findAvatarOption } from "../../components/ui/AvatarDisplay";
 import { CoinIcon } from "../../components/ui/CoinIcon";
+import { PressableScale } from "../../components/ui/PressableScale";
 import { TabBackground } from "../../components/ui/TabBackground";
+import { WalkingSprite } from "../../components/ui/WalkingSprite";
+import { WalkingVideo } from "../../components/ui/WalkingVideo";
 import { API_BASE_URL, GOLD, PARCHMENT, WOOD_DARK, WOOD_MID } from "../../constants/pet-log-theme";
 import { PetEntry, usePets } from "../../context/PetInformation";
 import { useTheme } from "../../context/ThemeContext";
+import { findWalkFrames } from "../../data/walkAnimations";
+import { findWalkVideo } from "../../data/walkVideos";
 import { useTabBarClearance } from "../../hooks/useTabBarClearance";
 
 type AttributeKey =
@@ -48,18 +52,26 @@ const MAX_RATING = 5;
 
 export default function DailyPawLog() {
   const { pets, setPets, coins, earnCoins, hasStorybook } = usePets();
-  const { accentColor } = useTheme();
+  const { accentColor, theme } = useTheme();
   const tabBarClearance = useTabBarClearance();
 
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
   const selectedPet =
     pets.find((pet) => pet.id === selectedPetId) ?? null;
+  const walkFrames = selectedPet
+    ? findWalkFrames(selectedPet.selectedEmoji)
+    : undefined;
+  // Video takes priority over sprite frames when both exist for a pet.
+  const walkVideo = selectedPet
+    ? findWalkVideo(selectedPet.selectedEmoji)
+    : undefined;
 
   const [logText, setLogText] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiFeedback, setAiFeedback] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
   const [isOriginStoryVisible, setIsOriginStoryVisible] = useState(false);
+  const [isAvatarWalking, setIsAvatarWalking] = useState(false);
 
   const handleAiSubmit = async () => {
     if (!selectedPet || !logText.trim() || isAnalyzing) return;
@@ -140,6 +152,7 @@ export default function DailyPawLog() {
     setAiFeedback(null);
     setAiError(null);
     setIsOriginStoryVisible(false);
+    setIsAvatarWalking(false);
   };
 
   const updateBackstory = (petId: string, text: string) => {
@@ -197,7 +210,7 @@ export default function DailyPawLog() {
       >
       <View style={styles.headerRow}>
         <View style={styles.pageLabelPill}>
-          <Text style={styles.pageLabelPillText}>📖 Daily Paw Log</Text>
+          <Text style={styles.pageLabelPillText}>Daily Paw Log</Text>
         </View>
 
         <View style={styles.coinBadge}>
@@ -213,9 +226,15 @@ export default function DailyPawLog() {
           {pets
             .filter((pet) => pet.confirmed)
             .map((pet) => (
-              <Pressable
+              <PressableScale
                 key={pet.id}
-                style={styles.petCard}
+                style={[
+                  styles.petCard,
+                  {
+                    backgroundColor: theme.card.background,
+                    borderColor: theme.card.border,
+                  },
+                ]}
                 onPress={() => changePet(pet)}
               >
                 <View style={{ marginRight: 20 }}>
@@ -224,19 +243,20 @@ export default function DailyPawLog() {
                     emoji={pet.selectedEmoji}
                     color={pet.color}
                     size={35}
+                    transparentBackdrop
                   />
                 </View>
 
-                <Text style={styles.petName}>
+                <Text style={[styles.petName, { color: theme.text.primary }]}>
                   {pet.name || "Unnamed Pet"}
                 </Text>
-              </Pressable>
+              </PressableScale>
             ))}
         </>
       ) : (
         <View style={styles.pageBody}>
           <View style={styles.almanacPage}>
-            <Pressable
+            <PressableScale
               style={styles.changePetPill}
               onPress={() => changePet(null)}
             >
@@ -246,7 +266,7 @@ export default function DailyPawLog() {
                 color={PARCHMENT}
               />
               <Text style={styles.changePetPillText}>Change Pet</Text>
-            </Pressable>
+            </PressableScale>
 
             <View style={styles.mediaRow}>
               <View style={styles.photoFrame}>
@@ -270,7 +290,29 @@ export default function DailyPawLog() {
                 )}
               </View>
 
-              <View style={styles.avatarFrame}>
+              <PressableScale
+                style={styles.avatarFrame}
+                onPressIn={() => setIsAvatarWalking(true)}
+                onPressOut={() => setIsAvatarWalking(false)}
+              >
+                {/* Off-screen decode pass for sprite-based pets: mounting
+                    these as soon as the pet is selected means each walk
+                    frame is already decoded/cached by the time the user
+                    holds the avatar, instead of decoding on first use
+                    (which showed up as a black flash for the first cycle
+                    or two). Skipped for pets with a video clip — WalkingVideo
+                    below handles its own warm-up by staying mounted. */}
+                {walkFrames && !walkVideo && (
+                  <View
+                    style={{ position: "absolute", width: 1, height: 1, opacity: 0 }}
+                    pointerEvents="none"
+                  >
+                    {walkFrames.map((frame, i) => (
+                      <Image key={i} source={frame} style={{ width: 1, height: 1 }} />
+                    ))}
+                  </View>
+                )}
+
                 {(() => {
                   const avatarOption = findAvatarOption(
                     selectedPet.category,
@@ -278,7 +320,7 @@ export default function DailyPawLog() {
                     selectedPet.color
                   );
 
-                  return avatarOption?.image ? (
+                  const staticAvatar = avatarOption?.image ? (
                     <Image
                       source={avatarOption.image}
                       style={styles.avatarFrameImage}
@@ -289,8 +331,48 @@ export default function DailyPawLog() {
                       {avatarOption?.emoji ?? selectedPet.selectedEmoji ?? "🐾"}
                     </Text>
                   );
+
+                  if (walkVideo) {
+                    // Stays mounted, just opacity-swapped with the static avatar.
+                    return (
+                      <>
+                        <View
+                          style={[
+                            StyleSheet.absoluteFillObject,
+                            { opacity: isAvatarWalking ? 0 : 1 },
+                          ]}
+                        >
+                          {staticAvatar}
+                        </View>
+                        <View
+                          style={[
+                            StyleSheet.absoluteFillObject,
+                            { opacity: isAvatarWalking ? 1 : 0 },
+                          ]}
+                          pointerEvents="none"
+                        >
+                          <WalkingVideo
+                            source={walkVideo}
+                            playing={isAvatarWalking}
+                            style={{ width: "100%", height: "100%" }}
+                          />
+                        </View>
+                      </>
+                    );
+                  }
+
+                  if (isAvatarWalking && walkFrames) {
+                    return (
+                      <WalkingSprite
+                        frames={walkFrames}
+                        style={{ width: "100%", height: "100%" }}
+                      />
+                    );
+                  }
+
+                  return staticAvatar;
                 })()}
-              </View>
+              </PressableScale>
             </View>
 
             <View style={styles.namePlaque}>
@@ -313,7 +395,7 @@ export default function DailyPawLog() {
                 onChangeText={(text) => updateBackstory(selectedPet.id, text)}
               />
 
-              <Pressable
+              <PressableScale
                 style={styles.originStoryButton}
                 onPress={() => setIsOriginStoryVisible(true)}
               >
@@ -327,7 +409,7 @@ export default function DailyPawLog() {
                     ? "Rewrite with the Origin Story wizard"
                     : "Create with the Origin Story wizard"}
                 </Text>
-              </Pressable>
+              </PressableScale>
             </View>
 
             <View style={styles.statsSection}>
@@ -359,7 +441,7 @@ export default function DailyPawLog() {
                     editable={!isAnalyzing}
                   />
 
-                  <Pressable
+                  <PressableScale
                     style={[
                       styles.coachSubmitButton,
                       (!logText.trim() || isAnalyzing) &&
@@ -375,7 +457,7 @@ export default function DailyPawLog() {
                         Ask the Bond Keeper
                       </Text>
                     )}
-                  </Pressable>
+                  </PressableScale>
 
                   {aiError && (
                     <Text style={styles.coachError}>{aiError}</Text>
@@ -440,14 +522,14 @@ const styles = StyleSheet.create({
   pageLabelPill: {
     backgroundColor: PARCHMENT,
     borderRadius: 16,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingVertical: 9,
+    paddingHorizontal: 18,
   },
 
   pageLabelPillText: {
     color: WOOD_DARK,
     fontWeight: "800",
-    fontSize: 14,
+    fontSize: 18,
   },
 
   coinBadge: {
@@ -490,13 +572,11 @@ const styles = StyleSheet.create({
     color: "#F5F5F5",
   },
 
-  // Fills whatever vertical space is left below the header, so the whole
-  // screen reads as one full page rather than a card floating at the top.
   pageBody: {
     flex: 1,
   },
 
-  // --- Almanac page: one continuous parchment page filling the tab ---
+  // --- Almanac page ---
 
   almanacPage: {
     flex: 1,
@@ -558,9 +638,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
-  // Fills edge-to-edge, same as photoFrame — avatar art (or a large emoji
-  // fallback) takes up the whole box instead of sitting as a small centered
-  // icon with empty space around it.
   avatarFrame: {
     flex: 1,
     height: 260,

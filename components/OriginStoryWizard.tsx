@@ -6,7 +6,6 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,6 +13,7 @@ import {
   View,
 } from "react-native";
 
+import { PressableScale } from "./ui/PressableScale";
 import { API_BASE_URL, GOLD, PARCHMENT, WOOD_DARK, WOOD_MID } from "../constants/pet-log-theme";
 import { usePets } from "../context/PetInformation";
 import { PET_CATEGORIES, PetCategory } from "../data/petcategories";
@@ -298,9 +298,9 @@ export default function OriginStoryWizard({
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <Animated.View style={[styles.card, { opacity: fadeAnim }]}>
-          <Pressable style={styles.closeButton} onPress={onClose} hitSlop={10}>
+          <PressableScale style={styles.closeButton} onPress={onClose} hitSlop={10}>
             <MaterialCommunityIcons name="close" size={20} color={WOOD_DARK} />
-          </Pressable>
+          </PressableScale>
 
           {step === "intro" && (
             <View style={styles.centeredContent}>
@@ -314,7 +314,7 @@ export default function OriginStoryWizard({
                 you want to tell?
               </Text>
 
-              <Pressable
+              <PressableScale
                 style={styles.modeCard}
                 onPress={() => startInterview("true")}
               >
@@ -324,9 +324,9 @@ export default function OriginStoryWizard({
                   A heartfelt story about how you two actually found each
                   other.
                 </Text>
-              </Pressable>
+              </PressableScale>
 
-              <Pressable
+              <PressableScale
                 style={styles.modeCard}
                 onPress={() => startInterview("legend")}
               >
@@ -336,7 +336,7 @@ export default function OriginStoryWizard({
                   A whimsical myth about the epic past life {petName || "your pet"}{" "}
                   secretly lived before becoming your pet.
                 </Text>
-              </Pressable>
+              </PressableScale>
             </View>
           )}
 
@@ -369,7 +369,7 @@ export default function OriginStoryWizard({
                 onChangeText={setAnswerText}
               />
 
-              <Pressable
+              <PressableScale
                 style={[
                   styles.primaryButton,
                   !answerText.trim() && styles.primaryButtonDisabled,
@@ -382,7 +382,7 @@ export default function OriginStoryWizard({
                     ? "Finish & write the story"
                     : "Next question"}
                 </Text>
-              </Pressable>
+              </PressableScale>
             </View>
           )}
 
@@ -406,12 +406,12 @@ export default function OriginStoryWizard({
             <View style={styles.centeredContent}>
               <Text style={styles.introEmoji}>😿</Text>
               <Text style={styles.bodyText}>{errorMessage}</Text>
-              <Pressable
+              <PressableScale
                 style={styles.primaryButton}
                 onPress={handleRetryFinalize}
               >
                 <Text style={styles.primaryButtonText}>Try again</Text>
-              </Pressable>
+              </PressableScale>
             </View>
           )}
 
@@ -431,13 +431,13 @@ export default function OriginStoryWizard({
                 <Text style={styles.resultText}>{backstory}</Text>
               </ScrollView>
 
-              <Pressable style={styles.primaryButton} onPress={handleSave}>
+              <PressableScale style={styles.primaryButton} onPress={handleSave}>
                 <Text style={styles.primaryButtonText}>
                   Save to {petName ? `${petName}'s` : "the"} profile
                 </Text>
-              </Pressable>
+              </PressableScale>
 
-              <Pressable
+              <PressableScale
                 style={styles.secondaryButton}
                 onPress={handleRegenerate}
               >
@@ -446,7 +446,7 @@ export default function OriginStoryWizard({
                     ? `Write it differently (🪙 ${REDO_COST})`
                     : "Write it differently (free)"}
                 </Text>
-              </Pressable>
+              </PressableScale>
 
               {redoError && (
                 <Text style={styles.redoErrorText}>{redoError}</Text>

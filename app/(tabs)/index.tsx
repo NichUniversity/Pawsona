@@ -18,6 +18,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AvatarDisplay, findAvatarOption } from '../../components/ui/AvatarDisplay';
+import { DailyRewardModal } from '../../components/ui/DailyRewardModal';
+import { PressableScale } from '../../components/ui/PressableScale';
 import { SettingsMenu } from '../../components/ui/SettingsMenu';
 import { TabBackground } from '../../components/ui/TabBackground';
 import { ONBOARDING_STORAGE_KEY } from '../../constants/onboarding';
@@ -33,10 +35,12 @@ import {
 import {
   AVATAR_OPTIONS,
   AvatarOption,
+  getAvatarVariants,
+  getMainPickerOptions,
   PET_CATEGORIES,
   PetCategory,
 } from '../../data/petcategories';
-import { ACCENT_COLORS, useTheme } from '../../context/ThemeContext';
+import { ACCENT_COLORS, useTheme, withAlpha } from '../../context/ThemeContext';
 import { useTabBarClearance } from '../../hooks/useTabBarClearance';
 
 const ATTRIBUTES = [
@@ -65,6 +69,7 @@ function categoryMeta(category: PetCategory) {
 }
 
 function PawRating({ value }: { value: number }) {
+  const { theme } = useTheme();
   return (
     <View style={styles.pawsRow}>
       {[1, 2, 3, 4, 5].map((paw) => (
@@ -72,7 +77,7 @@ function PawRating({ value }: { value: number }) {
           key={paw}
           name={paw <= value ? 'paw' : 'paw-outline'}
           size={18}
-          color={paw <= value ? '#fff' : 'rgba(255,255,255,0.35)'}
+          color={paw <= value ? theme.text.primary : withAlpha(theme.text.primary, 0.35)}
         />
       ))}
     </View>
@@ -80,10 +85,20 @@ function PawRating({ value }: { value: number }) {
 }
 
 export default function HomeScreen() {
-  const { pets: entries, setPets: setEntries } = usePets();
+  const {
+    pets: entries,
+    setPets: setEntries,
+    streak,
+    longestStreak,
+    canClaimDailyReward,
+    previewStreak,
+    previewReward,
+    claimDailyReward,
+    isHydrated,
+  } = usePets();
   const { signOut } = useAuth();
   const { replayOnboarding } = useOnboarding();
-  const { accentKey, accentColor, setAccentKey } = useTheme();
+  const { accentKey, accentColor, setAccentKey, theme } = useTheme();
   const tabBarClearance = useTabBarClearance();
   const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
@@ -93,16 +108,17 @@ export default function HomeScreen() {
   const [avatarModalState, setAvatarModalState] = useState<{
     entryId: string;
     category: PetCategory;
+    // True to show only alternate looks of the current avatar.
+    variantsOnly?: boolean;
   } | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
 
-  // The upload-box glow only plays the very first time the app is opened
-  // (same flag the onboarding walkthrough uses), so it doesn't nag on
-  // every launch once the user already knows where to tap.
+  // Only glow on the very first app open.
   const [isFirstLaunch, setIsFirstLaunch] = useState(false);
   useEffect(() => {
     (async () => {
@@ -112,10 +128,24 @@ export default function HomeScreen() {
           setIsFirstLaunch(true);
         }
       } catch {
-        // If storage isn't available, just skip the glow — no harm done.
+        // Skip the glow if storage isn't available.
       }
     })();
   }, []);
+
+  // Daily-reward popup, shown once per calendar day once hydrated.
+  const [rewardModalVisible, setRewardModalVisible] = useState(false);
+  useEffect(() => {
+    if (isHydrated && canClaimDailyReward) {
+      setRewardModalVisible(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHydrated]);
+
+  const handleClaimDailyReward = () => {
+    claimDailyReward();
+    setRewardModalVisible(false);
+  };
 
   // Keep currentIndex valid if entries shrink/grow.
   useEffect(() => {
@@ -134,12 +164,7 @@ export default function HomeScreen() {
     }).start();
   }, [currentIndex, fadeAnim]);
 
-  // Slow pulsing glow behind the upload box — draws the eye to it before a
-  // photo has been added. Only rendered while there's no photo yet (see
-  // uploadBoxWrapper JSX below), and only kept running while this tab is
-  // actually focused — a background Animated.loop left running while the
-  // user has swiped away to another tab is one less thing competing with
-  // the swipe gesture for the native thread.
+  // Pulsing glow behind the empty upload box, only while this tab is focused.
   useEffect(() => {
     if (!isFocused) return;
 
@@ -268,18 +293,54 @@ export default function HomeScreen() {
     });
   };
 
+  // Opens the delete-confirm modal for this entry.
+  const handleDeleteEntry = (id: string) => {
+    setDeleteConfirmId(id);
+  };
+
+  // Removes a pet's photo/profile/stats, always leaving at least one entry.
+  const confirmDeleteEntry = () => {
+    if (!deleteConfirmId) return;
+    const id = deleteConfirmId;
+
+    setEntries((prev) => {
+      const filtered = prev.filter((e) => e.id !== id);
+      return filtered.length > 0 ? filtered : [makeEmptyEntry()];
+    });
+
+    setDeleteConfirmId(null);
+  };
+
   const hasConfirmedPet = entries.some((e) => e.confirmed);
+
+  // Options to list in the avatar picker modal.
+  const avatarModalOptions: AvatarOption[] = (() => {
+    if (!avatarModalState) return [];
+    const { category, variantsOnly, entryId } = avatarModalState;
+    if (!variantsOnly) return getMainPickerOptions(category);
+
+    const activeEntry = entries.find((e) => e.id === entryId);
+    const currentOption = activeEntry?.selectedEmoji
+      ? AVATAR_OPTIONS[category].find(
+          (o) => o.emoji === activeEntry.selectedEmoji
+        )
+      : undefined;
+
+    return currentOption
+      ? getAvatarVariants(category, currentOption)
+      : getMainPickerOptions(category);
+  })();
 
   return (
     <View style={styles.screen}>
       <TabBackground />
 
-      <Pressable
+      <PressableScale
         style={[styles.settingsButton, { top: insets.top + 8 }]}
         onPress={() => setSettingsVisible(true)}
       >
-        <MaterialCommunityIcons name="cog" size={22} color="rgba(255,255,255,0.7)" />
-      </Pressable>
+        <MaterialCommunityIcons name="cog" size={22} color={withAlpha(theme.text.primary, 0.7)} />
+      </PressableScale>
 
       <ScrollView
         contentContainerStyle={[
@@ -291,13 +352,53 @@ export default function HomeScreen() {
         <View style={styles.container}>
 
           <View style={styles.header}>
-            <Text style={styles.title}>Pawsona</Text>
-            <Text style={styles.subtitle}>
+            <Text style={[styles.title, { color: theme.text.primary }]}>Pawsona</Text>
+            <Text style={[styles.subtitle, { color: withAlpha(theme.text.primary, 0.85) }]}>
               {hasConfirmedPet
                 ? 'Your pet pals, ready for adventure 🐾'
                 : 'Upload a photo to bring your pet to life'}
             </Text>
           </View>
+
+          <PressableScale
+            style={[
+              styles.streakBanner,
+              {
+                backgroundColor: theme.card.background,
+                borderColor: theme.card.border,
+              },
+            ]}
+            disabled={!canClaimDailyReward}
+            onPress={handleClaimDailyReward}
+          >
+            <View
+              style={[
+                styles.streakIconBadge,
+                { backgroundColor: withAlpha(accentColor, 0.15) },
+              ]}
+            >
+              <MaterialCommunityIcons name="fire" size={18} color={accentColor} />
+            </View>
+
+            <View style={styles.streakTextColumn}>
+              <Text style={[styles.streakTitle, { color: theme.text.primary }]}>
+                {streak > 0 ? `Day ${streak} streak` : 'Start your streak'}
+              </Text>
+              <Text style={[styles.streakSubtitle, { color: theme.text.secondary }]}>
+                {canClaimDailyReward
+                  ? `Tap to claim Day ${previewStreak} · +${previewReward} coins`
+                  : longestStreak > streak
+                  ? `Best streak: ${longestStreak} days`
+                  : 'Come back tomorrow to keep it going'}
+              </Text>
+            </View>
+
+            {canClaimDailyReward && (
+              <View style={[styles.streakClaimPill, { backgroundColor: accentColor }]}>
+                <Text style={styles.streakClaimPillText}>Claim</Text>
+              </View>
+            )}
+          </PressableScale>
 
           {currentEntry && (
             <View style={styles.swiperArea}>
@@ -306,16 +407,49 @@ export default function HomeScreen() {
                 <View style={styles.uploadColumn}>
 
                   {currentEntry.confirmed && (
-                    <View style={styles.nameInputWrapper}>
-                      <TextInput
-                        style={[styles.nameInput, { color: accentColor }]}
-                        placeholder="Pet's name"
-                        placeholderTextColor="#aaa"
-                        value={currentEntry.name}
-                        onChangeText={(text) =>
-                          updateEntry(currentEntry.id, { name: text })
-                        }
-                      />
+                    <View style={styles.nameRow}>
+                      {currentEntry.selectedEmoji && (
+                        <PressableScale
+                          style={[
+                            styles.avatarBox,
+                            { backgroundColor: currentEntry.color ?? '#fff' },
+                          ]}
+                          onPress={() =>
+                            setAvatarModalState({
+                              entryId: currentEntry.id,
+                              category: currentEntry.category!,
+                              variantsOnly: true,
+                            })
+                          }
+                        >
+                          <AvatarDisplay
+                            category={currentEntry.category}
+                            emoji={currentEntry.selectedEmoji}
+                            color={currentEntry.color}
+                            size={62}
+                            transparentBackdrop
+                          />
+                          <View style={styles.avatarBoxEditDot}>
+                            <MaterialCommunityIcons
+                              name="pencil"
+                              size={12}
+                              color="#fff"
+                            />
+                          </View>
+                        </PressableScale>
+                      )}
+
+                      <View style={styles.nameInputWrapper}>
+                        <TextInput
+                          style={[styles.nameInput, { color: accentColor }]}
+                          placeholder="Pet's name"
+                          placeholderTextColor="#aaa"
+                          value={currentEntry.name}
+                          onChangeText={(text) =>
+                            updateEntry(currentEntry.id, { name: text })
+                          }
+                        />
+                      </View>
                     </View>
                   )}
 
@@ -336,20 +470,17 @@ export default function HomeScreen() {
                       />
                     )}
 
-                    {currentEntry.confirmed && currentEntry.selectedEmoji && (
-                      <View
-                        style={[
-                          styles.avatarBadge,
-                          { backgroundColor: currentEntry.color ?? '#fff' },
-                        ]}
+                    {currentEntry.photoUri && (
+                      <PressableScale
+                        style={styles.deleteBadge}
+                        onPress={() => handleDeleteEntry(currentEntry.id)}
                       >
-                        <AvatarDisplay
-                          category={currentEntry.category}
-                          emoji={currentEntry.selectedEmoji}
-                          color={currentEntry.color}
-                          size={28}
+                        <MaterialCommunityIcons
+                          name="trash-can-outline"
+                          size={16}
+                          color="#fff"
                         />
-                      </View>
+                      </PressableScale>
                     )}
 
                     <Animated.View
@@ -359,7 +490,7 @@ export default function HomeScreen() {
                         { opacity: fadeAnim },
                       ]}
                     >
-                      <Pressable
+                      <PressableScale
                         style={styles.uploadBox}
                         onPress={() =>
                           handleUpload(currentEntry.id)
@@ -387,7 +518,7 @@ export default function HomeScreen() {
                             </Text>
                           </View>
                         )}
-                      </Pressable>
+                      </PressableScale>
                     </Animated.View>
 
                   </View>
@@ -401,7 +532,7 @@ export default function HomeScreen() {
                         key={attr.key}
                         style={styles.attributeRowSide}
                       >
-                        <Text style={styles.attributeLabelSide}>
+                        <Text style={[styles.attributeLabelSide, { color: theme.text.primary }]}>
                           {attr.label}
                         </Text>
 
@@ -421,7 +552,7 @@ export default function HomeScreen() {
 
               {entries.length > 1 && (
                 <View style={styles.carouselControls}>
-                  <Pressable
+                  <PressableScale
                     onPress={goLeft}
                     disabled={currentIndex === 0}
                     style={[
@@ -432,13 +563,13 @@ export default function HomeScreen() {
                     <MaterialCommunityIcons
                       name="chevron-left"
                       size={20}
-                      color="#fff"
+                      color={theme.text.primary}
                     />
-                  </Pressable>
+                  </PressableScale>
 
                   <View style={styles.dotsRow}>
                     {entries.map((entry, i) => (
-                      <Pressable
+                      <PressableScale
                         key={entry.id}
                         onPress={() => goToIndex(i)}
                         hitSlop={8}
@@ -446,14 +577,16 @@ export default function HomeScreen() {
                         <View
                           style={[
                             styles.dot,
+                            { backgroundColor: withAlpha(theme.text.primary, 0.35) },
                             i === currentIndex && styles.dotActive,
+                            i === currentIndex && { backgroundColor: theme.text.primary },
                           ]}
                         />
-                      </Pressable>
+                      </PressableScale>
                     ))}
                   </View>
 
-                  <Pressable
+                  <PressableScale
                     onPress={goRight}
                     disabled={currentIndex === entries.length - 1}
                     style={[
@@ -465,16 +598,16 @@ export default function HomeScreen() {
                     <MaterialCommunityIcons
                       name="chevron-right"
                       size={20}
-                      color="#fff"
+                      color={theme.text.primary}
                     />
-                  </Pressable>
+                  </PressableScale>
                 </View>
               )}
 
               {currentEntry.photoUri && !currentEntry.confirmed && (
                 <View style={styles.pickerSection}>
                   {!currentEntry.category ? (
-                    <Pressable
+                    <PressableScale
                       style={styles.chooseTypeButton}
                       onPress={() => setCategoryModalId(currentEntry.id)}
                     >
@@ -486,7 +619,7 @@ export default function HomeScreen() {
                         size={20}
                         color={accentColor}
                       />
-                    </Pressable>
+                    </PressableScale>
                   ) : (
                     <View style={styles.pickerRow}>
                       <View
@@ -507,11 +640,12 @@ export default function HomeScreen() {
                           }
                           color={currentEntry.color}
                           size={48}
+                          transparentBackdrop
                         />
                       </View>
 
                       <View style={styles.dropdownWrapper}>
-                        <Pressable
+                        <PressableScale
                           style={styles.dropdownButton}
                           onPress={() =>
                             setAvatarModalState({
@@ -537,18 +671,18 @@ export default function HomeScreen() {
                             size={20}
                             color={accentColor}
                           />
-                        </Pressable>
+                        </PressableScale>
 
-                        <Pressable
+                        <PressableScale
                           style={styles.changeTypeLink}
                           onPress={() =>
                             handleChangeCategory(currentEntry.id)
                           }
                         >
-                          <Text style={styles.changeTypeLinkText}>
+                          <Text style={[styles.changeTypeLinkText, { color: withAlpha(theme.text.primary, 0.85) }]}>
                             Change pet type
                           </Text>
-                        </Pressable>
+                        </PressableScale>
                       </View>
                     </View>
                   )}
@@ -558,7 +692,7 @@ export default function HomeScreen() {
               {currentEntry.photoUri &&
                 !currentEntry.confirmed &&
                 currentEntry.selectedEmoji && (
-                  <Pressable
+                  <PressableScale
                     style={styles.confirmButton}
                     onPress={() =>
                       handleConfirm(currentEntry.id)
@@ -567,7 +701,7 @@ export default function HomeScreen() {
                     <Text style={[styles.confirmButtonText, { color: accentColor }]}>
                       Confirm Avatar
                     </Text>
-                  </Pressable>
+                  </PressableScale>
                 )}
 
             </View>
@@ -588,7 +722,7 @@ export default function HomeScreen() {
                 <Text style={styles.modalTitle}>Choose pet type</Text>
                 <ScrollView>
                   {PET_CATEGORIES.map((cat) => (
-                    <Pressable
+                    <PressableScale
                       key={cat.key}
                       style={styles.dropdownItem}
                       onPress={() =>
@@ -603,7 +737,7 @@ export default function HomeScreen() {
                       <Text style={styles.dropdownItemText}>
                         {cat.label}
                       </Text>
-                    </Pressable>
+                    </PressableScale>
                   ))}
                 </ScrollView>
               </View>
@@ -623,16 +757,19 @@ export default function HomeScreen() {
             >
               <View style={styles.dropdownMenu}>
                 <Text style={styles.modalTitle}>
-                  {avatarModalState
-                    ? categoryMeta(avatarModalState.category).label
-                    : ''}{' '}
-                  avatars
+                  {avatarModalState?.variantsOnly
+                    ? 'Choose a look'
+                    : `${
+                        avatarModalState
+                          ? categoryMeta(avatarModalState.category).label
+                          : ''
+                      } avatars`}
                 </Text>
                 <ScrollView>
                   {avatarModalState &&
-                    AVATAR_OPTIONS[avatarModalState.category].map(
+                    avatarModalOptions.map(
                       (option) => (
-                        <Pressable
+                        <PressableScale
                           key={`${option.emoji}-${option.color}`}
                           style={styles.dropdownItem}
                           onPress={() =>
@@ -653,16 +790,66 @@ export default function HomeScreen() {
                               emoji={option.emoji}
                               color={option.color}
                               size={28}
+                              variant="face"
+                              transparentBackdrop
                             />
                           </View>
 
                           <Text style={styles.dropdownItemText}>
                             {option.label}
                           </Text>
-                        </Pressable>
+                        </PressableScale>
                       )
                     )}
                 </ScrollView>
+              </View>
+            </Pressable>
+          </Modal>
+
+          {/* Delete-pet confirmation modal */}
+          <Modal
+            visible={deleteConfirmId !== null}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setDeleteConfirmId(null)}
+          >
+            <Pressable
+              style={styles.modalOverlay}
+              onPress={() => setDeleteConfirmId(null)}
+            >
+              <View style={styles.confirmCard}>
+                <Text style={styles.modalTitle}>Remove this pet?</Text>
+                <Text style={styles.confirmBody}>
+                  {(() => {
+                    const entry = entries.find(
+                      (e) => e.id === deleteConfirmId
+                    );
+                    const label = entry?.name
+                      ? `${entry.name}'s`
+                      : "this pet's";
+                    return `This will permanently delete ${label} photo, profile, and stats. This can't be undone.`;
+                  })()}
+                </Text>
+
+                <View style={styles.confirmButtonRow}>
+                  <PressableScale
+                    style={styles.confirmCancelButton}
+                    onPress={() => setDeleteConfirmId(null)}
+                  >
+                    <Text style={styles.confirmCancelButtonText}>
+                      Cancel
+                    </Text>
+                  </PressableScale>
+
+                  <PressableScale
+                    style={styles.confirmDeleteButton}
+                    onPress={confirmDeleteEntry}
+                  >
+                    <Text style={styles.confirmDeleteButtonText}>
+                      Delete
+                    </Text>
+                  </PressableScale>
+                </View>
               </View>
             </Pressable>
           </Modal>
@@ -688,6 +875,14 @@ export default function HomeScreen() {
                 onPress: signOut,
               },
             ]}
+          />
+
+          <DailyRewardModal
+            visible={rewardModalVisible}
+            streakDay={previewStreak}
+            reward={previewReward}
+            onClaim={handleClaimDailyReward}
+            onClose={() => setRewardModalVisible(false)}
           />
 
         </View>
@@ -716,7 +911,56 @@ const styles = StyleSheet.create({
 
   header: {
     alignItems: 'center',
-    marginBottom: 36,
+    marginBottom: 18,
+  },
+
+  streakBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 24,
+    gap: 12,
+  },
+
+  streakIconBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  streakTextColumn: {
+    flex: 1,
+  },
+
+  streakTitle: {
+    fontFamily: 'Fredoka_600SemiBold',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+
+  streakSubtitle: {
+    fontFamily: 'Fredoka_400Regular',
+    fontSize: 12,
+    marginTop: 2,
+  },
+
+  streakClaimPill: {
+    borderRadius: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+
+  streakClaimPillText: {
+    fontFamily: 'Fredoka_700Bold',
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '800',
   },
 
   settingsButton: {
@@ -758,8 +1002,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // Carousel controls now sit below the photo instead of overlaid on top
-  // of it — left arrow, page dots, right arrow, all in one row.
   carouselControls: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -783,12 +1025,20 @@ const styles = StyleSheet.create({
 
   uploadColumn: {
     alignItems: 'center',
-    width: 170,
+    width: 230,
+  },
+
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    width: 260,
+    marginBottom: 20,
+    marginLeft: -80,
   },
 
   nameInputWrapper: {
-    width: '100%',
-    marginBottom: 10,
+    flex: 1,
   },
 
   nameInput: {
@@ -804,6 +1054,24 @@ const styles = StyleSheet.create({
 
   uploadBoxWrapper: {
     position: 'relative',
+  },
+
+  deleteBadge: {
+    position: 'absolute',
+    top: -10,
+    right: -10,
+    zIndex: 6,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(220,60,60,0.9)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
 
   uploadGlow: {
@@ -865,14 +1133,10 @@ const styles = StyleSheet.create({
     height: '100%',
   },
 
-  avatarBadge: {
-    position: 'absolute',
-    top: -10,
-    left: -10,
-    zIndex: 6,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  avatarBox: {
+    width: 76,
+    height: 76,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -880,6 +1144,20 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 4,
+  },
+
+  avatarBoxEditDot: {
+    position: 'absolute',
+    bottom: -3,
+    right: -3,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.7)',
   },
 
   sideAvatarEmoji: {
@@ -905,7 +1183,8 @@ const styles = StyleSheet.create({
   },
 
   attributesSide: {
-    marginLeft: 8,
+    marginLeft: 10,
+    marginTop: 30,
     gap: 10,
     justifyContent: 'center',
   },
@@ -1057,6 +1336,59 @@ const styles = StyleSheet.create({
     fontFamily: 'Fredoka_600SemiBold',
     fontSize: 15,
     color: '#333',
+  },
+
+  confirmCard: {
+    width: '82%',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+  },
+
+  confirmBody: {
+    fontFamily: 'Fredoka_400Regular',
+    fontSize: 13,
+    color: '#555',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginTop: 4,
+    marginBottom: 18,
+  },
+
+  confirmButtonRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+
+  confirmCancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.06)',
+  },
+
+  confirmCancelButtonText: {
+    fontFamily: 'Fredoka_600SemiBold',
+    fontSize: 14,
+    color: '#555',
+  },
+
+  confirmDeleteButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#DC3C3C',
+  },
+
+  confirmDeleteButtonText: {
+    fontFamily: 'Fredoka_600SemiBold',
+    fontSize: 14,
+    color: '#fff',
   },
 
   avatarSwatch: {
