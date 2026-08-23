@@ -352,7 +352,7 @@ export default function HomeScreen() {
         <View style={styles.container}>
 
           <View style={styles.header}>
-            <Text style={[styles.title, { color: theme.text.primary }]}>Pawsona</Text>
+            <Text style={[styles.title, { color: accentColor }]}>Pawsona</Text>
             <Text style={[styles.subtitle, { color: withAlpha(theme.text.primary, 0.85) }]}>
               {hasConfirmedPet
                 ? 'Your pet pals, ready for adventure 🐾'
@@ -426,13 +426,13 @@ export default function HomeScreen() {
                             category={currentEntry.category}
                             emoji={currentEntry.selectedEmoji}
                             color={currentEntry.color}
-                            size={62}
+                            size={50}
                             transparentBackdrop
                           />
                           <View style={styles.avatarBoxEditDot}>
                             <MaterialCommunityIcons
                               name="pencil"
-                              size={12}
+                              size={10}
                               color="#fff"
                             />
                           </View>
@@ -1032,9 +1032,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    width: 260,
-    marginBottom: 20,
-    marginLeft: -80,
+    width: '100%',
+    marginBottom: 6,
+    marginLeft: -40,
   },
 
   nameInputWrapper: {
@@ -1134,9 +1134,9 @@ const styles = StyleSheet.create({
   },
 
   avatarBox: {
-    width: 76,
-    height: 76,
-    borderRadius: 22,
+    width: 62,
+    height: 62,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -1150,9 +1150,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: -3,
     right: -3,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1183,8 +1183,8 @@ const styles = StyleSheet.create({
   },
 
   attributesSide: {
-    marginLeft: 10,
-    marginTop: 30,
+    marginLeft: -10,
+    marginTop: 55,
     gap: 10,
     justifyContent: 'center',
   },

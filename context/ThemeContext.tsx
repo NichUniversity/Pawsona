@@ -161,7 +161,7 @@ export const THEME_OPTIONS: { key: ThemeKey; label: string; value: string }[] =
 // Old name, kept so any straggling import doesn't break.
 export const ACCENT_COLORS = THEME_OPTIONS;
 
-const DEFAULT_THEME: ThemeKey = "dark";
+const DEFAULT_THEME: ThemeKey = "orange";
 const THEME_STORAGE_KEY = "pawsona_theme_accent_v1";
 
 type ThemeContextType = {
@@ -179,9 +179,8 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 // App-wide theme, swappable from Settings and remembered on the device.
 // Picking a theme now changes the background (and cards, text, tab bar)
-// along with the accent color — Dark is the default, matching the
-// Instagram-style look the app started with; White/Orange/Blue/Purple are
-// full light themes built around that color.
+// along with the accent color — Orange is the default; Dark/White/Blue/Purple
+// are the other options, all built around their own accent color.
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [themeKey, setThemeKeyState] = useState<ThemeKey>(DEFAULT_THEME);
 

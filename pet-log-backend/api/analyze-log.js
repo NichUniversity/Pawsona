@@ -94,7 +94,7 @@ module.exports = async (req, res) => {
     let parsed;
     try {
       parsed = JSON.parse(cleaned);
-    } catch (parseErr) {
+    } catch {
       console.error("Failed to parse model output:", rawText);
       return res.status(502).json({ error: "AI returned an unexpected format" });
     }

@@ -129,7 +129,7 @@ export function WalkingSprite({
       bob.stop();
       sway.stop();
     };
-  }, [frames, fps]);
+  }, [frames, fps, bobY, swayX]);
 
   if (frames.length === 0) return null;
 

@@ -208,15 +208,11 @@ export default function DailyPawLog() {
           { paddingBottom: tabBarClearance },
         ]}
       >
-      <View style={styles.headerRow}>
-        <View style={styles.pageLabelPill}>
-          <Text style={styles.pageLabelPillText}>Daily Paw Log</Text>
-        </View>
+      <Text style={[styles.title, { color: accentColor }]}>Daily Paw Log</Text>
 
-        <View style={styles.coinBadge}>
-          <CoinIcon size={16} />
-          <Text style={[styles.coinText, { color: accentColor }]}> {coins}</Text>
-        </View>
+      <View style={styles.coinBadge}>
+        <CoinIcon size={16} />
+        <Text style={[styles.coinText, { color: accentColor }]}> {coins}</Text>
       </View>
 
       {!selectedPet ? (
@@ -509,37 +505,30 @@ const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
     padding: 14,
-    paddingTop: 52,
+    paddingTop: 80,
   },
 
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+  title: {
+    fontFamily: "Fredoka_700Bold",
+    fontSize: 32,
+    letterSpacing: 0.5,
+    textShadowColor: "rgba(0,0,0,0.15)",
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 0,
+    textAlign: "center",
     marginBottom: 16,
-  },
-
-  pageLabelPill: {
-    backgroundColor: PARCHMENT,
-    borderRadius: 16,
-    paddingVertical: 9,
-    paddingHorizontal: 18,
-  },
-
-  pageLabelPillText: {
-    color: WOOD_DARK,
-    fontWeight: "800",
-    fontSize: 18,
   },
 
   coinBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    alignSelf: "center",
     backgroundColor: "#fff",
     borderRadius: 20,
     paddingVertical: 8,
     paddingHorizontal: 18,
+    marginBottom: 20,
   },
 
   coinText: {
