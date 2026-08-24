@@ -4,6 +4,7 @@ import { useIsFocused } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   Image,
   Modal,
@@ -330,6 +331,16 @@ export default function HomeScreen() {
       ? getAvatarVariants(category, currentOption)
       : getMainPickerOptions(category);
   })();
+
+  // The pet entry the avatar picker modal is currently editing — used to
+  // check which locked/purchasable looks this specific pet already owns.
+  const avatarModalEntry = avatarModalState
+    ? entries.find((e) => e.id === avatarModalState.entryId)
+    : undefined;
+
+  const isAvatarLocked = (option: AvatarOption) =>
+    !!option.unlockId &&
+    !(avatarModalEntry?.ownedCosmetics ?? []).includes(option.unlockId);
 
   return (
     <View style={styles.screen}>
@@ -768,38 +779,67 @@ export default function HomeScreen() {
                 <ScrollView>
                   {avatarModalState &&
                     avatarModalOptions.map(
-                      (option) => (
-                        <PressableScale
-                          key={`${option.emoji}-${option.color}`}
-                          style={styles.dropdownItem}
-                          onPress={() =>
-                            handleSelectAvatar(
-                              avatarModalState.entryId,
-                              option
-                            )
-                          }
-                        >
-                          <View
-                            style={[
-                              styles.avatarSwatch,
-                              { backgroundColor: option.color },
-                            ]}
-                          >
-                            <AvatarDisplay
-                              category={avatarModalState.category}
-                              emoji={option.emoji}
-                              color={option.color}
-                              size={28}
-                              variant="face"
-                              transparentBackdrop
-                            />
-                          </View>
+                      (option) => {
+                        const locked = isAvatarLocked(option);
 
-                          <Text style={styles.dropdownItemText}>
-                            {option.label}
-                          </Text>
-                        </PressableScale>
-                      )
+                        return (
+                          <PressableScale
+                            key={`${option.emoji}-${option.color}`}
+                            style={styles.dropdownItem}
+                            onPress={() => {
+                              if (locked) {
+                                Alert.alert(
+                                  'Locked avatar',
+                                  `Unlock "${option.label}" in the Paw Shop to use this look.`
+                                );
+                                return;
+                              }
+                              handleSelectAvatar(
+                                avatarModalState.entryId,
+                                option
+                              );
+                            }}
+                          >
+                            <View
+                              style={[
+                                styles.avatarSwatch,
+                                { backgroundColor: option.color },
+                                locked && styles.avatarSwatchLocked,
+                              ]}
+                            >
+                              <AvatarDisplay
+                                category={avatarModalState.category}
+                                emoji={option.emoji}
+                                color={option.color}
+                                size={28}
+                                variant="face"
+                                transparentBackdrop
+                                style={locked ? { opacity: 0.35 } : undefined}
+                              />
+
+                              {locked && (
+                                <View style={styles.lockBadge}>
+                                  <MaterialCommunityIcons
+                                    name="lock"
+                                    size={12}
+                                    color="#fff"
+                                  />
+                                </View>
+                              )}
+                            </View>
+
+                            <Text
+                              style={[
+                                styles.dropdownItemText,
+                                locked && styles.dropdownItemTextLocked,
+                              ]}
+                            >
+                              {option.label}
+                              {locked ? '  🔒 Paw Shop' : ''}
+                            </Text>
+                          </PressableScale>
+                        );
+                      }
                     )}
                 </ScrollView>
               </View>
@@ -1401,5 +1441,27 @@ const styles = StyleSheet.create({
 
   avatarSwatchEmoji: {
     fontSize: 20,
+  },
+
+  avatarSwatchLocked: {
+    opacity: 0.6,
+  },
+
+  lockBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#8C6C4B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+
+  dropdownItemTextLocked: {
+    color: '#999',
   },
 });

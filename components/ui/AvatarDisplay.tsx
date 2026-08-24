@@ -10,6 +10,13 @@ import {
 
 import { AVATAR_OPTIONS, AvatarOption, PetCategory } from "../../data/petcategories";
 
+// Shared "picture frame mat" color behind avatar art — matches
+// daily_log_tab.tsx's photoFrame background so the photo box and the
+// avatar/walk box read as one matched pair. Also baked into the
+// WALK_VIDEOS clips (see data/walkVideos.ts) — changing this alone won't
+// recolor those; re-render the clips too.
+export const AVATAR_BACKDROP_COLOR = "#D8C79A";
+
 export function findAvatarOption(
   category: PetCategory | null | undefined,
   emoji: string | null | undefined,
@@ -60,7 +67,7 @@ export function AvatarDisplay({
             width: size,
             height: size,
             borderRadius: size / 2,
-            backgroundColor: transparentBackdrop ? "transparent" : "#000",
+            backgroundColor: transparentBackdrop ? "transparent" : AVATAR_BACKDROP_COLOR,
             alignItems: "center",
             justifyContent: "center",
             overflow: "hidden",

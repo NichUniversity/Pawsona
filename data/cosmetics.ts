@@ -4,7 +4,8 @@ export type CosmeticCategory =
   | "background"
   | "accessory"
   | "toy"
-  | "bed";
+  | "bed"
+  | "avatar";
 
 export type CosmeticItem = {
   id: string;
@@ -48,6 +49,10 @@ export const COSMETICS: CosmeticItem[] = [
   { id: "bed-cloud", name: "Cloud Pillow", emoji: "☁️", price: 32, category: "bed" },
   { id: "bed-castle", name: "Pet Castle", emoji: "🏰", price: 45, category: "bed" },
   { id: "bed-hammock", name: "Sunny Hammock", emoji: "🌞", price: 28, category: "bed" },
+
+  // Avatars — unlockable looks. `id` here is referenced by an AvatarOption's
+  // `unlockId` in data/petcategories.ts to gate that look until it's owned.
+  { id: "avatar-wolf", name: "Wolf", emoji: "🐺", price: 60, category: "avatar" },
 ];
 
 export const CATEGORY_LABELS: Record<CosmeticCategory, { label: string; emoji: string }> = {
@@ -57,4 +62,5 @@ export const CATEGORY_LABELS: Record<CosmeticCategory, { label: string; emoji: s
   accessory: { label: "Accessories", emoji: "✨" },
   toy: { label: "Toys", emoji: "🧸" },
   bed: { label: "Beds", emoji: "🛏️" },
+  avatar: { label: "Avatars", emoji: "🐾" },
 };

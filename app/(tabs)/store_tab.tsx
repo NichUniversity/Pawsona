@@ -202,7 +202,19 @@ export default function StoreTab() {
                         equipped && { borderWidth: 2, borderColor: accentColor },
                       ]}
                     >
-                      <Text style={styles.itemEmoji}>{item.emoji}</Text>
+                      {item.id === "avatar-wolf" ? (
+                        <View style={styles.itemAvatarPreview}>
+                          <AvatarDisplay
+                            category="dog"
+                            emoji="wolf-myavatar"
+                            color="#8E96A0"
+                            size={56}
+                            variant="face"
+                          />
+                        </View>
+                      ) : (
+                        <Text style={styles.itemEmoji}>{item.emoji}</Text>
+                      )}
                       <Text style={[styles.itemName, { color: theme.text.primary }]}>
                         {item.name}
                       </Text>
@@ -213,7 +225,28 @@ export default function StoreTab() {
                         </Text>
                       )}
 
-                      {owned ? (
+                      {owned && item.category === "avatar" && (
+                        <Text
+                          style={[styles.itemHint, { color: theme.text.secondary }]}
+                        >
+                          Pick it on the Home tab
+                        </Text>
+                      )}
+
+                      {owned && item.category === "avatar" ? (
+                        <View
+                          style={[
+                            styles.actionButton,
+                            { backgroundColor: withAlpha(accentColor, 0.15) },
+                          ]}
+                        >
+                          <Text
+                            style={[styles.actionButtonText, { color: accentColor }]}
+                          >
+                            Unlocked ✓
+                          </Text>
+                        </View>
+                      ) : owned ? (
                         <PressableScale
                           style={[
                             styles.actionButton,
@@ -420,6 +453,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
 
+  itemAvatarPreview: {
+    marginBottom: 8,
+  },
+
   itemName: {
     fontSize: 14,
     fontWeight: "700",
@@ -432,6 +469,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#FF8C42",
+    marginBottom: 10,
+  },
+
+  itemHint: {
+    fontSize: 11,
+    fontWeight: "600",
+    textAlign: "center",
     marginBottom: 10,
   },
 

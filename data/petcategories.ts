@@ -16,6 +16,7 @@ export type AvatarOption = {
   faceImage?: ImageSourcePropType; // optional close-up face art shown while picking this avatar; falls back to `image`
   variantGroup?: string; // options sharing a variantGroup are alternate looks of the same avatar
   hiddenFromMainPicker?: boolean; // excluded from the main picker; reachable only via getAvatarVariants
+  unlockId?: string; // id of a "avatar"-category item in data/cosmetics.ts — must be owned by the pet to select this look
 };
 
 export const PET_CATEGORIES: CategoryOption[] = [
@@ -28,12 +29,20 @@ export const PET_CATEGORIES: CategoryOption[] = [
 
 export const AVATAR_OPTIONS: Record<PetCategory, AvatarOption[]> = {
   dog: [
-    { label: "Golden Pup", emoji: "🐶", color: "#F2C879" },
-    { label: "Brown Dog", emoji: "🐕", color: "#B5794A" },
-    { label: "Poodle", emoji: "🐩", color: "#F5F1E8" },
-    { label: "Service Dog", emoji: "🦮", color: "#D9B48F" },
-    { label: "Guide Dog", emoji: "🐕‍🦺", color: "#8C6C4B" },
-    { label: "Wolf Pup", emoji: "🐺", color: "#8A8F99" },
+    {
+      label: "Poodle",
+      emoji: "poodle-myavatar",
+      color: "#F5F1E8",
+      image: require("../assets/avatars/poodle.png"),
+      faceImage: require("../assets/avatars/poodle_face.png"),
+    },
+    {
+      label: "Service Dog",
+      emoji: "service-dog-myavatar",
+      color: "#D9B48F",
+      image: require("../assets/avatars/service_dog.png"),
+      faceImage: require("../assets/avatars/service_dog_face.png"),
+    },
     {
       label: "Bulldog",
       emoji: "bulldog-myavatar",
@@ -64,6 +73,14 @@ export const AVATAR_OPTIONS: Record<PetCategory, AvatarOption[]> = {
       faceImage: require("../assets/avatars/german_shepherd_sable_face.png"),
       variantGroup: "german-shepherd",
       hiddenFromMainPicker: true,
+    },
+    {
+      label: "Wolf",
+      emoji: "wolf-myavatar",
+      color: "#8E96A0",
+      image: require("../assets/avatars/wolf.png"),
+      faceImage: require("../assets/avatars/wolf_face.png"),
+      unlockId: "avatar-wolf",
     },
   ],
   cat: [

@@ -11,7 +11,7 @@ import {
 } from "react-native";
 
 import OriginStoryWizard from "../../components/OriginStoryWizard";
-import { AvatarDisplay, findAvatarOption } from "../../components/ui/AvatarDisplay";
+import { AVATAR_BACKDROP_COLOR, AvatarDisplay, findAvatarOption } from "../../components/ui/AvatarDisplay";
 import { CoinIcon } from "../../components/ui/CoinIcon";
 import { PressableScale } from "../../components/ui/PressableScale";
 import { TabBackground } from "../../components/ui/TabBackground";
@@ -633,7 +633,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 4,
     borderColor: WOOD_MID,
-    backgroundColor: "#000",
+    backgroundColor: AVATAR_BACKDROP_COLOR,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
