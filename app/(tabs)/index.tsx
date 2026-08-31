@@ -96,6 +96,7 @@ export default function HomeScreen() {
     previewReward,
     claimDailyReward,
     isHydrated,
+    unlockedAvatars,
   } = usePets();
   const { signOut } = useAuth();
   const { replayOnboarding } = useOnboarding();
@@ -332,15 +333,11 @@ export default function HomeScreen() {
       : getMainPickerOptions(category);
   })();
 
-  // The pet entry the avatar picker modal is currently editing — used to
-  // check which locked/purchasable looks this specific pet already owns.
-  const avatarModalEntry = avatarModalState
-    ? entries.find((e) => e.id === avatarModalState.entryId)
-    : undefined;
-
+  // Avatar unlocks (e.g. the Wolf) are account-wide — bought once in the
+  // Paw Shop, pickable on any pet — so this checks the global list, not
+  // whichever pet the picker modal happens to be open for.
   const isAvatarLocked = (option: AvatarOption) =>
-    !!option.unlockId &&
-    !(avatarModalEntry?.ownedCosmetics ?? []).includes(option.unlockId);
+    !!option.unlockId && !unlockedAvatars.includes(option.unlockId);
 
   return (
     <View style={styles.screen}>
@@ -363,7 +360,11 @@ export default function HomeScreen() {
         <View style={styles.container}>
 
           <View style={styles.header}>
-            <Text style={[styles.title, { color: accentColor }]}>Pawsona</Text>
+            <Image
+              source={require('../../assets/images/pawsona-logo.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
             <Text style={[styles.subtitle, { color: withAlpha(theme.text.primary, 0.85) }]}>
               {hasConfirmedPet
                 ? 'Your pet pals, ready for adventure 🐾'
@@ -1014,14 +1015,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  title: {
-    fontFamily: 'Fredoka_700Bold',
-    fontSize: 42,
-    color: '#fff',
-    letterSpacing: 0.5,
-    textShadowColor: 'rgba(0,0,0,0.15)',
-    textShadowOffset: { width: 0, height: 3 },
-    textShadowRadius: 0,
+  // Double the original "Pawsona" text title's fontSize (42 -> 84).
+  logoImage: {
+    height: 84,
+    aspectRatio: 2172 / 724,
+    // Same soft drop shadow the old text title had.
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    elevation: 4, // Android equivalent — shadow* alone is iOS-only.
   },
 
   subtitle: {

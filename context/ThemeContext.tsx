@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useState } from "react";
 
-export type ThemeKey = "dark" | "white" | "orange" | "blue" | "purple";
+export type ThemeKey = "dark" | "white" | "orange" | "blue" | "purple" | "green";
 // Old name kept as an alias — a few files may still reference it by this name.
 export type AccentColorKey = ThemeKey;
 
@@ -148,6 +148,32 @@ export const THEMES: Record<ThemeKey, ThemeDefinition> = {
     },
     swatchColor: "#A66BFF",
   },
+  // Sampled from the Pawsona wordmark's green ("aw" / the snake) — the one
+  // prominent logo color that didn't have its own theme yet (orange and
+  // blue were already close matches for the logo's other two hues).
+  green: {
+    key: "green",
+    label: "Green",
+    isDark: false,
+    statusBarStyle: "dark",
+    accent: "#7CB342",
+    background: {
+      top: "#F3F8E9",
+      mid: "#E7F1D3",
+      bottom: "#DAE9BC",
+      sheenColor: "#FFFFFF",
+      sheenOpacity: 0.35,
+    },
+    card: { background: "#F9FCF3", border: "rgba(124,179,66,0.25)" },
+    text: { primary: "#2E3B18", secondary: "#71835A" },
+    tabBar: {
+      background: "#F3F8E9",
+      border: "rgba(124,179,66,0.2)",
+      activeTint: "#7CB342",
+      inactiveTint: "#9CAF86",
+    },
+    swatchColor: "#7CB342",
+  },
 };
 
 // Ordered list for the Settings picker (dot color + label per theme).
@@ -179,8 +205,8 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 // App-wide theme, swappable from Settings and remembered on the device.
 // Picking a theme now changes the background (and cards, text, tab bar)
-// along with the accent color — Orange is the default; Dark/White/Blue/Purple
-// are the other options, all built around their own accent color.
+// along with the accent color — Orange is the default; Dark/White/Blue/Purple/
+// Green are the other options, all built around their own accent color.
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [themeKey, setThemeKeyState] = useState<ThemeKey>(DEFAULT_THEME);
 

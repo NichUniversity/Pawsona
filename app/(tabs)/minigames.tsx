@@ -84,13 +84,17 @@ export default function Minigames() {
         <>
           <PassiveActivitiesSection />
 
-          <Text style={styles.sectionHeading}>🎮 Games</Text>
+          <Text style={[styles.sectionHeading, { color: theme.text.primary }]}>🎮 Games</Text>
           <View style={styles.grid}>
             {GAMES.map((game) => (
               <Pressable
                 key={game.id}
                 style={[
                   styles.gameCard,
+                  {
+                    backgroundColor: theme.card.background,
+                    borderColor: theme.card.border,
+                  },
                   !game.available && styles.gameCardLocked,
                 ]}
                 onPress={() => game.available && setActiveGame(game.id)}
@@ -99,8 +103,10 @@ export default function Minigames() {
                 <Text style={styles.gameEmoji}>
                   {game.available ? game.emoji : "🔒"}
                 </Text>
-                <Text style={styles.gameName}>{game.name}</Text>
-                <Text style={styles.gameDescription}>{game.description}</Text>
+                <Text style={[styles.gameName, { color: theme.text.primary }]}>{game.name}</Text>
+                <Text style={[styles.gameDescription, { color: theme.text.secondary }]}>
+                  {game.description}
+                </Text>
               </Pressable>
             ))}
           </View>
@@ -181,7 +187,7 @@ function cooldownKey(activityId: ActivityId, petId: string) {
 
 function PassiveActivitiesSection() {
   const { pets, setPets, earnCoins } = usePets();
-  const { accentColor } = useTheme();
+  const { accentColor, theme } = useTheme();
 
   const confirmedPets = pets.filter((pet) => pet.confirmed);
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
@@ -249,15 +255,20 @@ function PassiveActivitiesSection() {
 
   return (
     <View style={styles.activitiesSection}>
-      <Text style={styles.sectionHeading}>🪙 Passive Coins</Text>
-      <Text style={styles.activitiesSubtitle}>
+      <Text style={[styles.sectionHeading, { color: theme.text.primary }]}>🪙 Passive Coins</Text>
+      <Text style={[styles.activitiesSubtitle, { color: theme.text.secondary }]}>
         Check in every 30 seconds to earn a few coins — and sometimes a
         cosmetic!
       </Text>
 
       {confirmedPets.length === 0 ? (
-        <View style={styles.activitiesEmptyCard}>
-          <Text style={styles.activitiesEmptyText}>
+        <View
+          style={[
+            styles.activitiesEmptyCard,
+            { backgroundColor: theme.card.background, borderColor: theme.card.border },
+          ]}
+        >
+          <Text style={[styles.activitiesEmptyText, { color: theme.text.primary }]}>
             Confirm a pet on the Home tab to start earning passive coins!
           </Text>
         </View>
@@ -274,6 +285,10 @@ function PassiveActivitiesSection() {
                   key={pet.id}
                   style={[
                     styles.activityPetChip,
+                    {
+                      backgroundColor: theme.card.background,
+                      borderColor: theme.card.border,
+                    },
                     selectedPetId === pet.id && {
                       backgroundColor: accentColor,
                       borderColor: accentColor,
@@ -281,7 +296,12 @@ function PassiveActivitiesSection() {
                   ]}
                   onPress={() => setSelectedPetId(pet.id)}
                 >
-                  <Text style={styles.activityPetChipName}>
+                  <Text
+                    style={[
+                      styles.activityPetChipName,
+                      { color: selectedPetId === pet.id ? "#fff" : theme.text.primary },
+                    ]}
+                  >
                     {pet.name || "Unnamed Pet"}
                   </Text>
                 </Pressable>
@@ -299,12 +319,20 @@ function PassiveActivitiesSection() {
             const remainingSec = Math.ceil(remainingMs / 1000);
 
             return (
-              <View key={activity.id} style={styles.activityCard}>
+              <View
+                key={activity.id}
+                style={[
+                  styles.activityCard,
+                  { backgroundColor: theme.card.background, borderColor: theme.card.border },
+                ]}
+              >
                 <View style={styles.activityCardHeader}>
                   <Text style={styles.activityEmoji}>{activity.emoji}</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.activityName}>{activity.name}</Text>
-                    <Text style={styles.activityDescription}>
+                    <Text style={[styles.activityName, { color: theme.text.primary }]}>
+                      {activity.name}
+                    </Text>
+                    <Text style={[styles.activityDescription, { color: theme.text.secondary }]}>
                       {activity.description}
                     </Text>
                   </View>

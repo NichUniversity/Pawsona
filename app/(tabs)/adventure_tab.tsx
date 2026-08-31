@@ -36,10 +36,24 @@ const AREA_BACKGROUNDS: Partial<Record<AreaName, ImageSourcePropType>> = {
   "Magical Forest": require("../../assets/backgrounds/EnchantedForestCartoon.png"),
 };
 
-const TRANSITION_FADE_IN_MS = 900;
-const TRANSITION_TEXT_SCALE_MS = 650;
-const TRANSITION_HOLD_MS = 950;
-const TRANSITION_FADE_OUT_MS = 850;
+// Used when stepping into a whole new area — long enough for the
+// "Entering {areaName}..." label to build in and hold.
+const AREA_TRANSITION = {
+  fadeIn: 900,
+  textScale: 650,
+  hold: 950,
+  fadeOut: 850,
+};
+
+// Used between story beats within the same area — a quick, wordless
+// black cut/fade so picking a choice always feels like moving to the next
+// scene (Slay the Princess-style), not just an instant text swap.
+const SCENE_TRANSITION = {
+  fadeIn: 320,
+  textScale: 0,
+  hold: 120,
+  fadeOut: 320,
+};
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const FIREFLY_COUNT = 12;
@@ -146,7 +160,7 @@ function FireflyField({ fireflies }: { fireflies: FireflyConfig[] }) {
 export default function Adventure() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  const { pets, coins, unlockedAreas, unlockArea, unlockStorybook } =
+  const { pets, coins, unlockedAreas, unlockArea, unlockBookOfOrigin } =
     usePets();
   const { accentColor, theme } = useTheme();
 
@@ -234,32 +248,40 @@ export default function Adventure() {
     ? AREA_BACKGROUNDS[selectedArea]
     : undefined;
 
-  // Fades a black overlay in with "Entering {areaName}..." text, swaps the
-  // underlying screen state while fully black (via onMidpoint), then fades
-  // the overlay back out to reveal the new area/background.
-  const runAreaTransition = (areaName: AreaName, onMidpoint: () => void) => {
-    setTransitionLabel(`Entering ${areaName}...`);
+  // Fades a black overlay in (optionally with a label that builds in once
+  // the screen is fully black), swaps the underlying screen state while
+  // covered (via onMidpoint), then fades the overlay back out to reveal
+  // whatever comes next. Shared by the big "Entering {areaName}..." area
+  // transition and the quick, wordless cut used between story choices.
+  const runSceneTransition = (
+    label: string,
+    durations: { fadeIn: number; textScale: number; hold: number; fadeOut: number },
+    onMidpoint: () => void
+  ) => {
+    setTransitionLabel(label);
     setIsTransitioning(true);
     fadeAnim.setValue(0);
     transitionTextScale.setValue(0.82);
 
     Animated.timing(fadeAnim, {
       toValue: 1,
-      duration: TRANSITION_FADE_IN_MS,
+      duration: durations.fadeIn,
       useNativeDriver: true,
     }).start(() => {
       onMidpoint();
 
-      Animated.timing(transitionTextScale, {
-        toValue: 1,
-        duration: TRANSITION_TEXT_SCALE_MS,
-        useNativeDriver: true,
-      }).start();
+      if (label) {
+        Animated.timing(transitionTextScale, {
+          toValue: 1,
+          duration: durations.textScale,
+          useNativeDriver: true,
+        }).start();
+      }
 
       Animated.timing(fadeAnim, {
         toValue: 0,
-        duration: TRANSITION_FADE_OUT_MS,
-        delay: TRANSITION_HOLD_MS,
+        duration: durations.fadeOut,
+        delay: durations.hold,
         useNativeDriver: true,
       }).start(() => {
         setIsTransitioning(false);
@@ -268,7 +290,7 @@ export default function Adventure() {
   };
 
   const chooseArea = (areaName: AreaName) => {
-    runAreaTransition(areaName, () => {
+    runSceneTransition(`Entering ${areaName}...`, AREA_TRANSITION, () => {
       setSelectedArea(areaName);
       setCurrentNodeId(ADVENTURES[areaName].start);
     });
@@ -288,15 +310,21 @@ export default function Adventure() {
     }
   };
 
+  // Every choice cuts to black and back before the next scene appears —
+  // same beat as stepping into an area, just quicker and wordless, so the
+  // story always feels like it's moving somewhere new rather than just
+  // swapping text in place.
   const handleChoice = (nextId: string) => {
     if (!selectedArea) return;
 
-    setCurrentNodeId(nextId);
+    runSceneTransition("", SCENE_TRANSITION, () => {
+      setCurrentNodeId(nextId);
 
-    const nextNode = ADVENTURES[selectedArea].nodes[nextId];
-    if (nextNode?.givesBook) {
-      unlockStorybook();
-    }
+      const nextNode = ADVENTURES[selectedArea].nodes[nextId];
+      if (nextNode?.givesBookOfOrigin) {
+        unlockBookOfOrigin();
+      }
+    });
   };
 
   // Resets adventure state and returns to the pet/area picker within this tab.
@@ -350,12 +378,16 @@ export default function Adventure() {
         ]}
         style={showFullScreenBackground ? styles.transparentScroll : undefined}
       >
-        <Text style={[styles.title, { color: accentColor }]}>Adventure</Text>
+        {!selectedArea && (
+          <>
+            <Text style={[styles.title, { color: accentColor }]}>Adventure</Text>
 
-        <View style={styles.coinBadge}>
-          <CoinIcon size={16} />
-          <Text style={[styles.coinText, { color: accentColor }]}> {coins}</Text>
-        </View>
+            <View style={styles.coinBadge}>
+              <CoinIcon size={16} />
+              <Text style={[styles.coinText, { color: accentColor }]}> {coins}</Text>
+            </View>
+          </>
+        )}
 
         {showEndAdventureButton && (
           <PressableScale
@@ -430,7 +462,10 @@ export default function Adventure() {
                   style={[
                     styles.card,
                     { backgroundColor: theme.card.background, borderColor: theme.card.border },
-                    !isUnlocked && styles.cardLocked,
+                    // Only fade a locked area once you can't afford it —
+                    // one you can afford right now should read at full
+                    // brightness, same as an area you already own.
+                    !isUnlocked && !canAfford && styles.cardLocked,
                   ]}
                   onPress={() => handleAreaPress(area.name, area.price)}
                   disabled={!isUnlocked && !canAfford}
@@ -507,7 +542,7 @@ export default function Adventure() {
           </View>
         )}
 
-        {currentStory && currentStory.isEnding && currentStory.givesBook && (
+        {currentStory && currentStory.isEnding && currentStory.givesBookOfOrigin && (
           <View
             style={[
               styles.bookBox,
@@ -538,8 +573,8 @@ export default function Adventure() {
                   showFullScreenBackground && styles.bookBannerTextThemed,
                 ]}
               >
-                Storybook unlocked! You can now use the AI Pet Coach on the
-                Daily Paw Log tab.
+                Book of Origin unlocked! You can now use the Origin Story
+                wizard on the Daily Paw Log tab.
               </Text>
             </View>
 
@@ -563,7 +598,7 @@ export default function Adventure() {
           </View>
         )}
 
-        {currentStory && currentStory.isEnding && !currentStory.givesBook && (
+        {currentStory && currentStory.isEnding && !currentStory.givesBookOfOrigin && (
           <View
             style={[
               styles.storyBox,

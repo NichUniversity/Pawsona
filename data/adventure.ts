@@ -16,7 +16,7 @@ export type StoryNode = {
   story: string;
   choices: StoryChoice[];
   isEnding?: boolean;
-  givesBook?: boolean; // true only on the node where the witch hands over the Storybook
+  givesBookOfOrigin?: boolean; // true only on the node where the witch hands over the Book of Origin
 };
 
 export type StoryArea = {
@@ -103,10 +103,10 @@ export const ADVENTURES: Record<string, StoryArea> = {
       "forest-book": {
         id: "forest-book",
         story:
-          '"This is the Storybook of Bonds," the witch explains. "Write about your pet\'s days in your own words, and it will help you understand them more deeply than ever before." The book glows warmly as it settles into your hands.',
+          '"This is the Book of Origin," the witch explains. "Write about your pet\'s days in your own words, and it will help you understand them more deeply than ever before." The book glows warmly as it settles into your hands.',
         choices: [],
         isEnding: true,
-        givesBook: true,
+        givesBookOfOrigin: true,
       },
 
       "forest-end-run": {

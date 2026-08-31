@@ -20,7 +20,8 @@ import {
 import { useTabBarClearance } from "../../hooks/useTabBarClearance";
 
 export default function StoreTab() {
-  const { pets, setPets, coins, spendCoins } = usePets();
+  const { pets, setPets, coins, spendCoins, unlockedAvatars, unlockAvatar } =
+    usePets();
   const { accentColor, theme } = useTheme();
   const tabBarClearance = useTabBarClearance();
 
@@ -36,8 +37,23 @@ export default function StoreTab() {
     );
   };
 
-  const handleBuy = (itemId: string, price: number) => {
+  const handleBuy = (
+    itemId: string,
+    price: number,
+    category: CosmeticCategory
+  ) => {
     if (!selectedPet) return;
+
+    // Avatar looks (e.g. the Wolf) are account-wide once bought — any pet
+    // can pick them on the Home tab — so they're tracked separately from
+    // the per-pet hat/collar/etc. ownership below.
+    if (category === "avatar") {
+      if (unlockedAvatars.includes(itemId)) return;
+      const success = spendCoins(price);
+      if (success) unlockAvatar(itemId);
+      return;
+    }
+
     if (selectedPet.ownedCosmetics.includes(itemId)) return;
 
     const success = spendCoins(price);
@@ -185,7 +201,10 @@ export default function StoreTab() {
 
               <View style={styles.grid}>
                 {itemsInCategory.map((item) => {
-                  const owned = selectedPet.ownedCosmetics.includes(item.id);
+                  const owned =
+                    item.category === "avatar"
+                      ? unlockedAvatars.includes(item.id)
+                      : selectedPet.ownedCosmetics.includes(item.id);
                   const equipped =
                     selectedPet.equippedCosmetics[item.category] === item.id;
                   const canAfford = coins >= item.price;
@@ -200,6 +219,7 @@ export default function StoreTab() {
                           borderColor: theme.card.border,
                         },
                         equipped && { borderWidth: 2, borderColor: accentColor },
+                        !owned && !canAfford && styles.itemCardUnaffordable,
                       ]}
                     >
                       {item.id === "avatar-wolf" ? (
@@ -273,7 +293,9 @@ export default function StoreTab() {
                             !canAfford && styles.buyButtonDisabled,
                           ]}
                           disabled={!canAfford}
-                          onPress={() => handleBuy(item.id, item.price)}
+                          onPress={() =>
+                            handleBuy(item.id, item.price, item.category)
+                          }
                         >
                           <Text style={styles.actionButtonText}>
                             {canAfford ? "Buy" : "Not enough"}
@@ -446,6 +468,13 @@ const styles = StyleSheet.create({
   itemCardEquipped: {
     borderWidth: 2,
     borderColor: "#FF8C42",
+  },
+
+  // Applied to a not-yet-owned item's whole card once coins fall short of
+  // its price, so it visibly fades out instead of looking identical to
+  // something you can actually afford right now.
+  itemCardUnaffordable: {
+    opacity: 0.4,
   },
 
   itemEmoji: {

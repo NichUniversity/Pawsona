@@ -51,7 +51,8 @@ const ATTRIBUTE_META: { key: AttributeKey; label: string; emoji: string }[] = [
 const MAX_RATING = 5;
 
 export default function DailyPawLog() {
-  const { pets, setPets, coins, earnCoins, hasStorybook } = usePets();
+  const { pets, setPets, coins, earnCoins, hasBookOfOrigin, hasBondKeeper } =
+    usePets();
   const { accentColor, theme } = useTheme();
   const tabBarClearance = useTabBarClearance();
 
@@ -208,7 +209,9 @@ export default function DailyPawLog() {
           { paddingBottom: tabBarClearance },
         ]}
       >
-      <Text style={[styles.title, { color: accentColor }]}>Daily Paw Log</Text>
+      {!selectedPet && (
+        <Text style={[styles.title, { color: accentColor }]}>Daily Paw Log</Text>
+      )}
 
       <View style={styles.coinBadge}>
         <CoinIcon size={16} />
@@ -217,7 +220,7 @@ export default function DailyPawLog() {
 
       {!selectedPet ? (
         <>
-          <Text style={styles.header}>Choose your pet</Text>
+          <Text style={[styles.header, { color: theme.text.primary }]}>Choose your pet</Text>
 
           {pets
             .filter((pet) => pet.confirmed)
@@ -391,21 +394,35 @@ export default function DailyPawLog() {
                 onChangeText={(text) => updateBackstory(selectedPet.id, text)}
               />
 
-              <PressableScale
-                style={styles.originStoryButton}
-                onPress={() => setIsOriginStoryVisible(true)}
-              >
-                <MaterialCommunityIcons
-                  name="auto-fix"
-                  size={16}
-                  color={PARCHMENT}
-                />
-                <Text style={styles.originStoryButtonText}>
-                  {selectedPet.backstory
-                    ? "Rewrite with the Origin Story wizard"
-                    : "Create with the Origin Story wizard"}
-                </Text>
-              </PressableScale>
+              {hasBookOfOrigin ? (
+                <PressableScale
+                  style={styles.originStoryButton}
+                  onPress={() => setIsOriginStoryVisible(true)}
+                >
+                  <MaterialCommunityIcons
+                    name="auto-fix"
+                    size={16}
+                    color={PARCHMENT}
+                  />
+                  <Text style={styles.originStoryButtonText}>
+                    {selectedPet.backstory
+                      ? "Rewrite with the Origin Story wizard"
+                      : "Create with the Origin Story wizard"}
+                  </Text>
+                </PressableScale>
+              ) : (
+                <View style={styles.originLockedState}>
+                  <Text style={styles.originLockedEmoji}>🔒</Text>
+                  <Text style={styles.originLockedTitle}>
+                    Origin Story wizard is locked
+                  </Text>
+                  <Text style={styles.originLockedSubtitle}>
+                    Find the witch somewhere out in the Magical Forest to earn
+                    the Book of Origin and unlock the wizard. You can still
+                    write a backstory by hand above in the meantime.
+                  </Text>
+                </View>
+              )}
             </View>
 
             <View style={styles.statsSection}>
@@ -421,7 +438,7 @@ export default function DailyPawLog() {
 
             {/* --- Bond Keeper, same page, fills remaining height --- */}
             <View style={styles.coachSection}>
-              {hasStorybook ? (
+              {hasBondKeeper ? (
                 <>
                   <Text style={styles.coachScrollTitle}>
                     📜 Tell the Bond Keeper about today
@@ -473,8 +490,8 @@ export default function DailyPawLog() {
                     Bond Keeper is locked
                   </Text>
                   <Text style={styles.coachLockedSubtitle}>
-                    Complete the Magical Forest adventure to earn the
-                    Storybook of Bonds and unlock your Bond Keeper.
+                    The Bond Keeper is out there somewhere in your toughest
+                    adventure yet — exactly where is still being written.
                   </Text>
                 </View>
               )}
@@ -706,6 +723,32 @@ const styles = StyleSheet.create({
     color: PARCHMENT,
     fontWeight: "700",
     fontSize: 13,
+  },
+
+  originLockedState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    marginTop: 4,
+  },
+
+  originLockedEmoji: {
+    fontSize: 22,
+    marginBottom: 6,
+  },
+
+  originLockedTitle: {
+    color: WOOD_DARK,
+    fontWeight: "800",
+    fontSize: 14,
+    marginBottom: 4,
+  },
+
+  originLockedSubtitle: {
+    color: "#6B4A28",
+    fontSize: 13,
+    textAlign: "center",
+    lineHeight: 18,
   },
 
   statsSection: {

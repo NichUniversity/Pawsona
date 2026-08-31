@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 
-import { CATEGORY_LABELS, CosmeticCategory } from "../data/cosmetics";
+import { CATEGORY_LABELS, COSMETICS, CosmeticCategory } from "../data/cosmetics";
 import { PetCategory } from "../data/petcategories";
 
 export type AttributeRatings = {
@@ -45,6 +45,15 @@ export const EMPTY_RATINGS: AttributeRatings = {
   strength: 0,
   energy: 0,
 };
+
+// "avatar"-category cosmetics (unlockable species looks, e.g. the Wolf) are
+// account-wide once bought — unlike hats/collars/etc. they aren't something
+// one pet "wears" while another doesn't, they're a look any pet can pick on
+// the Home tab. Used only to migrate ids that got recorded on a single
+// pet's `ownedCosmetics` before this was global.
+const AVATAR_COSMETIC_IDS = new Set(
+  COSMETICS.filter((item) => item.category === "avatar").map((item) => item.id)
+);
 
 export const EMPTY_EQUIPPED: EquippedCosmetics = (
   Object.keys(CATEGORY_LABELS) as CosmeticCategory[]
@@ -114,10 +123,15 @@ type PersistedPetState = {
   pets: PetEntry[];
   coins: number;
   unlockedAreas: string[];
-  hasStorybook: boolean;
+  hasBookOfOrigin: boolean;
+  hasBondKeeper: boolean;
+  /** Avatar-category cosmetic ids owned account-wide (see AVATAR_COSMETIC_IDS). */
+  unlockedAvatars: string[];
   streak: number;
   longestStreak: number;
   lastClaimDate: string | null;
+  /** @deprecated old field name for hasBookOfOrigin — read once for migration, never written. */
+  hasStorybook?: boolean;
 };
 
 type PetContextType = {
@@ -128,8 +142,22 @@ type PetContextType = {
   spendCoins: (amount: number) => boolean;
   unlockedAreas: string[];
   unlockArea: (areaName: string, price: number) => boolean;
-  hasStorybook: boolean;
-  unlockStorybook: () => void;
+  /** True once a pet has found the witch in Magical Forest and been handed
+   *  the Book of Origin. Gates the AI-assisted Origin Story wizard on the
+   *  Daily Paw Log tab — the plain backstory text box stays open regardless. */
+  hasBookOfOrigin: boolean;
+  unlockBookOfOrigin: () => void;
+  /** True once the Bond Keeper has been found. Not wired to any adventure
+   *  content yet — this is a placeholder flag/setter. The only thing
+   *  decided so far is that it'll be found somewhere in the hardest
+   *  (most expensive) adventure, not tied to the Book of Origin at all. */
+  hasBondKeeper: boolean;
+  unlockBondKeeper: () => void;
+  /** Avatar-category cosmetic ids (e.g. "avatar-wolf") owned account-wide —
+   *  buying one on any pet unlocks it as a pickable look for every pet.
+   *  Hat/collar/background/etc. cosmetics stay per-pet on PetEntry.ownedCosmetics. */
+  unlockedAvatars: string[];
+  unlockAvatar: (itemId: string) => void;
   /** Current consecutive-day login streak (0 before the very first claim). */
   streak: number;
   /** Longest streak ever reached, for a little bragging-rights display. */
@@ -160,7 +188,9 @@ export function PetProvider({
   const [unlockedAreas, setUnlockedAreas] = useState<string[]>([
     "Magical Forest",
   ]);
-  const [hasStorybook, setHasStorybook] = useState<boolean>(false);
+  const [hasBookOfOrigin, setHasBookOfOrigin] = useState<boolean>(false);
+  const [hasBondKeeper, setHasBondKeeper] = useState<boolean>(false);
+  const [unlockedAvatars, setUnlockedAvatars] = useState<string[]>([]);
   const [streak, setStreak] = useState<number>(0);
   const [longestStreak, setLongestStreak] = useState<number>(0);
   const [lastClaimDate, setLastClaimDate] = useState<string | null>(null);
@@ -179,7 +209,26 @@ export function PetProvider({
           if (saved.pets?.length) setPets(saved.pets);
           if (typeof saved.coins === "number") setCoins(saved.coins);
           if (saved.unlockedAreas) setUnlockedAreas(saved.unlockedAreas);
-          if (saved.hasStorybook) setHasStorybook(true);
+          // hasBookOfOrigin used to be saved under the old name "hasStorybook" —
+          // fall back to that for anyone who saved before the rename.
+          if (saved.hasBookOfOrigin || saved.hasStorybook) {
+            setHasBookOfOrigin(true);
+          }
+          if (saved.hasBondKeeper) setHasBondKeeper(true);
+
+          // Merge any saved global list with avatar ids that ended up
+          // recorded on an individual pet before this was account-wide, so
+          // a purchase made under the old per-pet system isn't lost.
+          const migratedAvatars = new Set(saved.unlockedAvatars ?? []);
+          (saved.pets ?? []).forEach((pet) => {
+            pet.ownedCosmetics?.forEach((id) => {
+              if (AVATAR_COSMETIC_IDS.has(id)) migratedAvatars.add(id);
+            });
+          });
+          if (migratedAvatars.size > 0) {
+            setUnlockedAvatars(Array.from(migratedAvatars));
+          }
+
           if (typeof saved.streak === "number") setStreak(saved.streak);
           if (typeof saved.longestStreak === "number") {
             setLongestStreak(saved.longestStreak);
@@ -202,7 +251,9 @@ export function PetProvider({
       pets,
       coins,
       unlockedAreas,
-      hasStorybook,
+      hasBookOfOrigin,
+      hasBondKeeper,
+      unlockedAvatars,
       streak,
       longestStreak,
       lastClaimDate,
@@ -211,7 +262,17 @@ export function PetProvider({
       PET_STATE_STORAGE_KEY,
       JSON.stringify(snapshot)
     ).catch(() => {});
-  }, [pets, coins, unlockedAreas, hasStorybook, streak, longestStreak, lastClaimDate]);
+  }, [
+    pets,
+    coins,
+    unlockedAreas,
+    hasBookOfOrigin,
+    hasBondKeeper,
+    unlockedAvatars,
+    streak,
+    longestStreak,
+    lastClaimDate,
+  ]);
 
   const earnCoins = (amount: number) => {
     setCoins((prev) => prev + amount);
@@ -233,8 +294,21 @@ export function PetProvider({
     return success;
   };
 
-  const unlockStorybook = () => {
-    setHasStorybook(true);
+  const unlockBookOfOrigin = () => {
+    setHasBookOfOrigin(true);
+  };
+
+  // Placeholder — nothing calls this yet. Whichever node in the hardest
+  // adventure ends up granting the Bond Keeper should call this once that
+  // story exists.
+  const unlockBondKeeper = () => {
+    setHasBondKeeper(true);
+  };
+
+  const unlockAvatar = (itemId: string) => {
+    setUnlockedAvatars((prev) =>
+      prev.includes(itemId) ? prev : [...prev, itemId]
+    );
   };
 
   const today = localDateKey(new Date());
@@ -266,8 +340,12 @@ export function PetProvider({
         spendCoins,
         unlockedAreas,
         unlockArea,
-        hasStorybook,
-        unlockStorybook,
+        hasBookOfOrigin,
+        unlockBookOfOrigin,
+        hasBondKeeper,
+        unlockBondKeeper,
+        unlockedAvatars,
+        unlockAvatar,
         streak,
         longestStreak,
         canClaimDailyReward,

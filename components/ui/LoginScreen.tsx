@@ -1,8 +1,8 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as AppleAuthentication from "expo-apple-authentication";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -95,11 +95,12 @@ export function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={[styles.logoBadge, { backgroundColor: withAlpha(accentColor, 0.15) }]}>
-            <MaterialCommunityIcons name="paw" size={34} color={accentColor} />
-          </View>
+          <Image
+            source={require("../../assets/images/pawsona-logo.png")}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
 
-          <Text style={[styles.title, { color: theme.text.primary }]}>Pawsona</Text>
           <Text style={[styles.subtitle, { color: theme.text.secondary }]}>
             Sign in to bring your pet to life
           </Text>
@@ -261,21 +262,17 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
   },
 
-  logoBadge: {
-    width: 68,
+  // Double the original "Pawsona" text title's fontSize (34 -> 68).
+  logoImage: {
     height: 68,
-    borderRadius: 34,
-    backgroundColor: "rgba(255,140,66,0.15)",
-    alignItems: "center",
-    justifyContent: "center",
+    aspectRatio: 2172 / 724,
     marginBottom: 16,
-  },
-
-  title: {
-    fontFamily: "Fredoka_700Bold",
-    fontSize: 34,
-    color: "#F5F5F5",
-    letterSpacing: 0.5,
+    // Little drop shadow so the logo lifts off the background a bit.
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    elevation: 4, // Android equivalent — shadow* alone is iOS-only.
   },
 
   subtitle: {
