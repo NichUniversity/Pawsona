@@ -265,7 +265,7 @@ const styles = StyleSheet.create({
   // Double the original "Pawsona" text title's fontSize (34 -> 68).
   logoImage: {
     height: 68,
-    aspectRatio: 2172 / 724,
+    aspectRatio: 1970 / 493,
     marginBottom: 16,
     // Little drop shadow so the logo lifts off the background a bit.
     shadowColor: '#000',

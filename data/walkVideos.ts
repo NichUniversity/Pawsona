@@ -16,6 +16,7 @@ export const WALK_VIDEOS: Record<string, VideoSource> = {
   "poodle-myavatar": require("../assets/animations/poodle_walk.mp4"),
   "german-shepherd-sable-myavatar": require("../assets/animations/german_shepherd_sable_walk.mp4"),
   "german-shepherd-myavatar": require("../assets/animations/german_shepherd_walk.mp4"),
+  "wolf-myavatar": require("../assets/animations/wolf_walk.mp4"),
 };
 
 export function findWalkVideo(

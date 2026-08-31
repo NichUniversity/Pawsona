@@ -7,7 +7,7 @@ import type { ParamListBase, TabNavigationState } from '@react-navigation/native
 import * as Haptics from 'expo-haptics';
 import { withLayoutContext } from 'expo-router';
 import React, { useRef, useState } from 'react';
-import { Dimensions, Platform, StyleSheet, View } from 'react-native';
+import { Dimensions, Platform, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 
@@ -40,24 +40,37 @@ const TRANSITION_LOCK_MS = 160;
 // constant, so the reset always matches whatever theme is active instead
 // of snapping back to a hardcoded color.
 //
-// Instagram/Snapchat-style flat bar: edge-to-edge, flush against the
-// bottom of the screen, solid background with just a hairline top border
-// instead of the old floating rounded "pill" with a drop shadow. Height
-// and paddingBottom depend on the device's safe-area inset.
+// Keep these two in sync with hooks/useTabBarClearance.ts's TAB_BAR_HEIGHT
+// (which should equal PILL_HEIGHT + PILL_BOTTOM_MARGIN below) — that hook
+// is what keeps scrollable tab screens from letting content scroll behind
+// the floating pill.
+const PILL_HEIGHT = 64;
+// Wider inset than a typical floating pill — this is what makes the bar
+// narrower/more compact horizontally (PokiPet's small bar look) while
+// keeping the height/icon size from the previous pass.
+const PILL_SIDE_MARGIN = 60;
+const PILL_BOTTOM_MARGIN = 14;
+
+// PokiPet-style floating pill: fully rounded, lifted off the bottom edge
+// with margin on all three sides, solid theme-colored background and a
+// soft drop shadow — instead of the old Instagram/Snapchat-style bar that
+// sat edge-to-edge and flush against the bottom of the screen.
 export function getTabBarStyle(theme: ThemeDefinition, bottomInset: number) {
   return {
     position: 'absolute' as const,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: 0,
+    left: PILL_SIDE_MARGIN,
+    right: PILL_SIDE_MARGIN,
+    bottom: PILL_BOTTOM_MARGIN + bottomInset,
+    height: PILL_HEIGHT,
+    borderRadius: PILL_HEIGHT / 2,
     backgroundColor: theme.tabBar.background,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: theme.tabBar.border,
-    shadowOpacity: 0,
-    elevation: 0,
-    height: 58 + bottomInset,
-    paddingBottom: bottomInset,
+    borderTopWidth: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    elevation: 12,
+    paddingBottom: 0,
   };
 }
 
@@ -137,16 +150,28 @@ export default function TabLayout() {
         lazyPreloadDistance: 1,
 
         tabBarShowIcon: true,
-        tabBarShowLabel: false,
+        // The new sticker icons come from the same reference sheet as
+        // their label ("HOME", "PAW LOG", ...), so this turns the label
+        // back on to match — it had been off while the icons were plain
+        // line art with nothing but color to identify each tab.
+        tabBarShowLabel: true,
         tabBarIndicatorStyle: { height: 0 },
         tabBarPressColor: 'transparent',
         tabBarPressOpacity: 1,
 
-        // Tint colors follow the active theme so icons stay readable against
-        // whatever the tab bar's background is (white-on-black for Dark,
-        // accent-on-light for the color themes).
+        // Tint colors still follow the active theme for the text label —
+        // the icon art itself is full-color now and can't be tinted (see
+        // pawsona-tab-icons.tsx), so it uses opacity/scale for its own
+        // active state instead.
         tabBarActiveTintColor: theme.tabBar.activeTint,
         tabBarInactiveTintColor: theme.tabBar.inactiveTint,
+        tabBarLabelStyle: {
+          fontFamily: 'Fredoka_700Bold',
+          fontSize: 10,
+          textTransform: 'uppercase',
+          letterSpacing: 0.3,
+          marginTop: 2,
+        },
 
         tabBarItemStyle: {
           flexDirection: 'column',
@@ -161,8 +186,9 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, focused }) => (
-            <PawsonaTabIcon name="home" color={color} size={32} active={focused} />
+          tabBarLabel: 'Home',
+          tabBarIcon: ({ focused }) => (
+            <PawsonaTabIcon name="home" size={34} active={focused} />
           ),
         }}
       />
@@ -171,8 +197,9 @@ export default function TabLayout() {
         name="daily_log_tab"
         options={{
           title: 'Daily Paw Log',
-          tabBarIcon: ({ color, focused }) => (
-            <PawsonaTabIcon name="daily-log" color={color} size={32} active={focused} />
+          tabBarLabel: 'Paw Log',
+          tabBarIcon: ({ focused }) => (
+            <PawsonaTabIcon name="daily-log" size={34} active={focused} />
           ),
         }}
       />
@@ -181,8 +208,9 @@ export default function TabLayout() {
         name="minigames"
         options={{
           title: 'Mini Games',
-          tabBarIcon: ({ color, focused }) => (
-            <PawsonaTabIcon name="minigames" color={color} size={32} active={focused} />
+          tabBarLabel: 'Games',
+          tabBarIcon: ({ focused }) => (
+            <PawsonaTabIcon name="minigames" size={34} active={focused} />
           ),
         }}
       />
@@ -191,8 +219,9 @@ export default function TabLayout() {
         name="store_tab"
         options={{
           title: 'Paw Shop',
-          tabBarIcon: ({ color, focused }) => (
-            <PawsonaTabIcon name="store" color={color} size={32} active={focused} />
+          tabBarLabel: 'Shop',
+          tabBarIcon: ({ focused }) => (
+            <PawsonaTabIcon name="store" size={34} active={focused} />
           ),
         }}
       />
@@ -201,8 +230,9 @@ export default function TabLayout() {
         name="adventure_tab"
         options={{
           title: 'Adventure',
-          tabBarIcon: ({ color, focused }) => (
-            <PawsonaTabIcon name="adventure" color={color} size={32} active={focused} />
+          tabBarLabel: 'Adventure',
+          tabBarIcon: ({ focused }) => (
+            <PawsonaTabIcon name="adventure" size={34} active={focused} />
           ),
         }}
       />

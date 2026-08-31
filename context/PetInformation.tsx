@@ -174,6 +174,9 @@ type PetContextType = {
    *  disk — check this before acting on canClaimDailyReward so a fresh
    *  launch doesn't briefly see default (unclaimed) state. */
   isHydrated: boolean;
+  /** Resets every pet/coin/streak field to a fresh install's defaults and
+   *  clears the on-disk copy — used by "Delete Account" in Settings. */
+  resetAllData: () => Promise<void>;
 };
 
 const PetContext = createContext<PetContextType | undefined>(undefined);
@@ -330,6 +333,23 @@ export function PetProvider({
     return reward;
   };
 
+  // Wipes every pet/coin/streak field back to a fresh install's defaults
+  // and clears the on-disk copy — used by "Delete Account" in Settings.
+  // Doesn't touch auth (see AuthContext.deleteAccount) or device-level
+  // preferences like the chosen theme, which aren't "account data".
+  const resetAllData = async () => {
+    setPets([makeEmptyEntry()]);
+    setCoins(STARTING_COINS);
+    setUnlockedAreas(["Magical Forest"]);
+    setHasBookOfOrigin(false);
+    setHasBondKeeper(false);
+    setUnlockedAvatars([]);
+    setStreak(0);
+    setLongestStreak(0);
+    setLastClaimDate(null);
+    await AsyncStorage.removeItem(PET_STATE_STORAGE_KEY);
+  };
+
   return (
     <PetContext.Provider
       value={{
@@ -353,6 +373,7 @@ export function PetProvider({
         previewReward,
         claimDailyReward,
         isHydrated,
+        resetAllData,
       }}
     >
       {children}

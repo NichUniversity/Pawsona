@@ -14,6 +14,7 @@ import { LoginScreen } from '../components/ui/LoginScreen';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { OnboardingProvider } from '../context/OnboardingContext';
 import { PetProvider } from '../context/PetInformation';
+import { SettingsProvider } from '../context/SettingsContext';
 import { ThemeProvider as AccentThemeProvider, useTheme } from '../context/ThemeContext';
 
 export const unstable_settings = {
@@ -55,13 +56,15 @@ function RootLayoutFonts() {
   }
 
   return (
-    <AuthProvider>
-      <PetProvider>
-        <OnboardingProvider>
-          <RootLayoutGate />
-        </OnboardingProvider>
-      </PetProvider>
-    </AuthProvider>
+    <SettingsProvider>
+      <AuthProvider>
+        <PetProvider>
+          <OnboardingProvider>
+            <RootLayoutGate />
+          </OnboardingProvider>
+        </PetProvider>
+      </AuthProvider>
+    </SettingsProvider>
   );
 }
 

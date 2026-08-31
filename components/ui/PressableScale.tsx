@@ -7,6 +7,8 @@ import {
   ViewStyle,
 } from "react-native";
 
+import { useSettings } from "../../context/SettingsContext";
+
 // Animated.createAnimatedComponent lets a single Pressable's `style` prop
 // carry an Animated value — same element, same layout behavior as a plain
 // <Pressable>, just with a style that can animate. (Wrapping Pressable in a
@@ -29,6 +31,7 @@ type Props = Omit<PressableProps, "style"> & {
 export const PressableScale = forwardRef<React.ElementRef<typeof Pressable>, Props>(
   ({ style, scaleTo = 0.94, onPressIn, onPressOut, ...rest }, ref) => {
     const scale = useRef(new Animated.Value(1)).current;
+    const { triggerHaptic } = useSettings();
 
     const animateTo = (toValue: number) => {
       Animated.spring(scale, {
@@ -45,6 +48,9 @@ export const PressableScale = forwardRef<React.ElementRef<typeof Pressable>, Pro
         style={[style, { transform: [{ scale }] }]}
         onPressIn={(e: any) => {
           animateTo(scaleTo);
+          // Same instant as the squish — a haptic tick on press-down (not
+          // release) is what reads as "responsive" rather than "delayed".
+          triggerHaptic();
           onPressIn?.(e);
         }}
         onPressOut={(e: any) => {

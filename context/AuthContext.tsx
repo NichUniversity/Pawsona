@@ -45,6 +45,13 @@ type AuthContextType = {
   ) => Promise<EmailAuthResult>;
   continueAsGuest: () => Promise<void>;
   signOut: () => Promise<void>;
+  /** Signs out and, for an email account, permanently forgets its stored
+   *  credentials on this device (there's no backend to delete from yet —
+   *  see the note on StoredAccount above). Apple/guest sessions have no
+   *  stored credentials to remove, so this just signs them out. Callers
+   *  are responsible for also clearing any app data they own (see
+   *  usePets().resetAllData) before or after calling this. */
+  deleteAccount: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -159,6 +166,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.removeItem(SESSION_KEY);
   };
 
+  const deleteAccount = async () => {
+    if (user?.method === "email" && user.email) {
+      const accounts = await getAccounts();
+      delete accounts[user.email];
+      await AsyncStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+    }
+    setUser(null);
+    await AsyncStorage.removeItem(SESSION_KEY);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -169,6 +186,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signInWithEmail,
         continueAsGuest,
         signOut,
+        deleteAccount,
       }}
     >
       {children}

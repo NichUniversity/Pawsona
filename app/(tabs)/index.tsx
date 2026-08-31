@@ -1,16 +1,19 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
+import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
   Image,
+  Linking,
   Modal,
   PanResponder,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -42,7 +45,11 @@ import {
   PetCategory,
 } from '../../data/petcategories';
 import { ACCENT_COLORS, useTheme, withAlpha } from '../../context/ThemeContext';
+import { useSettings } from '../../context/SettingsContext';
 import { useTabBarClearance } from '../../hooks/useTabBarClearance';
+
+// TODO: swap in a real inbox before shipping — this is a placeholder.
+const SUPPORT_EMAIL = 'pawsonasupport@gmail.com';
 
 const ATTRIBUTES = [
   { key: 'intelligence', label: 'Intelligence' },
@@ -97,10 +104,12 @@ export default function HomeScreen() {
     claimDailyReward,
     isHydrated,
     unlockedAvatars,
+    resetAllData,
   } = usePets();
-  const { signOut } = useAuth();
+  const { signOut, deleteAccount } = useAuth();
   const { replayOnboarding } = useOnboarding();
   const { accentKey, accentColor, setAccentKey, theme } = useTheme();
+  const { hapticsEnabled, setHapticsEnabled } = useSettings();
   const tabBarClearance = useTabBarClearance();
   const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
@@ -311,6 +320,58 @@ export default function HomeScreen() {
     });
 
     setDeleteConfirmId(null);
+  };
+
+  // Opens the device's mail client with a pre-filled subject/body — no
+  // in-app form to build or backend to receive it, just the standard
+  // "Send Feedback" pattern most apps use.
+  const handleSendFeedback = () => {
+    const subject = encodeURIComponent('Pawsona Feedback');
+    const body = encodeURIComponent(
+      `\n\n—\nApp version ${Constants.expoConfig?.version ?? 'unknown'}`
+    );
+    Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`).catch(
+      () => Alert.alert("Couldn't open Mail", 'You can reach us at ' + SUPPORT_EMAIL)
+    );
+  };
+
+  // Hands over every pet's saved data as JSON through the native share
+  // sheet — Files, Mail, Messages, AirDrop, whatever the person picks.
+  // A simple "export my data" is standard in apps that hold personal
+  // data, and this one needs no backend or file-system permissions.
+  const handleExportData = () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      pets: entries,
+    };
+    Share.share({
+      message: JSON.stringify(payload, null, 2),
+      title: 'Pawsona Data Export',
+    }).catch(() => {
+      // User cancelled the share sheet — nothing to do.
+    });
+  };
+
+  // Destructive and permanent: wipes the locally stored account plus
+  // every pet/coin/streak field, then signs out. Confirmed with a native
+  // alert since this can't be undone — same pattern iOS apps use for
+  // account deletion.
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'This permanently deletes your account and all pet data on this device. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await resetAllData();
+            await deleteAccount();
+          },
+        },
+      ]
+    );
   };
 
   const hasConfirmedPet = entries.some((e) => e.confirmed);
@@ -901,6 +962,15 @@ export default function HomeScreen() {
             accentOptions={ACCENT_COLORS}
             activeAccentKey={accentKey}
             onSelectAccent={(key) => setAccentKey(key as typeof accentKey)}
+            toggles={[
+              {
+                key: 'haptics',
+                label: 'Haptic Feedback',
+                icon: 'vibrate',
+                value: hapticsEnabled,
+                onToggle: setHapticsEnabled,
+              },
+            ]}
             options={[
               {
                 key: 'replay-tutorial',
@@ -909,13 +979,33 @@ export default function HomeScreen() {
                 onPress: replayOnboarding,
               },
               {
+                key: 'export-data',
+                label: 'Export My Data',
+                icon: 'export-variant',
+                onPress: handleExportData,
+              },
+              {
+                key: 'send-feedback',
+                label: 'Send Feedback',
+                icon: 'email-outline',
+                onPress: handleSendFeedback,
+              },
+              {
                 key: 'logout',
                 label: 'Log Out',
                 icon: 'logout',
                 destructive: true,
                 onPress: signOut,
               },
+              {
+                key: 'delete-account',
+                label: 'Delete Account',
+                icon: 'delete-outline',
+                destructive: true,
+                onPress: handleDeleteAccount,
+              },
             ]}
+            footerText={`Pawsona v${Constants.expoConfig?.version ?? '1.0.0'}`}
           />
 
           <DailyRewardModal
@@ -1018,7 +1108,7 @@ const styles = StyleSheet.create({
   // Double the original "Pawsona" text title's fontSize (42 -> 84).
   logoImage: {
     height: 84,
-    aspectRatio: 2172 / 724,
+    aspectRatio: 1970 / 493,
     // Same soft drop shadow the old text title had.
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },

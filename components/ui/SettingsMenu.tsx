@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, StyleSheet, Switch, Text, View } from "react-native";
 
 import { useTheme, withAlpha } from "../../context/ThemeContext";
 import { PressableScale } from "./PressableScale";
@@ -13,6 +13,16 @@ export type SettingsOption = {
   onPress: () => void;
 };
 
+// An on/off row (e.g. "Haptic Feedback") — same look as SettingsOption
+// but renders a Switch instead of firing an action on tap.
+export type SettingsToggle = {
+  key: string;
+  label: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  value: boolean;
+  onToggle: (value: boolean) => void;
+};
+
 export type AccentSwatch = {
   key: string;
   label: string;
@@ -23,9 +33,13 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   options: SettingsOption[];
+  /** Toggle rows shown in their own "Preferences" section, above `options`. */
+  toggles?: SettingsToggle[];
   accentOptions?: AccentSwatch[];
   activeAccentKey?: string;
   onSelectAccent?: (key: string) => void;
+  /** Small centered caption under the option list — e.g. an app version string. */
+  footerText?: string;
 };
 
 // A pale swatch (e.g. the White theme's dot) needs a dark checkmark instead
@@ -50,9 +64,11 @@ export function SettingsMenu({
   visible,
   onClose,
   options,
+  toggles,
   accentOptions,
   activeAccentKey,
   onSelectAccent,
+  footerText,
 }: Props) {
   const { theme } = useTheme();
 
@@ -113,6 +129,32 @@ export function SettingsMenu({
             </View>
           )}
 
+          {toggles && toggles.length > 0 && (
+            <View style={[styles.themeSection, { borderBottomColor: theme.card.border }]}>
+              <Text style={[styles.themeLabel, { color: theme.text.primary }]}>Preferences</Text>
+              {toggles.map((toggle) => (
+                <View key={toggle.key} style={styles.toggleRow}>
+                  <MaterialCommunityIcons
+                    name={toggle.icon}
+                    size={20}
+                    color={theme.text.primary}
+                    style={styles.optionIcon}
+                  />
+                  <Text style={[styles.optionText, styles.toggleText, { color: theme.text.primary }]}>
+                    {toggle.label}
+                  </Text>
+                  <Switch
+                    value={toggle.value}
+                    onValueChange={toggle.onToggle}
+                    trackColor={{ false: withAlpha(theme.text.primary, 0.15), true: theme.accent }}
+                    thumbColor="#fff"
+                    ios_backgroundColor={withAlpha(theme.text.primary, 0.15)}
+                  />
+                </View>
+              ))}
+            </View>
+          )}
+
           {options.map((option, index) => (
             <PressableScale
               key={option.key}
@@ -150,6 +192,12 @@ export function SettingsMenu({
           >
             <Text style={[styles.cancelButtonText, { color: theme.text.primary }]}>Cancel</Text>
           </PressableScale>
+
+          {footerText && (
+            <Text style={[styles.footerText, { color: withAlpha(theme.text.primary, 0.4) }]}>
+              {footerText}
+            </Text>
+          )}
         </Pressable>
       </Pressable>
     </Modal>
@@ -220,6 +268,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+
+  toggleText: {
+    flex: 1,
+  },
+
   optionRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -255,5 +313,12 @@ const styles = StyleSheet.create({
   cancelButtonText: {
     fontSize: 15,
     fontWeight: "700",
+  },
+
+  footerText: {
+    fontSize: 12,
+    fontWeight: "500",
+    textAlign: "center",
+    marginTop: 14,
   },
 });

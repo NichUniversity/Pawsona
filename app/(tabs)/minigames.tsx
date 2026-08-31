@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
+  Image,
   PanResponder,
   Pressable,
   ScrollView,
@@ -73,7 +74,11 @@ export default function Minigames() {
           { paddingBottom: tabBarClearance },
         ]}
       >
-      <Text style={[styles.title, { color: accentColor }]}>Mini Games</Text>
+      <Image
+        source={require("../../assets/images/minigames-logo.png")}
+        style={styles.titleImage}
+        resizeMode="contain"
+      />
 
       <View style={styles.coinBadge}>
         <CoinIcon size={16} />
@@ -1734,16 +1739,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  title: {
-    fontFamily: "Fredoka_700Bold",
-    fontSize: 32,
-    color: "#fff",
-    letterSpacing: 0.5,
-    textShadowColor: "rgba(0,0,0,0.15)",
-    textShadowOffset: { width: 0, height: 3 },
-    textShadowRadius: 0,
-    textAlign: "center",
+  // Doubles the old text title's fontSize (32 -> 64), same convention as
+  // the Home tab and Login screen logo swaps.
+  titleImage: {
+    height: 64,
+    aspectRatio: 2100 / 443,
     marginBottom: 16,
+    // Same soft drop shadow the old text title had.
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    elevation: 4, // Android equivalent — shadow* alone is iOS-only.
   },
 
   coinBadge: {
