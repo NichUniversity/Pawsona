@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
-  Image,
   PanResponder,
   Pressable,
   ScrollView,
@@ -74,12 +73,6 @@ export default function Minigames() {
           { paddingBottom: tabBarClearance },
         ]}
       >
-      <Image
-        source={require("../../assets/images/minigames-logo.png")}
-        style={styles.titleImage}
-        resizeMode="contain"
-      />
-
       <View style={styles.coinBadge}>
         <CoinIcon size={16} />
         <Text style={[styles.coinText, { color: accentColor }]}> {coins}</Text>
@@ -260,7 +253,9 @@ function PassiveActivitiesSection() {
 
   return (
     <View style={styles.activitiesSection}>
-      <Text style={[styles.sectionHeading, { color: theme.text.primary }]}>🪙 Passive Coins</Text>
+      <Text style={[styles.sectionHeading, { color: theme.text.primary }]}>
+        <CoinIcon size={18} /> Passive Coins
+      </Text>
       <Text style={[styles.activitiesSubtitle, { color: theme.text.secondary }]}>
         Check in every 30 seconds to earn a few coins — and sometimes a
         cosmetic!

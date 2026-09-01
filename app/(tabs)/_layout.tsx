@@ -32,6 +32,15 @@ const { Navigator } = createMaterialTopTabNavigator();
 // back, raise this toward 220-250 first before changing anything else.
 const TRANSITION_LOCK_MS = 160;
 
+// Separate, much shorter window just to stop a single logical tap from
+// double-buzzing (tabPress fires immediately, then "state" fires again
+// once the focus change actually commits). Deliberately NOT the same
+// value as TRANSITION_LOCK_MS above — that lock exists to swallow the
+// *navigation* on a rapid repeat tap (dodging the partial-swipe bug), but
+// the tap itself should still feel like it landed, so haptic isn't gated
+// on that longer lock at all.
+const HAPTIC_DEDUPE_MS = 80;
+
 // Shared with adventure_tab.tsx: whenever a screen needs to reset the tab
 // bar back to its normal resting look via navigation.setOptions, it must
 // re-apply this style rather than passing `undefined` — undefined clobbers
@@ -45,16 +54,17 @@ const TRANSITION_LOCK_MS = 160;
 // is what keeps scrollable tab screens from letting content scroll behind
 // the floating pill.
 const PILL_HEIGHT = 64;
-// Wider inset than a typical floating pill — this is what makes the bar
-// narrower/more compact horizontally (PokiPet's small bar look) while
-// keeping the height/icon size from the previous pass.
-const PILL_SIDE_MARGIN = 60;
+// Inset from the screen edges. Now that the bar has no background/shadow
+// of its own (see getTabBarStyle below), there's no floating-pill shape
+// to look odd sitting close to the screen edges, so this can stay small —
+// which maximizes the row width for bigger icons and one-line labels.
+const PILL_SIDE_MARGIN = 12;
 const PILL_BOTTOM_MARGIN = 14;
 
-// PokiPet-style floating pill: fully rounded, lifted off the bottom edge
-// with margin on all three sides, solid theme-colored background and a
-// soft drop shadow — instead of the old Instagram/Snapchat-style bar that
-// sat edge-to-edge and flush against the bottom of the screen.
+// Floating, but transparent now instead of the solid PokiPet-style pill —
+// no background fill and no drop shadow, just the icons/labels themselves
+// lifted off the bottom edge. Dropping the pill shape freed up room to
+// size the icons up and gave labels enough width to stay on one line.
 export function getTabBarStyle(theme: ThemeDefinition, bottomInset: number) {
   return {
     position: 'absolute' as const,
@@ -62,14 +72,10 @@ export function getTabBarStyle(theme: ThemeDefinition, bottomInset: number) {
     right: PILL_SIDE_MARGIN,
     bottom: PILL_BOTTOM_MARGIN + bottomInset,
     height: PILL_HEIGHT,
-    borderRadius: PILL_HEIGHT / 2,
-    backgroundColor: theme.tabBar.background,
+    backgroundColor: 'transparent',
     borderTopWidth: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.22,
-    shadowRadius: 16,
-    elevation: 12,
+    elevation: 0,
+    shadowOpacity: 0,
     paddingBottom: 0,
   };
 }
@@ -106,6 +112,35 @@ export default function TabLayout() {
     }, TRANSITION_LOCK_MS);
   };
 
+  // Deliberately separate from isTransitioningRef/lockTransition above.
+  // tabPress and "state" both fire for a single tap (tabPress immediately,
+  // then state once the new tab commits) — this is just what stops that
+  // pair from double-buzzing. It does NOT gate on the transition lock, so
+  // a tap that lands *during* the lock (and gets its navigation swallowed
+  // to dodge the partial-swipe bug) still gets its own haptic — the touch
+  // should always feel like it registered, even when the page-change
+  // itself is being intentionally debounced.
+  const recentHapticRef = useRef(false);
+  const hapticResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fireHaptic = () => {
+    if (recentHapticRef.current) {
+      return;
+    }
+    recentHapticRef.current = true;
+
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+
+    if (hapticResetTimeoutRef.current) {
+      clearTimeout(hapticResetTimeoutRef.current);
+    }
+    hapticResetTimeoutRef.current = setTimeout(() => {
+      recentHapticRef.current = false;
+    }, HAPTIC_DEDUPE_MS);
+  };
+
   const { showOnboarding, finishOnboarding } = useOnboarding();
 
   return (
@@ -116,13 +151,13 @@ export default function TabLayout() {
       initialLayout={{ width: screenWidth }}
       screenListeners={{
         tabPress: (e) => {
+          // Always acknowledge the touch, even if the transition below
+          // ends up getting debounced away — see fireHaptic's comment.
+          fireHaptic();
+
           if (isTransitioningRef.current) {
             e.preventDefault();
             return;
-          }
-
-          if (Platform.OS === 'ios') {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           }
 
           lockTransition();
@@ -131,6 +166,7 @@ export default function TabLayout() {
         // that just settled — this is what catches the swipe-triggered
         // case tabPress alone can't see.
         state: () => {
+          fireHaptic();
           lockTransition();
         },
       }}
@@ -167,9 +203,9 @@ export default function TabLayout() {
         tabBarInactiveTintColor: theme.tabBar.inactiveTint,
         tabBarLabelStyle: {
           fontFamily: 'Fredoka_700Bold',
-          fontSize: 10,
+          fontSize: 8,
           textTransform: 'uppercase',
-          letterSpacing: 0.3,
+          letterSpacing: 0,
           marginTop: 2,
         },
 
@@ -188,7 +224,7 @@ export default function TabLayout() {
           title: 'Home',
           tabBarLabel: 'Home',
           tabBarIcon: ({ focused }) => (
-            <PawsonaTabIcon name="home" size={34} active={focused} />
+            <PawsonaTabIcon name="home" size={30} active={focused} />
           ),
         }}
       />
@@ -199,7 +235,7 @@ export default function TabLayout() {
           title: 'Daily Paw Log',
           tabBarLabel: 'Paw Log',
           tabBarIcon: ({ focused }) => (
-            <PawsonaTabIcon name="daily-log" size={34} active={focused} />
+            <PawsonaTabIcon name="daily-log" size={30} active={focused} />
           ),
         }}
       />
@@ -210,7 +246,7 @@ export default function TabLayout() {
           title: 'Mini Games',
           tabBarLabel: 'Games',
           tabBarIcon: ({ focused }) => (
-            <PawsonaTabIcon name="minigames" size={34} active={focused} />
+            <PawsonaTabIcon name="minigames" size={30} active={focused} />
           ),
         }}
       />
@@ -221,7 +257,7 @@ export default function TabLayout() {
           title: 'Paw Shop',
           tabBarLabel: 'Shop',
           tabBarIcon: ({ focused }) => (
-            <PawsonaTabIcon name="store" size={34} active={focused} />
+            <PawsonaTabIcon name="store" size={30} active={focused} />
           ),
         }}
       />
@@ -232,7 +268,7 @@ export default function TabLayout() {
           title: 'Adventure',
           tabBarLabel: 'Adventure',
           tabBarIcon: ({ focused }) => (
-            <PawsonaTabIcon name="adventure" size={34} active={focused} />
+            <PawsonaTabIcon name="adventure" size={30} active={focused} />
           ),
         }}
       />

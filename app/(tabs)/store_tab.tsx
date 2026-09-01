@@ -93,8 +93,6 @@ export default function StoreTab() {
           { paddingBottom: tabBarClearance },
         ]}
       >
-      <Text style={[styles.title, { color: accentColor }]}>Pet Store</Text>
-
       <View style={styles.coinBadge}>
         <CoinIcon size={16} />
         <Text style={[styles.coinText, { color: accentColor }]}> {coins}</Text>

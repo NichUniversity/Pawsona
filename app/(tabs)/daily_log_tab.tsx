@@ -209,14 +209,6 @@ export default function DailyPawLog() {
           { paddingBottom: tabBarClearance },
         ]}
       >
-      {!selectedPet && (
-        <Image
-          source={require("../../assets/images/daily-paw-log-logo.png")}
-          style={styles.titleImage}
-          resizeMode="contain"
-        />
-      )}
-
       <View style={styles.coinBadge}>
         <CoinIcon size={16} />
         <Text style={[styles.coinText, { color: accentColor }]}> {coins}</Text>

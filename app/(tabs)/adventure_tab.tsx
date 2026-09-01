@@ -379,14 +379,10 @@ export default function Adventure() {
         style={showFullScreenBackground ? styles.transparentScroll : undefined}
       >
         {!selectedArea && (
-          <>
-            <Text style={[styles.title, { color: accentColor }]}>Adventure</Text>
-
-            <View style={styles.coinBadge}>
-              <CoinIcon size={16} />
-              <Text style={[styles.coinText, { color: accentColor }]}> {coins}</Text>
-            </View>
-          </>
+          <View style={styles.coinBadge}>
+            <CoinIcon size={16} />
+            <Text style={[styles.coinText, { color: accentColor }]}> {coins}</Text>
+          </View>
         )}
 
         {showEndAdventureButton && (
