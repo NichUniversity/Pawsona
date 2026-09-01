@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Animated,
   PanResponder,
@@ -11,14 +11,13 @@ import {
 
 import { CoinIcon } from "../../components/ui/CoinIcon";
 import { PressableScale } from "../../components/ui/PressableScale";
-import { ScrollingLayer } from "../../components/ui/ScrollingLayer";
 import { TabBackground } from "../../components/ui/TabBackground";
 import { PetEntry, usePets } from "../../context/PetInformation";
 import { useTheme } from "../../context/ThemeContext";
 import { COSMETICS } from "../../data/cosmetics";
 import { useTabBarClearance } from "../../hooks/useTabBarClearance";
 
-type GameId = "simon" | "minesweeper" | "parkour" | "parkourFP";
+type GameId = "simon" | "minesweeper" | "parkour" | "territory";
 
 const GAMES: {
   id: GameId;
@@ -49,11 +48,11 @@ const GAMES: {
     description: "Jump hurdles, dodge walls!",
   },
   {
-    id: "parkourFP",
-    name: "Dog's-Eye Dash",
-    emoji: "👀",
+    id: "territory",
+    name: "Mark Your Territory",
+    emoji: "🚩",
     available: true,
-    description: "Same run, pup's POV!",
+    description: "Sneak a pee before the neighbor spots you!",
   },
 ];
 
@@ -123,8 +122,8 @@ export default function Minigames() {
         <PupParkourGame onExit={() => setActiveGame("menu")} />
       )}
 
-      {activeGame === "parkourFP" && (
-        <PupParkourFPGame onExit={() => setActiveGame("menu")} />
+      {activeGame === "territory" && (
+        <MarkYourTerritoryGame onExit={() => setActiveGame("menu")} />
       )}
       </ScrollView>
     </View>
@@ -1185,236 +1184,238 @@ function PupParkourGame({ onExit }: { onExit: () => void }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Dog's-Eye Dash (first-person version of Pup Parkour)                */
+/* Mark Your Territory (hold-to-mark house-to-house minigame)          */
 /*                                                                      */
-/* Same hurdle/wall lane logic as Pup Parkour, but rendered as a road  */
-/* receding toward a vanishing point instead of top-down. Obstacles    */
-/* carry a "p" progress value (0 = just spawned at the horizon, 1 =    */
-/* reaches the camera) and get projected to a screen x/y/scale each    */
-/* frame — classic cheap fake-3D-road trick, no 3D/canvas lib needed.  */
+/* Walk the block, marking one yard fixture per house (mailbox or fire */
+/* hydrant) by holding down on it. A neighbor cycles between "safe"    */
+/* (not looking), "tell" (a peek warning — window glows, 👀 fades in)  */
+/* and "danger" (actively looking) on a randomized, house-scaled       */
+/* timer. Holding through safe fills the Marked meter; still holding   */
+/* when danger hits gets the dog busted and ends the run. Release      */
+/* during the tell window, wait danger out, then resume.               */
 /* ------------------------------------------------------------------ */
 
-const FP_TRACK_WIDTH = 280;
-const FP_TRACK_HEIGHT = 300;
-const FP_HORIZON_Y = 46;
-const FP_COLLISION_Y = FP_TRACK_HEIGHT - 30;
-const FP_VANISH_X = FP_TRACK_WIDTH / 2;
-const FP_LANE_WIDTH = FP_TRACK_WIDTH / LANE_COUNT;
+type TerritoryTarget = "mailbox" | "hydrant";
+type NeighborPhase = "safe" | "tell" | "danger";
 
-const FP_MIN_SCALE = 0.12;
-const FP_MAX_SCALE = 1.05;
-const FP_EASE_POWER = 2.1;
-const FP_COLLISION_P = 0.92;
+const TERR_TRACK_WIDTH = TRACK_WIDTH; // reuse Pup Parkour's card width
+const TERR_TRACK_HEIGHT = 320;
+const TERR_HOUSE_WIDTH = 170;
+const TERR_HOUSE_HEIGHT = 120;
+const TERR_WINDOW_WIDTH = 80;
+const TERR_WINDOW_HEIGHT = 54;
 
-const FP_BASE_RATE = 0.5; // progress / second (0 -> 1 is one full approach)
-const FP_MAX_RATE = 1.15;
-const FP_RATE_RAMP_PER_POINT = 0.003;
-const FP_SCORE_PER_PROGRESS = 30;
+const TERR_METER_MAX = 100;
+const TERR_FILL_PER_SEC = 42; // ~2.4s of continuous holding to fill from empty
 
-// Parallax scenery layers — aspect ratio matches the generated PNGs
-// (far_treeline.png is 512x110, near_bushes.png is 384x74).
-const FP_FAR_LAYER_HEIGHT = Math.round(FP_TRACK_WIDTH * (110 / 512));
-const FP_NEAR_LAYER_HEIGHT = Math.round(FP_TRACK_WIDTH * (74 / 384));
+const TERR_SAFE_MIN_BASE = 1500;
+const TERR_SAFE_MAX_BASE = 2600;
+const TERR_SAFE_MIN_FLOOR = 550;
+const TERR_SAFE_MAX_FLOOR = 950;
+const TERR_SAFE_RAMP_PER_HOUSE = 90;
 
-type FPObstacle = {
-  id: number;
-  type: "hurdle" | "barrier";
-  lane: number;
-  safeLane: number;
-  p: number;
-  scored: boolean;
-};
+const TERR_TELL_MS_BASE = 600;
+const TERR_TELL_MS_FLOOR = 260;
+const TERR_TELL_RAMP_PER_HOUSE = 22;
 
-function spawnFPObstacle(id: number): FPObstacle {
-  const isBarrier = Math.random() < 0.35;
-  if (isBarrier) {
-    const safeLane = Math.floor(Math.random() * LANE_COUNT);
-    return { id, type: "barrier", lane: -1, safeLane, p: 0, scored: false };
+const TERR_DANGER_MS = 700;
+
+const TERR_COINS_PER_HOUSE = 8;
+const TERR_BUSTED_FLASH_MS = 700;
+
+const TERR_HOUSE_COLORS = ["#E8C99B", "#CFE3D6", "#DCCBEA", "#F2CFC9"];
+
+function territorySafeWindow(houseIndex: number) {
+  const shrink = Math.min(
+    houseIndex * TERR_SAFE_RAMP_PER_HOUSE,
+    TERR_SAFE_MIN_BASE - TERR_SAFE_MIN_FLOOR
+  );
+  const min = Math.max(TERR_SAFE_MIN_FLOOR, TERR_SAFE_MIN_BASE - shrink);
+  const max = Math.max(TERR_SAFE_MAX_FLOOR, TERR_SAFE_MAX_BASE - shrink);
+  return min + Math.random() * (max - min);
+}
+
+function territoryTellWindow(houseIndex: number) {
+  return Math.max(
+    TERR_TELL_MS_FLOOR,
+    TERR_TELL_MS_BASE - houseIndex * TERR_TELL_RAMP_PER_HOUSE
+  );
+}
+
+function pickTerritoryTarget(prev: TerritoryTarget | null): TerritoryTarget {
+  const next: TerritoryTarget = Math.random() < 0.5 ? "mailbox" : "hydrant";
+  if (next === prev && Math.random() < 0.6) {
+    return next === "mailbox" ? "hydrant" : "mailbox";
   }
-  const lane = Math.floor(Math.random() * LANE_COUNT);
-  return { id, type: "hurdle", lane, safeLane: -1, p: 0, scored: false };
+  return next;
 }
 
-function fpProject(lane: number, p: number) {
-  const ease = Math.min(1, p) ** FP_EASE_POWER;
-  const nearX = lane * FP_LANE_WIDTH + FP_LANE_WIDTH / 2;
-  const x = FP_VANISH_X + (nearX - FP_VANISH_X) * ease;
-  const y = FP_HORIZON_Y + (FP_COLLISION_Y - FP_HORIZON_Y) * ease;
-  const scale = FP_MIN_SCALE + (FP_MAX_SCALE - FP_MIN_SCALE) * ease;
-  const opacity = 0.22 + 0.78 * ease;
-  return { x, y, scale, opacity };
-}
-
-// Positions an absolutely-placed line between two points by rotating around
-// its own left edge (the standard RN "line between two points" trick).
-function lineBetween(
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-  thickness: number,
-  color: string
-) {
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const length = Math.sqrt(dx * dx + dy * dy);
-  const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
-  return {
-    position: "absolute" as const,
-    left: x1,
-    top: y1 - thickness / 2,
-    width: length,
-    height: thickness,
-    backgroundColor: color,
-    transform: [
-      { translateX: length / 2 },
-      { rotate: `${angleDeg}deg` },
-      { translateX: -length / 2 },
-    ],
-  };
-}
-
-function PupParkourFPGame({ onExit }: { onExit: () => void }) {
+function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
   const { earnCoins } = usePets();
   const { accentColor, theme } = useTheme();
 
   const [gameState, setGameState] = useState<"idle" | "playing" | "gameover">(
     "idle"
   );
-  const [obstacles, setObstacles] = useState<FPObstacle[]>([]);
-  const [dogLane, setDogLane] = useState(1);
-  const [isJumping, setIsJumping] = useState(false);
-  const [score, setScore] = useState(0);
+  const [houseIndex, setHouseIndex] = useState(0);
+  const [housesMarked, setHousesMarked] = useState(0);
   const [best, setBest] = useState(0);
+  const [target, setTarget] = useState<TerritoryTarget>("mailbox");
+  const [meter, setMeter] = useState(0);
+  const [neighborPhase, setNeighborPhase] = useState<NeighborPhase>("safe");
+  const [isHolding, setIsHolding] = useState(false);
+  const [busted, setBusted] = useState(false);
   const [lastCoins, setLastCoins] = useState(0);
 
   const gameStateRef = useRef(gameState);
-  const dogLaneRef = useRef(dogLane);
-  const isJumpingRef = useRef(isJumping);
-  const scoreRef = useRef(0);
-  const scoreFloatRef = useRef(0);
-  const spawnTimerRef = useRef(0);
-  const nextIdRef = useRef(0);
+  const houseIndexRef = useRef(0);
+  const housesMarkedRef = useRef(0);
+  const targetRef = useRef<TerritoryTarget>("mailbox");
+  const meterRef = useRef(0);
+  const neighborPhaseRef = useRef<NeighborPhase>("safe");
+  const neighborTimerRef = useRef(0);
+  const safeDurationRef = useRef(territorySafeWindow(0));
+  const tellDurationRef = useRef(territoryTellWindow(0));
+  const isHoldingRef = useRef(false);
+  const bustedRef = useRef(false);
+  const runCoinsRef = useRef(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const bobLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+  const bustedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const pawsTranslateX = useRef(new Animated.Value(0)).current;
-  const pawsTranslateY = useRef(new Animated.Value(0)).current;
-  const bobAnim = useRef(new Animated.Value(0)).current;
+  const holdScale = useRef(new Animated.Value(1)).current;
+  const holdLoopRef = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
     gameStateRef.current = gameState;
   }, [gameState]);
 
-  const setDogLaneSynced = (lane: number) => {
-    setDogLane(lane);
-    dogLaneRef.current = lane;
+  const setIsHoldingSynced = (val: boolean) => {
+    setIsHolding(val);
+    isHoldingRef.current = val;
   };
 
-  const setIsJumpingSynced = (val: boolean) => {
-    setIsJumping(val);
-    isJumpingRef.current = val;
+  const startHold = () => {
+    if (gameStateRef.current !== "playing" || bustedRef.current) return;
+    setIsHoldingSynced(true);
   };
 
-  const moveLane = (targetLane: number) => {
-    if (gameStateRef.current !== "playing") return;
-    const clamped = Math.max(0, Math.min(LANE_COUNT - 1, targetLane));
-    if (clamped === dogLaneRef.current) return;
-    setDogLaneSynced(clamped);
-    Animated.spring(pawsTranslateX, {
-      toValue: (clamped - 1) * 20,
-      useNativeDriver: true,
-      friction: 6,
-      tension: 80,
-    }).start();
+  const stopHold = () => {
+    setIsHoldingSynced(false);
   };
 
-  const jump = () => {
-    if (gameStateRef.current !== "playing" || isJumpingRef.current) return;
-    setIsJumpingSynced(true);
-    Animated.sequence([
-      Animated.timing(pawsTranslateY, {
-        toValue: -24,
-        duration: JUMP_DURATION * 0.42,
-        useNativeDriver: true,
-      }),
-      Animated.timing(pawsTranslateY, {
-        toValue: 0,
-        duration: JUMP_DURATION * 0.58,
-        useNativeDriver: true,
-      }),
-    ]).start(() => setIsJumpingSynced(false));
-  };
+  // Little "straining" pulse on the dog/target while actively holding —
+  // purely cosmetic feedback that the hold is registering.
+  useEffect(() => {
+    if (isHolding && gameState === "playing") {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(holdScale, {
+            toValue: 1.08,
+            duration: 180,
+            useNativeDriver: true,
+          }),
+          Animated.timing(holdScale, {
+            toValue: 1,
+            duration: 180,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      holdLoopRef.current = loop;
+      loop.start();
+      return () => {
+        loop.stop();
+        holdLoopRef.current = null;
+      };
+    }
+    holdScale.setValue(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHolding, gameState]);
 
   const endGame = () => {
-    if (gameStateRef.current !== "playing") return;
     gameStateRef.current = "gameover";
     setGameState("gameover");
+    setBest((prev) => Math.max(prev, housesMarkedRef.current));
+    setLastCoins(runCoinsRef.current);
+    bustedRef.current = false;
+    setBusted(false);
+  };
 
-    const finalScore = scoreRef.current;
-    setBest((prev) => Math.max(prev, finalScore));
+  const triggerCaught = () => {
+    bustedRef.current = true;
+    setBusted(true);
+    setIsHoldingSynced(false);
+    bustedTimeoutRef.current = setTimeout(endGame, TERR_BUSTED_FLASH_MS);
+  };
 
-    const coinsEarned = Math.floor(finalScore / COINS_PER_DISTANCE);
-    if (coinsEarned > 0) earnCoins(coinsEarned);
-    setLastCoins(coinsEarned);
+  const advanceHouse = () => {
+    earnCoins(TERR_COINS_PER_HOUSE);
+    runCoinsRef.current += TERR_COINS_PER_HOUSE;
+
+    housesMarkedRef.current += 1;
+    setHousesMarked(housesMarkedRef.current);
+
+    houseIndexRef.current += 1;
+    setHouseIndex(houseIndexRef.current);
+
+    meterRef.current = 0;
+    setMeter(0);
+
+    targetRef.current = pickTerritoryTarget(targetRef.current);
+    setTarget(targetRef.current);
+
+    neighborPhaseRef.current = "safe";
+    setNeighborPhase("safe");
+    neighborTimerRef.current = 0;
+    safeDurationRef.current = territorySafeWindow(houseIndexRef.current);
+    tellDurationRef.current = territoryTellWindow(houseIndexRef.current);
   };
 
   const tick = () => {
+    if (bustedRef.current) return;
+
     const dt = TICK_MS / 1000;
-    const rate = Math.min(
-      FP_MAX_RATE,
-      FP_BASE_RATE + scoreRef.current * FP_RATE_RAMP_PER_POINT
-    );
+    neighborTimerRef.current += TICK_MS;
 
-    scoreFloatRef.current += rate * dt * FP_SCORE_PER_PROGRESS;
-    scoreRef.current = Math.floor(scoreFloatRef.current);
-    setScore(scoreRef.current);
-
-    spawnTimerRef.current += TICK_MS;
-    const spawnInterval = Math.max(
-      MIN_SPAWN_MS,
-      BASE_SPAWN_MS - scoreRef.current * SPAWN_RAMP_PER_POINT
-    );
-    let shouldSpawn = false;
-    if (spawnTimerRef.current >= spawnInterval) {
-      spawnTimerRef.current = 0;
-      shouldSpawn = true;
-    }
-
-    setObstacles((prev) => {
-      let hit = false;
-      const moved = prev.map((o) => ({ ...o, p: o.p + rate * dt }));
-
-      for (const o of moved) {
-        if (o.scored) continue;
-        if (o.p >= FP_COLLISION_P) {
-          o.scored = true;
-          const collided =
-            o.type === "hurdle"
-              ? o.lane === dogLaneRef.current && !isJumpingRef.current
-              : dogLaneRef.current !== o.safeLane;
-
-          if (collided) {
-            hit = true;
-          } else {
-            scoreFloatRef.current += DODGE_BONUS;
-            scoreRef.current = Math.floor(scoreFloatRef.current);
-          }
+    if (neighborPhaseRef.current === "safe") {
+      if (neighborTimerRef.current >= safeDurationRef.current) {
+        neighborPhaseRef.current = "tell";
+        neighborTimerRef.current = 0;
+        setNeighborPhase("tell");
+      }
+    } else if (neighborPhaseRef.current === "tell") {
+      if (neighborTimerRef.current >= tellDurationRef.current) {
+        neighborPhaseRef.current = "danger";
+        neighborTimerRef.current = 0;
+        setNeighborPhase("danger");
+        if (isHoldingRef.current) {
+          triggerCaught();
+          return;
         }
       }
-
-      const next = moved.filter((o) => o.p < 1.2);
-
-      if (shouldSpawn) {
-        next.push(spawnFPObstacle(nextIdRef.current++));
+    } else if (neighborPhaseRef.current === "danger") {
+      if (isHoldingRef.current) {
+        triggerCaught();
+        return;
       }
-
-      if (hit) {
-        setTimeout(endGame, 0);
+      if (neighborTimerRef.current >= TERR_DANGER_MS) {
+        neighborPhaseRef.current = "safe";
+        neighborTimerRef.current = 0;
+        safeDurationRef.current = territorySafeWindow(houseIndexRef.current);
+        setNeighborPhase("safe");
       }
+    }
 
-      return next;
-    });
+    if (isHoldingRef.current) {
+      meterRef.current = Math.min(
+        TERR_METER_MAX,
+        meterRef.current + TERR_FILL_PER_SEC * dt
+      );
+      setMeter(meterRef.current);
+      if (meterRef.current >= TERR_METER_MAX) {
+        advanceHouse();
+      }
+    }
   };
 
   useEffect(() => {
@@ -1423,79 +1424,62 @@ function PupParkourFPGame({ onExit }: { onExit: () => void }) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
-      if (bobLoopRef.current) {
-        bobLoopRef.current.stop();
-        bobLoopRef.current = null;
-      }
-      bobAnim.setValue(0);
       return;
     }
-
     intervalRef.current = setInterval(tick, TICK_MS);
-
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(bobAnim, {
-          toValue: 1,
-          duration: 220,
-          useNativeDriver: true,
-        }),
-        Animated.timing(bobAnim, {
-          toValue: 0,
-          duration: 220,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    bobLoopRef.current = loop;
-    loop.start();
-
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
       intervalRef.current = null;
-      loop.stop();
-      bobLoopRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameState]);
 
+  useEffect(() => {
+    return () => {
+      if (bustedTimeoutRef.current) clearTimeout(bustedTimeoutRef.current);
+    };
+  }, []);
+
   const startGame = () => {
-    setObstacles([]);
-    setDogLaneSynced(1);
-    setIsJumpingSynced(false);
-    setScore(0);
-    scoreRef.current = 0;
-    scoreFloatRef.current = 0;
-    spawnTimerRef.current = 0;
-    nextIdRef.current = 0;
-    pawsTranslateX.setValue(0);
-    pawsTranslateY.setValue(0);
+    if (bustedTimeoutRef.current) clearTimeout(bustedTimeoutRef.current);
+
+    houseIndexRef.current = 0;
+    setHouseIndex(0);
+    housesMarkedRef.current = 0;
+    setHousesMarked(0);
+    runCoinsRef.current = 0;
+
+    targetRef.current = pickTerritoryTarget(null);
+    setTarget(targetRef.current);
+
+    meterRef.current = 0;
+    setMeter(0);
+
+    neighborPhaseRef.current = "safe";
+    setNeighborPhase("safe");
+    neighborTimerRef.current = 0;
+    safeDurationRef.current = territorySafeWindow(0);
+    tellDurationRef.current = territoryTellWindow(0);
+
+    bustedRef.current = false;
+    setBusted(false);
+    setIsHoldingSynced(false);
+    holdScale.setValue(1);
+
     setGameState("playing");
     gameStateRef.current = "playing";
   };
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => gameStateRef.current === "playing",
-      onMoveShouldSetPanResponder: (_evt, gesture) =>
-        gameStateRef.current === "playing" &&
-        (Math.abs(gesture.dx) > 8 || Math.abs(gesture.dy) > 8),
-      onPanResponderRelease: (_evt, gesture) => {
-        if (gameStateRef.current !== "playing") return;
-        const { dx, dy } = gesture;
-        if (Math.abs(dx) < 24 && Math.abs(dy) < 24) {
-          jump();
-        } else if (dx > 24) {
-          moveLane(dogLaneRef.current + 1);
-        } else if (dx < -24) {
-          moveLane(dogLaneRef.current - 1);
-        }
-      },
-    })
-  ).current;
-
-  const laneBoundary1X = FP_LANE_WIDTH;
-  const laneBoundary2X = FP_LANE_WIDTH * 2;
+  const houseColor = TERR_HOUSE_COLORS[houseIndex % TERR_HOUSE_COLORS.length];
+  const meterPct = Math.round((meter / TERR_METER_MAX) * 100);
+  const eyeOpacity =
+    neighborPhase === "danger" ? 1 : neighborPhase === "tell" ? 0.55 : 0;
+  const windowColor =
+    neighborPhase === "danger"
+      ? "#7A2E2E"
+      : neighborPhase === "tell"
+      ? "#6B5B3A"
+      : "#3A3A3C";
 
   return (
     <View
@@ -1514,17 +1498,18 @@ function PupParkourFPGame({ onExit }: { onExit: () => void }) {
         <Text style={[styles.exitButtonText, { color: accentColor }]}>← Back to Games</Text>
       </PressableScale>
 
-      <Text style={[styles.gameTitle, { color: theme.text.primary }]}>👀 Dog&apos;s-Eye Dash</Text>
+      <Text style={[styles.gameTitle, { color: theme.text.primary }]}>🚩 Mark Your Territory</Text>
 
       {gameState === "idle" && (
         <>
           <Text style={[styles.gameSubtitle, { color: theme.text.secondary }]}>
-            Same course as Pup Parkour, seen through your pup&apos;s eyes! Tap to
-            hop over logs 🪵, swipe to duck through wall gaps 🧱.{" "}
-            <CoinIcon size={13} /> 1 per {COINS_PER_DISTANCE} distance.
+            Hold down on the mailbox or hydrant to mark it. Watch the
+            window — when the neighbor peeks, let go! Get caught mid-mark
+            and the walk ends. Every house marked earns{" "}
+            <CoinIcon size={13} /> {TERR_COINS_PER_HOUSE}.
           </Text>
           <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
-            <Text style={styles.primaryButtonText}>Start Run</Text>
+            <Text style={styles.primaryButtonText}>Start Walk</Text>
           </PressableScale>
         </>
       )}
@@ -1532,182 +1517,86 @@ function PupParkourFPGame({ onExit }: { onExit: () => void }) {
       {gameState !== "idle" && (
         <>
           <View style={styles.scoreRow}>
-            <Text style={[styles.scoreText, { color: theme.text.primary }]}>🐾 {score}</Text>
-            <Text style={[styles.bestScoreText, { color: theme.text.secondary }]}>Best {Math.max(best, score)}</Text>
+            <Text style={[styles.scoreText, { color: theme.text.primary }]}>🏠 {housesMarked}</Text>
+            <Text style={[styles.bestScoreText, { color: theme.text.secondary }]}>Best {Math.max(best, housesMarked)}</Text>
           </View>
 
-          <View style={styles.fpScene} {...panResponder.panHandlers}>
-            <Animated.View
-              style={[
-                styles.fpWorld,
-                {
-                  transform: [
-                    {
-                      translateY: bobAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0, -4],
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            >
-              <View style={styles.fpSky}>
-                <Text style={styles.fpSun}>☀️</Text>
+          <View style={styles.territoryScene}>
+            <View style={styles.territorySky} />
+            <View style={styles.territoryGround} />
+
+            <View style={[styles.territoryHouse, { backgroundColor: houseColor }]}>
+              <View style={styles.territoryRoof} />
+              <View style={[styles.territoryWindow, { backgroundColor: windowColor }]}>
+                <Text style={[styles.territoryEyes, { opacity: eyeOpacity }]}>👀</Text>
               </View>
-              <View style={styles.fpGround} />
-              <View style={styles.fpFogFar} />
-              <View style={styles.fpFogNear} />
-              <View style={styles.fpHorizonLine} />
+            </View>
 
-              <View style={styles.fpFarLayer}>
-                <ScrollingLayer
-                  source={require("../../assets/backgrounds/far_treeline.png")}
-                  width={FP_TRACK_WIDTH}
-                  height={FP_FAR_LAYER_HEIGHT}
-                  speed={18}
-                  running={gameState === "playing"}
-                />
-              </View>
-
-              <View style={styles.fpNearLayer}>
-                <ScrollingLayer
-                  source={require("../../assets/backgrounds/near_bushes.png")}
-                  width={FP_TRACK_WIDTH}
-                  height={FP_NEAR_LAYER_HEIGHT}
-                  speed={52}
-                  running={gameState === "playing"}
-                />
-              </View>
-
-              <View
-                style={lineBetween(
-                  FP_VANISH_X,
-                  FP_HORIZON_Y,
-                  0,
-                  FP_TRACK_HEIGHT,
-                  2,
-                  "rgba(255,255,255,0.55)"
-                )}
-              />
-              <View
-                style={lineBetween(
-                  FP_VANISH_X,
-                  FP_HORIZON_Y,
-                  laneBoundary1X,
-                  FP_TRACK_HEIGHT,
-                  2,
-                  "rgba(255,255,255,0.4)"
-                )}
-              />
-              <View
-                style={lineBetween(
-                  FP_VANISH_X,
-                  FP_HORIZON_Y,
-                  laneBoundary2X,
-                  FP_TRACK_HEIGHT,
-                  2,
-                  "rgba(255,255,255,0.4)"
-                )}
-              />
-              <View
-                style={lineBetween(
-                  FP_VANISH_X,
-                  FP_HORIZON_Y,
-                  FP_TRACK_WIDTH,
-                  FP_TRACK_HEIGHT,
-                  2,
-                  "rgba(255,255,255,0.55)"
-                )}
-              />
-
-              {obstacles.map((o) => {
-                if (o.type === "hurdle") {
-                  const { x, y, scale, opacity } = fpProject(o.lane, o.p);
-                  const w = 60;
-                  const h = 34;
-                  return (
-                    <View
-                      key={o.id}
-                      style={[
-                        styles.fpHurdle,
-                        {
-                          left: x - w / 2,
-                          top: y - h / 2,
-                          width: w,
-                          height: h,
-                          opacity,
-                          transform: [{ scale }],
-                        },
-                      ]}
-                    >
-                      <Text style={styles.hurdleEmoji}>🪵</Text>
+            <View style={styles.territoryYard}>
+              <PressableScale
+                scaleTo={0.97}
+                style={styles.territoryTargetWrapper}
+                onPressIn={startHold}
+                onPressOut={stopHold}
+                disabled={gameState !== "playing" || busted}
+              >
+                <Animated.View style={{ transform: [{ scale: holdScale }] }}>
+                  {target === "mailbox" ? (
+                    <View style={styles.territoryMailbox}>
+                      <Text style={styles.territoryMailboxEmoji}>📫</Text>
+                      <View style={styles.territoryMailboxPost} />
                     </View>
-                  );
-                }
+                  ) : (
+                    <View style={styles.territoryHydrant}>
+                      <View style={styles.territoryHydrantCap} />
+                      <View style={styles.territoryHydrantBody}>
+                        <View style={[styles.territoryHydrantBolt, styles.territoryHydrantBoltLeft]} />
+                        <View style={[styles.territoryHydrantBolt, styles.territoryHydrantBoltRight]} />
+                      </View>
+                      <View style={styles.territoryHydrantBase} />
+                    </View>
+                  )}
+                </Animated.View>
 
-                return (
-                  <React.Fragment key={o.id}>
-                    {Array.from({ length: LANE_COUNT }).map((_, laneIdx) => {
-                      const { x, y, scale, opacity } = fpProject(laneIdx, o.p);
-                      const isGap = laneIdx === o.safeLane;
-                      const w = FP_LANE_WIDTH - 8;
-                      const h = 44;
-                      return (
-                        <View
-                          key={laneIdx}
-                          style={[
-                            isGap ? styles.fpGapMarker : styles.fpWallCell,
-                            {
-                              left: x - w / 2,
-                              top: y - h / 2,
-                              width: w,
-                              height: h,
-                              opacity: isGap ? opacity * 0.5 : opacity,
-                              transform: [{ scale }],
-                            },
-                          ]}
-                        >
-                          {!isGap && <Text style={styles.wallEmoji}>🧱</Text>}
-                        </View>
-                      );
-                    })}
-                  </React.Fragment>
-                );
-              })}
-            </Animated.View>
+                {isHolding && <Text style={styles.territoryDrip}>💦</Text>}
+              </PressableScale>
+
+              <Text style={styles.territoryDogEmoji}>🐕</Text>
+            </View>
+
+            {busted && (
+              <View style={styles.territoryBustedOverlay}>
+                <Text style={styles.territoryBustedText}>🚨 BUSTED! 🚨</Text>
+              </View>
+            )}
           </View>
 
-          <View style={styles.fpPawsStrip}>
-            <Animated.Text
+          <Text style={[styles.territoryMeterLabel, { color: theme.text.secondary }]}>
+            Marked {meterPct}%
+          </Text>
+          <View style={styles.territoryMeterTrack}>
+            <View
               style={[
-                styles.fpPawsEmoji,
-                {
-                  transform: [
-                    { translateX: pawsTranslateX },
-                    { translateY: pawsTranslateY },
-                  ],
-                },
+                styles.territoryMeterFill,
+                { width: `${meterPct}%`, backgroundColor: accentColor },
               ]}
-            >
-              🐾  🐾
-            </Animated.Text>
+            />
           </View>
 
           {gameState === "playing" && (
             <Text style={[styles.instructionsText, { color: theme.text.secondary }]}>
-              Tap to jump · Swipe to dodge
+              Hold to mark · Let go when he looks!
             </Text>
           )}
 
           {gameState === "gameover" && (
             <>
               <Text style={[styles.gameOverText, { color: theme.text.primary }]}>
-                You made it {score}m! 🎉{" "}
-                {lastCoins > 0 ? `+${lastCoins} coins` : "Go a bit further next time!"}
+                Busted after {housesMarked} house{housesMarked === 1 ? "" : "s"}! 🚨{" "}
+                {lastCoins > 0 ? `+${lastCoins} coins` : "Try to mark at least one next time!"}
               </Text>
               <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
-                <Text style={styles.primaryButtonText}>Run Again</Text>
+                <Text style={styles.primaryButtonText}>Walk Again</Text>
               </PressableScale>
             </>
           )}
@@ -2177,9 +2066,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  fpScene: {
-    width: FP_TRACK_WIDTH,
-    height: FP_TRACK_HEIGHT,
+  territoryScene: {
+    width: TERR_TRACK_WIDTH,
+    height: TERR_TRACK_HEIGHT,
     borderRadius: 18,
     overflow: "hidden",
     borderWidth: 3,
@@ -2187,105 +2076,180 @@ const styles = StyleSheet.create({
     backgroundColor: "#BFE6FF",
   },
 
-  fpWorld: {
-    width: FP_TRACK_WIDTH,
-    height: FP_TRACK_HEIGHT,
-  },
-
-  fpSky: {
+  territorySky: {
     position: "absolute",
     left: 0,
     top: 0,
-    width: FP_TRACK_WIDTH,
-    height: FP_HORIZON_Y,
+    width: TERR_TRACK_WIDTH,
+    height: 120,
     backgroundColor: "#BFE6FF",
   },
 
-  fpSun: {
-    position: "absolute",
-    right: 14,
-    top: 8,
-    fontSize: 18,
-  },
-
-  fpGround: {
+  territoryGround: {
     position: "absolute",
     left: 0,
-    top: FP_HORIZON_Y,
-    width: FP_TRACK_WIDTH,
-    height: FP_TRACK_HEIGHT - FP_HORIZON_Y,
+    top: 120,
+    width: TERR_TRACK_WIDTH,
+    height: TERR_TRACK_HEIGHT - 120,
     backgroundColor: "#8FCB6B",
   },
 
-  fpFogFar: {
+  territoryHouse: {
     position: "absolute",
-    left: 0,
-    top: FP_HORIZON_Y,
-    width: FP_TRACK_WIDTH,
-    height: 90,
-    backgroundColor: "rgba(255,255,255,0.22)",
+    left: (TERR_TRACK_WIDTH - TERR_HOUSE_WIDTH) / 2,
+    top: 26,
+    width: TERR_HOUSE_WIDTH,
+    height: TERR_HOUSE_HEIGHT,
+    borderRadius: 10,
+    alignItems: "center",
   },
 
-  fpFogNear: {
+  territoryRoof: {
     position: "absolute",
-    left: 0,
-    top: FP_HORIZON_Y,
-    width: FP_TRACK_WIDTH,
-    height: 44,
-    backgroundColor: "rgba(255,255,255,0.3)",
-  },
-
-  fpHorizonLine: {
-    position: "absolute",
-    left: 0,
-    top: FP_HORIZON_Y - 1,
-    width: FP_TRACK_WIDTH,
-    height: 2,
-    backgroundColor: "#5C9A45",
-  },
-
-  fpFarLayer: {
-    position: "absolute",
-    left: 0,
-    top: FP_HORIZON_Y - FP_FAR_LAYER_HEIGHT * 0.6,
-  },
-
-  fpNearLayer: {
-    position: "absolute",
-    left: 0,
-    top: FP_HORIZON_Y + 30,
-  },
-
-  fpHurdle: {
-    position: "absolute",
-    backgroundColor: "#B5794A",
+    top: -16,
+    left: -6,
+    width: TERR_HOUSE_WIDTH + 12,
+    height: 24,
+    backgroundColor: "#6B4A32",
     borderRadius: 6,
-    alignItems: "center",
-    justifyContent: "center",
   },
 
-  fpWallCell: {
+  territoryWindow: {
     position: "absolute",
-    backgroundColor: "rgba(160,90,60,0.92)",
-    borderRadius: 4,
+    top: 34,
+    left: (TERR_HOUSE_WIDTH - TERR_WINDOW_WIDTH) / 2,
+    width: TERR_WINDOW_WIDTH,
+    height: TERR_WINDOW_HEIGHT,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "rgba(0,0,0,0.25)",
   },
 
-  fpGapMarker: {
-    position: "absolute",
-    backgroundColor: "rgba(255,255,255,0.5)",
-    borderRadius: 4,
-  },
-
-  fpPawsStrip: {
-    width: FP_TRACK_WIDTH,
-    height: 50,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  fpPawsEmoji: {
+  territoryEyes: {
     fontSize: 26,
+  },
+
+  territoryYard: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 14,
+    alignItems: "center",
+  },
+
+  territoryTargetWrapper: {
+    width: 70,
+    height: 92,
+    alignItems: "center",
+    justifyContent: "flex-end",
+  },
+
+  territoryMailbox: {
+    alignItems: "center",
+  },
+
+  territoryMailboxEmoji: {
+    fontSize: 34,
+  },
+
+  territoryMailboxPost: {
+    width: 6,
+    height: 26,
+    backgroundColor: "#8B5E34",
+    borderRadius: 2,
+    marginTop: -4,
+  },
+
+  territoryHydrant: {
+    alignItems: "center",
+  },
+
+  territoryHydrantCap: {
+    width: 20,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#D64545",
+  },
+
+  territoryHydrantBody: {
+    width: 24,
+    height: 32,
+    borderRadius: 7,
+    backgroundColor: "#E14B4B",
+    marginTop: -2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  territoryHydrantBolt: {
+    position: "absolute",
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#B23636",
+    top: 10,
+  },
+
+  territoryHydrantBoltLeft: {
+    left: -4,
+  },
+
+  territoryHydrantBoltRight: {
+    right: -4,
+  },
+
+  territoryHydrantBase: {
+    width: 28,
+    height: 7,
+    borderRadius: 3,
+    backgroundColor: "#B23636",
+    marginTop: -2,
+  },
+
+  territoryDrip: {
+    position: "absolute",
+    bottom: -2,
+    fontSize: 16,
+  },
+
+  territoryDogEmoji: {
+    fontSize: 32,
+    marginTop: 6,
+  },
+
+  territoryBustedOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(122,20,20,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  territoryBustedText: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#fff",
+    textAlign: "center",
+  },
+
+  territoryMeterLabel: {
+    marginTop: 14,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  territoryMeterTrack: {
+    width: TERR_TRACK_WIDTH,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "rgba(0,0,0,0.12)",
+    overflow: "hidden",
+    marginTop: 6,
+  },
+
+  territoryMeterFill: {
+    height: 14,
+    borderRadius: 7,
   },
 });
