@@ -1,13 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
+  Image,
   PanResponder,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CoinIcon } from "../../components/ui/CoinIcon";
 import { PressableScale } from "../../components/ui/PressableScale";
@@ -16,6 +20,7 @@ import { PetEntry, usePets } from "../../context/PetInformation";
 import { useTheme } from "../../context/ThemeContext";
 import { COSMETICS } from "../../data/cosmetics";
 import { useTabBarClearance } from "../../hooks/useTabBarClearance";
+import { getTabBarStyle } from "./_layout";
 
 type GameId = "simon" | "minesweeper" | "parkour" | "territory";
 
@@ -52,7 +57,7 @@ const GAMES: {
     name: "Mark Your Territory",
     emoji: "🚩",
     available: true,
-    description: "Sneak a pee before the neighbor spots you!",
+    description: "Take a peek at the block — gameplay coming soon!",
   },
 ];
 
@@ -61,6 +66,63 @@ export default function Minigames() {
   const { accentColor, theme } = useTheme();
   const [activeGame, setActiveGame] = useState<GameId | "menu">("menu");
   const tabBarClearance = useTabBarClearance();
+
+  const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
+  const isTerritoryFullScreen = activeGame === "territory";
+
+  // Same fade-the-floating-tab-bar pattern as adventure_tab.tsx: re-apply
+  // getTabBarStyle rather than `undefined` when restoring it (undefined
+  // drops the styling entirely instead of falling back to it — see
+  // _layout.tsx's comment on getTabBarStyle).
+  const restoredTabBarStyle = useMemo(
+    () => getTabBarStyle(theme, insets.bottom),
+    [theme, insets.bottom]
+  );
+  const tabBarOpacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const listenerId = tabBarOpacity.addListener(({ value }) => {
+      navigation.setOptions({
+        tabBarStyle: {
+          ...restoredTabBarStyle,
+          opacity: value,
+          ...(value <= 0.01 ? { display: "none" } : null),
+        },
+      });
+    });
+    return () => tabBarOpacity.removeListener(listenerId);
+  }, [navigation, restoredTabBarStyle, tabBarOpacity]);
+
+  useEffect(() => {
+    Animated.timing(tabBarOpacity, {
+      toValue: isTerritoryFullScreen ? 0 : 1,
+      duration: 300,
+      useNativeDriver: false, // driving a JS listener, not a native style prop
+    }).start();
+  }, [isTerritoryFullScreen, tabBarOpacity]);
+
+  // Safety net: always restore the tab bar instantly when leaving this tab
+  // entirely (e.g. swiping to another tab mid-game), regardless of
+  // activeGame state or any in-flight fade — minigames stays mounted and
+  // its state persists across tab swaps, same as adventure_tab.tsx.
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        tabBarOpacity.stopAnimation();
+        tabBarOpacity.setValue(1);
+        navigation.setOptions({ tabBarStyle: restoredTabBarStyle });
+      };
+    }, [navigation, restoredTabBarStyle, tabBarOpacity])
+  );
+
+  // Mark Your Territory takes over the whole screen for an immersive porch
+  // scene — no TabBackground/ScrollView chrome, no coin badge, just the
+  // scene and the exit button. Every other game keeps the normal
+  // scrollable card layout.
+  if (isTerritoryFullScreen) {
+    return <MarkYourTerritoryGame onExit={() => setActiveGame("menu")} />;
+  }
 
   return (
     <View style={{ flex: 1 }}>
@@ -120,10 +182,6 @@ export default function Minigames() {
 
       {activeGame === "parkour" && (
         <PupParkourGame onExit={() => setActiveGame("menu")} />
-      )}
-
-      {activeGame === "territory" && (
-        <MarkYourTerritoryGame onExit={() => setActiveGame("menu")} />
       )}
       </ScrollView>
     </View>
@@ -1184,424 +1242,189 @@ function PupParkourGame({ onExit }: { onExit: () => void }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Mark Your Territory (hold-to-mark house-to-house minigame)          */
+/* Mark Your Territory (full-screen static porch scene — gameplay      */
+/* reworked later)                                                     */
 /*                                                                      */
-/* Walk the block, marking one yard fixture per house (mailbox or fire */
-/* hydrant) by holding down on it. A neighbor cycles between "safe"    */
-/* (not looking), "tell" (a peek warning — window glows, 👀 fades in)  */
-/* and "danger" (actively looking) on a randomized, house-scaled       */
-/* timer. Holding through safe fills the Marked meter; still holding   */
-/* when danger hits gets the dog busted and ends the run. Release      */
-/* during the tell window, wait danger out, then resume.               */
+/* The old hold-to-mark-the-mailbox mechanic (Marked meter, neighbor    */
+/* safe/tell/danger phases, busted state, mailbox/hydrant targets, coin */
+/* payout) has been pulled out. This now just renders the block, full-  */
+/* bleed across the whole screen (Minigames swaps to this instead of    */
+/* its normal ScrollView layout, and fades the floating tab bar out —   */
+/* see isTerritoryFullScreen above): the house art (TERR_HOUSE_IMAGE)   */
+/* with the neighbor sitting on the porch reading the paper             */
+/* (TERR_PORCH_GUY_IMAGE). Gameplay gets rebuilt on top of this scene    */
+/* later.                                                                */
 /* ------------------------------------------------------------------ */
 
-type TerritoryTarget = "mailbox" | "hydrant";
-type NeighborPhase = "safe" | "tell" | "danger";
+// Hand-illustrated house scene (porch, mailbox, picket-fenced yard).
+// Natural pixel size of the source file — needed below to replicate
+// resizeMode="cover"'s scale/crop math in JS.
+const TERR_HOUSE_IMAGE = require("../../assets/images/territory-house.png");
+const TERR_HOUSE_IMG_WIDTH = 900;
+const TERR_HOUSE_IMG_HEIGHT = 1198;
 
-const TERR_TRACK_WIDTH = TRACK_WIDTH; // reuse Pup Parkour's card width
-const TERR_TRACK_HEIGHT = 320;
-const TERR_HOUSE_WIDTH = 170;
-const TERR_HOUSE_HEIGHT = 120;
-const TERR_WINDOW_WIDTH = 80;
-const TERR_WINDOW_HEIGHT = 54;
-
-const TERR_METER_MAX = 100;
-const TERR_FILL_PER_SEC = 42; // ~2.4s of continuous holding to fill from empty
-
-const TERR_SAFE_MIN_BASE = 1500;
-const TERR_SAFE_MAX_BASE = 2600;
-const TERR_SAFE_MIN_FLOOR = 550;
-const TERR_SAFE_MAX_FLOOR = 950;
-const TERR_SAFE_RAMP_PER_HOUSE = 90;
-
-const TERR_TELL_MS_BASE = 600;
-const TERR_TELL_MS_FLOOR = 260;
-const TERR_TELL_RAMP_PER_HOUSE = 22;
-
-const TERR_DANGER_MS = 700;
-
-const TERR_COINS_PER_HOUSE = 8;
-const TERR_BUSTED_FLASH_MS = 700;
-
-const TERR_HOUSE_COLORS = ["#E8C99B", "#CFE3D6", "#DCCBEA", "#F2CFC9"];
-
-function territorySafeWindow(houseIndex: number) {
-  const shrink = Math.min(
-    houseIndex * TERR_SAFE_RAMP_PER_HOUSE,
-    TERR_SAFE_MIN_BASE - TERR_SAFE_MIN_FLOOR
-  );
-  const min = Math.max(TERR_SAFE_MIN_FLOOR, TERR_SAFE_MIN_BASE - shrink);
-  const max = Math.max(TERR_SAFE_MAX_FLOOR, TERR_SAFE_MAX_BASE - shrink);
-  return min + Math.random() * (max - min);
-}
-
-function territoryTellWindow(houseIndex: number) {
-  return Math.max(
-    TERR_TELL_MS_FLOOR,
-    TERR_TELL_MS_BASE - houseIndex * TERR_TELL_RAMP_PER_HOUSE
-  );
-}
-
-function pickTerritoryTarget(prev: TerritoryTarget | null): TerritoryTarget {
-  const next: TerritoryTarget = Math.random() < 0.5 ? "mailbox" : "hydrant";
-  if (next === prev && Math.random() < 0.6) {
-    return next === "mailbox" ? "hydrant" : "mailbox";
-  }
-  return next;
-}
+// Neighbor in a rocking chair reading the paper — each stage below is
+// cropped tight to his silhouette (transparent PNG, no padding). Each
+// stage carries its own `aspect` (that file's own width/height) so we
+// can compute an exact on-screen width from a chosen height with no
+// letterboxing/stretching, even though separately-generated stage
+// images won't come out pixel-identical in canvas size or crop margins
+// to one another. The three SRC_* constants below (shared by every
+// stage) are anchor points measured against TERR_HOUSE_IMAGE's real
+// 900x1198 pixels instead — the porch's own fixed floor line and the
+// chair's horizontal position on it — so every stage renders at the
+// same spot and the same on-screen size on the porch regardless of
+// device, independent of any one stage image's own resolution.
+//
+// "Attentiveness" stages: same neighbor, same chair — only the
+// newspaper's position changes, from fully up (not paying attention)
+// down to not held up at all (looking straight at the player).
+//
+// To add a stage once its PNG is ready: crop it tight to the character
+// silhouette (matching how the existing ones are cropped), drop the
+// file in assets/images/, add one { source, aspect } entry to this
+// array (most-oblivious first, most-attentive last — aspect = that
+// file's own pixel width / height), and neighborStage below picks
+// which one renders — nothing else needs to change.
+const TERR_PORCH_GUY_STAGES = [
+  {
+    source: require("../../assets/images/territory-porch-guy.png"),
+    aspect: 644 / 900,
+  },
+  {
+    source: require("../../assets/images/territory-porch-guy-stage-2.png"),
+    aspect: 981 / 1296,
+  },
+  {
+    source: require("../../assets/images/territory-porch-guy-stage-3.png"),
+    aspect: 964 / 1265,
+  },
+];
+const TERR_PORCH_GUY_SRC_CENTER_X = 519;
+const TERR_PORCH_GUY_SRC_FLOOR_Y = 762;
+const TERR_PORCH_GUY_SRC_HEIGHT = 125;
+// Manual nudge on top of the measured floor-line anchor above — per user
+// feedback he still read as sitting a touch low/forward on the porch.
+// Source-pixel units (like the anchors above), so it scales consistently
+// with everything else instead of drifting at different screen sizes.
+const TERR_PORCH_GUY_LIFT = 34;
 
 function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
-  const { earnCoins } = usePets();
   const { accentColor, theme } = useTheme();
+  const insets = useSafeAreaInsets();
 
-  const [gameState, setGameState] = useState<"idle" | "playing" | "gameover">(
-    "idle"
-  );
-  const [houseIndex, setHouseIndex] = useState(0);
-  const [housesMarked, setHousesMarked] = useState(0);
-  const [best, setBest] = useState(0);
-  const [target, setTarget] = useState<TerritoryTarget>("mailbox");
-  const [meter, setMeter] = useState(0);
-  const [neighborPhase, setNeighborPhase] = useState<NeighborPhase>("safe");
-  const [isHolding, setIsHolding] = useState(false);
-  const [busted, setBusted] = useState(false);
-  const [lastCoins, setLastCoins] = useState(0);
+  // Which "attentiveness" stage the neighbor is showing — 0 is the most
+  // oblivious (paper fully up), rising toward the last entry in
+  // TERR_PORCH_GUY_STAGES (looking straight at the player). Not wired to
+  // any gameplay yet (there isn't any at the moment — see the file
+  // header), so this just always shows stage 0 for now; whatever
+  // mechanic gets built on top of this scene later will drive it via
+  // setNeighborStage instead of the hardcoded 0 default.
+  const [neighborStage, setNeighborStage] = useState(0);
+  const currentNeighborStage =
+    TERR_PORCH_GUY_STAGES[Math.min(neighborStage, TERR_PORCH_GUY_STAGES.length - 1)];
 
-  const gameStateRef = useRef(gameState);
-  const houseIndexRef = useRef(0);
-  const housesMarkedRef = useRef(0);
-  const targetRef = useRef<TerritoryTarget>("mailbox");
-  const meterRef = useRef(0);
-  const neighborPhaseRef = useRef<NeighborPhase>("safe");
-  const neighborTimerRef = useRef(0);
-  const safeDurationRef = useRef(territorySafeWindow(0));
-  const tellDurationRef = useRef(territoryTellWindow(0));
-  const isHoldingRef = useRef(false);
-  const bustedRef = useRef(false);
-  const runCoinsRef = useRef(0);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const bustedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Measure the container's own rendered box instead of trusting
+  // useWindowDimensions(). On native those two normally match, but on
+  // Expo web the app can be laid out inside a narrower centered column
+  // than the actual browser window — useWindowDimensions() there reports
+  // the full (wider) browser viewport, so the fit math below would size
+  // the scene for a box bigger than what's really on screen and the
+  // porch guy would land off in the extra space beside it, not on the
+  // house. onLayout always reports what this View actually rendered at,
+  // on every platform.
+  const [layout, setLayout] = useState<{ width: number; height: number } | null>(null);
 
-  const holdScale = useRef(new Animated.Value(1)).current;
-  const holdLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+  // Scale is always locked to the container's HEIGHT (never the width).
+  // That guarantees the full scene — roofline all the way down to the
+  // street — is always in frame, on every device: a plain resizeMode
+  // "cover" fill (scale = max(width ratio, height ratio)) crops whichever
+  // axis is "extra" once the other is filled, and on a wide/landscape
+  // window that's the height — the roof and the street both get cut off,
+  // leaving a tight, zoomed-in crop of just the porch. Locking to height
+  // means the box's WIDTH is what adjusts instead: on a tall phone
+  // viewport the scaled image ends up wider than the box and the sides
+  // get cropped (same look as before there — phones were already
+  // height-bound under plain cover); on a wide desktop window the scaled
+  // image ends up narrower than the box and the leftover width is
+  // letterboxed (centered, with the container's own background color
+  // showing on each side) instead of ever cropping the top or bottom.
+  const scale = layout ? layout.height / TERR_HOUSE_IMG_HEIGHT : 0;
+  const scaledHouseWidth = TERR_HOUSE_IMG_WIDTH * scale;
+  // Positive = letterboxed (image narrower than box, padded left/right).
+  // Negative = cropped (image wider than box, overflow clipped left/right
+  // by territoryFullScreen's own overflow:"hidden").
+  const houseOffsetX = layout ? (layout.width - scaledHouseWidth) / 2 : 0;
 
-  useEffect(() => {
-    gameStateRef.current = gameState;
-  }, [gameState]);
-
-  const setIsHoldingSynced = (val: boolean) => {
-    setIsHolding(val);
-    isHoldingRef.current = val;
-  };
-
-  const startHold = () => {
-    if (gameStateRef.current !== "playing" || bustedRef.current) return;
-    setIsHoldingSynced(true);
-  };
-
-  const stopHold = () => {
-    setIsHoldingSynced(false);
-  };
-
-  // Little "straining" pulse on the dog/target while actively holding —
-  // purely cosmetic feedback that the hold is registering.
-  useEffect(() => {
-    if (isHolding && gameState === "playing") {
-      const loop = Animated.loop(
-        Animated.sequence([
-          Animated.timing(holdScale, {
-            toValue: 1.08,
-            duration: 180,
-            useNativeDriver: true,
-          }),
-          Animated.timing(holdScale, {
-            toValue: 1,
-            duration: 180,
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      holdLoopRef.current = loop;
-      loop.start();
-      return () => {
-        loop.stop();
-        holdLoopRef.current = null;
-      };
-    }
-    holdScale.setValue(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHolding, gameState]);
-
-  const endGame = () => {
-    gameStateRef.current = "gameover";
-    setGameState("gameover");
-    setBest((prev) => Math.max(prev, housesMarkedRef.current));
-    setLastCoins(runCoinsRef.current);
-    bustedRef.current = false;
-    setBusted(false);
-  };
-
-  const triggerCaught = () => {
-    bustedRef.current = true;
-    setBusted(true);
-    setIsHoldingSynced(false);
-    bustedTimeoutRef.current = setTimeout(endGame, TERR_BUSTED_FLASH_MS);
-  };
-
-  const advanceHouse = () => {
-    earnCoins(TERR_COINS_PER_HOUSE);
-    runCoinsRef.current += TERR_COINS_PER_HOUSE;
-
-    housesMarkedRef.current += 1;
-    setHousesMarked(housesMarkedRef.current);
-
-    houseIndexRef.current += 1;
-    setHouseIndex(houseIndexRef.current);
-
-    meterRef.current = 0;
-    setMeter(0);
-
-    targetRef.current = pickTerritoryTarget(targetRef.current);
-    setTarget(targetRef.current);
-
-    neighborPhaseRef.current = "safe";
-    setNeighborPhase("safe");
-    neighborTimerRef.current = 0;
-    safeDurationRef.current = territorySafeWindow(houseIndexRef.current);
-    tellDurationRef.current = territoryTellWindow(houseIndexRef.current);
-  };
-
-  const tick = () => {
-    if (bustedRef.current) return;
-
-    const dt = TICK_MS / 1000;
-    neighborTimerRef.current += TICK_MS;
-
-    if (neighborPhaseRef.current === "safe") {
-      if (neighborTimerRef.current >= safeDurationRef.current) {
-        neighborPhaseRef.current = "tell";
-        neighborTimerRef.current = 0;
-        setNeighborPhase("tell");
-      }
-    } else if (neighborPhaseRef.current === "tell") {
-      if (neighborTimerRef.current >= tellDurationRef.current) {
-        neighborPhaseRef.current = "danger";
-        neighborTimerRef.current = 0;
-        setNeighborPhase("danger");
-        if (isHoldingRef.current) {
-          triggerCaught();
-          return;
-        }
-      }
-    } else if (neighborPhaseRef.current === "danger") {
-      if (isHoldingRef.current) {
-        triggerCaught();
-        return;
-      }
-      if (neighborTimerRef.current >= TERR_DANGER_MS) {
-        neighborPhaseRef.current = "safe";
-        neighborTimerRef.current = 0;
-        safeDurationRef.current = territorySafeWindow(houseIndexRef.current);
-        setNeighborPhase("safe");
-      }
-    }
-
-    if (isHoldingRef.current) {
-      meterRef.current = Math.min(
-        TERR_METER_MAX,
-        meterRef.current + TERR_FILL_PER_SEC * dt
-      );
-      setMeter(meterRef.current);
-      if (meterRef.current >= TERR_METER_MAX) {
-        advanceHouse();
-      }
-    }
-  };
-
-  useEffect(() => {
-    if (gameState !== "playing") {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-      return;
-    }
-    intervalRef.current = setInterval(tick, TICK_MS);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameState]);
-
-  useEffect(() => {
-    return () => {
-      if (bustedTimeoutRef.current) clearTimeout(bustedTimeoutRef.current);
-    };
-  }, []);
-
-  const startGame = () => {
-    if (bustedTimeoutRef.current) clearTimeout(bustedTimeoutRef.current);
-
-    houseIndexRef.current = 0;
-    setHouseIndex(0);
-    housesMarkedRef.current = 0;
-    setHousesMarked(0);
-    runCoinsRef.current = 0;
-
-    targetRef.current = pickTerritoryTarget(null);
-    setTarget(targetRef.current);
-
-    meterRef.current = 0;
-    setMeter(0);
-
-    neighborPhaseRef.current = "safe";
-    setNeighborPhase("safe");
-    neighborTimerRef.current = 0;
-    safeDurationRef.current = territorySafeWindow(0);
-    tellDurationRef.current = territoryTellWindow(0);
-
-    bustedRef.current = false;
-    setBusted(false);
-    setIsHoldingSynced(false);
-    holdScale.setValue(1);
-
-    setGameState("playing");
-    gameStateRef.current = "playing";
-  };
-
-  const houseColor = TERR_HOUSE_COLORS[houseIndex % TERR_HOUSE_COLORS.length];
-  const meterPct = Math.round((meter / TERR_METER_MAX) * 100);
-  const eyeOpacity =
-    neighborPhase === "danger" ? 1 : neighborPhase === "tell" ? 0.55 : 0;
-  const windowColor =
-    neighborPhase === "danger"
-      ? "#7A2E2E"
-      : neighborPhase === "tell"
-      ? "#6B5B3A"
-      : "#3A3A3C";
+  const guyHeight = TERR_PORCH_GUY_SRC_HEIGHT * scale;
+  const guyWidth = guyHeight * currentNeighborStage.aspect;
+  const guyLeft = TERR_PORCH_GUY_SRC_CENTER_X * scale + houseOffsetX - guyWidth / 2;
+  // No vertical offset needed — the house image's top always sits flush
+  // with the container's top (height is matched exactly), so the source
+  // floor-line anchor maps straight through the scale factor.
+  const guyBottom = (TERR_PORCH_GUY_SRC_FLOOR_Y - TERR_PORCH_GUY_LIFT) * scale;
+  const guyTop = guyBottom - guyHeight;
 
   return (
     <View
-      style={[
-        styles.gameBox,
-        { backgroundColor: theme.card.background, borderColor: theme.card.border },
-      ]}
+      style={styles.territoryFullScreen}
+      onLayout={(e) => {
+        const { width, height } = e.nativeEvent.layout;
+        setLayout({ width, height });
+      }}
     >
+      {layout && (
+        <>
+          {/* Sized to the exact scaled dimensions computed above (height
+              locked to the container, width following the source aspect
+              ratio) and offset by houseOffsetX, rather than filling the
+              container and letting resizeMode do the fit/crop — React
+              Native Web's Image, given StyleSheet.absoluteFillObject or
+              any style without explicit width/height, falls back to the
+              source asset's own natural pixel size instead of filling its
+              parent (confirmed live via DOM inspection), so explicit
+              numeric dimensions are what's needed on web regardless. Since
+              width/height here already match the source aspect exactly,
+              resizeMode has no extra fitting left to do. */}
+          <Image
+            source={TERR_HOUSE_IMAGE}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: houseOffsetX,
+              width: scaledHouseWidth,
+              height: layout.height,
+            }}
+            resizeMode="cover"
+          />
+          <Image
+            source={currentNeighborStage.source}
+            style={{
+              position: "absolute",
+              left: guyLeft,
+              top: guyTop,
+              width: guyWidth,
+              height: guyHeight,
+            }}
+            resizeMode="stretch"
+          />
+        </>
+      )}
+
       <PressableScale
         style={[
-          styles.exitButton,
-          { backgroundColor: theme.card.background, borderColor: theme.card.border },
+          styles.territoryExitButton,
+          {
+            top: insets.top + 12,
+            left: insets.left + 16,
+            backgroundColor: theme.card.background,
+            borderColor: theme.card.border,
+          },
         ]}
         onPress={onExit}
       >
         <Text style={[styles.exitButtonText, { color: accentColor }]}>← Back to Games</Text>
       </PressableScale>
-
-      <Text style={[styles.gameTitle, { color: theme.text.primary }]}>🚩 Mark Your Territory</Text>
-
-      {gameState === "idle" && (
-        <>
-          <Text style={[styles.gameSubtitle, { color: theme.text.secondary }]}>
-            Hold down on the mailbox or hydrant to mark it. Watch the
-            window — when the neighbor peeks, let go! Get caught mid-mark
-            and the walk ends. Every house marked earns{" "}
-            <CoinIcon size={13} /> {TERR_COINS_PER_HOUSE}.
-          </Text>
-          <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
-            <Text style={styles.primaryButtonText}>Start Walk</Text>
-          </PressableScale>
-        </>
-      )}
-
-      {gameState !== "idle" && (
-        <>
-          <View style={styles.scoreRow}>
-            <Text style={[styles.scoreText, { color: theme.text.primary }]}>🏠 {housesMarked}</Text>
-            <Text style={[styles.bestScoreText, { color: theme.text.secondary }]}>Best {Math.max(best, housesMarked)}</Text>
-          </View>
-
-          <View style={styles.territoryScene}>
-            <View style={styles.territorySky} />
-            <View style={styles.territoryGround} />
-
-            <View style={[styles.territoryHouse, { backgroundColor: houseColor }]}>
-              <View style={styles.territoryRoof} />
-              <View style={[styles.territoryWindow, { backgroundColor: windowColor }]}>
-                <Text style={[styles.territoryEyes, { opacity: eyeOpacity }]}>👀</Text>
-              </View>
-            </View>
-
-            <View style={styles.territoryYard}>
-              <PressableScale
-                scaleTo={0.97}
-                style={styles.territoryTargetWrapper}
-                onPressIn={startHold}
-                onPressOut={stopHold}
-                disabled={gameState !== "playing" || busted}
-              >
-                <Animated.View style={{ transform: [{ scale: holdScale }] }}>
-                  {target === "mailbox" ? (
-                    <View style={styles.territoryMailbox}>
-                      <Text style={styles.territoryMailboxEmoji}>📫</Text>
-                      <View style={styles.territoryMailboxPost} />
-                    </View>
-                  ) : (
-                    <View style={styles.territoryHydrant}>
-                      <View style={styles.territoryHydrantCap} />
-                      <View style={styles.territoryHydrantBody}>
-                        <View style={[styles.territoryHydrantBolt, styles.territoryHydrantBoltLeft]} />
-                        <View style={[styles.territoryHydrantBolt, styles.territoryHydrantBoltRight]} />
-                      </View>
-                      <View style={styles.territoryHydrantBase} />
-                    </View>
-                  )}
-                </Animated.View>
-
-                {isHolding && <Text style={styles.territoryDrip}>💦</Text>}
-              </PressableScale>
-
-              <Text style={styles.territoryDogEmoji}>🐕</Text>
-            </View>
-
-            {busted && (
-              <View style={styles.territoryBustedOverlay}>
-                <Text style={styles.territoryBustedText}>🚨 BUSTED! 🚨</Text>
-              </View>
-            )}
-          </View>
-
-          <Text style={[styles.territoryMeterLabel, { color: theme.text.secondary }]}>
-            Marked {meterPct}%
-          </Text>
-          <View style={styles.territoryMeterTrack}>
-            <View
-              style={[
-                styles.territoryMeterFill,
-                { width: `${meterPct}%`, backgroundColor: accentColor },
-              ]}
-            />
-          </View>
-
-          {gameState === "playing" && (
-            <Text style={[styles.instructionsText, { color: theme.text.secondary }]}>
-              Hold to mark · Let go when he looks!
-            </Text>
-          )}
-
-          {gameState === "gameover" && (
-            <>
-              <Text style={[styles.gameOverText, { color: theme.text.primary }]}>
-                Busted after {housesMarked} house{housesMarked === 1 ? "" : "s"}! 🚨{" "}
-                {lastCoins > 0 ? `+${lastCoins} coins` : "Try to mark at least one next time!"}
-              </Text>
-              <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
-                <Text style={styles.primaryButtonText}>Walk Again</Text>
-              </PressableScale>
-            </>
-          )}
-        </>
-      )}
     </View>
   );
 }
@@ -2066,190 +1889,44 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  territoryScene: {
-    width: TERR_TRACK_WIDTH,
-    height: TERR_TRACK_HEIGHT,
-    borderRadius: 18,
-    overflow: "hidden",
-    borderWidth: 3,
-    borderColor: "#6FA84F",
+  // Edge-to-edge container for the full-screen porch scene — no card
+  // background needed since TERR_HOUSE_IMAGE covers the whole screen.
+  // `flex:1` alone is enough on native (RN always gives every screen a
+  // real pixel height), but on web this View sits inside a swipeable
+  // MaterialTopTabs pager, and that pager's own height doesn't reliably
+  // propagate down through the flex chain in a browser the way RN's own
+  // layout engine guarantees on native — when it doesn't, `flex:1` here
+  // resolves to 0/auto height, and an absolutely-positioned child with no
+  // definite containing-block height falls back to sizing itself off its
+  // own intrinsic size instead of covering the box (this is what was
+  // showing the house at its native portrait aspect ratio in a corner
+  // instead of filling the screen, with the porch guy — positioned by JS
+  // math keyed to whatever tiny/wrong box `onLayout` measured — stranded
+  // out in the leftover space). `100vh` sidesteps all of that by tying
+  // this box directly to the actual browser viewport height, independent
+  // of whatever height the pager did or didn't hand it.
+  territoryFullScreen: {
+    flex: 1,
+    width: "100%",
     backgroundColor: "#BFE6FF",
-  },
-
-  territorySky: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    width: TERR_TRACK_WIDTH,
-    height: 120,
-    backgroundColor: "#BFE6FF",
-  },
-
-  territoryGround: {
-    position: "absolute",
-    left: 0,
-    top: 120,
-    width: TERR_TRACK_WIDTH,
-    height: TERR_TRACK_HEIGHT - 120,
-    backgroundColor: "#8FCB6B",
-  },
-
-  territoryHouse: {
-    position: "absolute",
-    left: (TERR_TRACK_WIDTH - TERR_HOUSE_WIDTH) / 2,
-    top: 26,
-    width: TERR_HOUSE_WIDTH,
-    height: TERR_HOUSE_HEIGHT,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-
-  territoryRoof: {
-    position: "absolute",
-    top: -16,
-    left: -6,
-    width: TERR_HOUSE_WIDTH + 12,
-    height: 24,
-    backgroundColor: "#6B4A32",
-    borderRadius: 6,
-  },
-
-  territoryWindow: {
-    position: "absolute",
-    top: 34,
-    left: (TERR_HOUSE_WIDTH - TERR_WINDOW_WIDTH) / 2,
-    width: TERR_WINDOW_WIDTH,
-    height: TERR_WINDOW_HEIGHT,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "rgba(0,0,0,0.25)",
-  },
-
-  territoryEyes: {
-    fontSize: 26,
-  },
-
-  territoryYard: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 14,
-    alignItems: "center",
-  },
-
-  territoryTargetWrapper: {
-    width: 70,
-    height: 92,
-    alignItems: "center",
-    justifyContent: "flex-end",
-  },
-
-  territoryMailbox: {
-    alignItems: "center",
-  },
-
-  territoryMailboxEmoji: {
-    fontSize: 34,
-  },
-
-  territoryMailboxPost: {
-    width: 6,
-    height: 26,
-    backgroundColor: "#8B5E34",
-    borderRadius: 2,
-    marginTop: -4,
-  },
-
-  territoryHydrant: {
-    alignItems: "center",
-  },
-
-  territoryHydrantCap: {
-    width: 20,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#D64545",
-  },
-
-  territoryHydrantBody: {
-    width: 24,
-    height: 32,
-    borderRadius: 7,
-    backgroundColor: "#E14B4B",
-    marginTop: -2,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  territoryHydrantBolt: {
-    position: "absolute",
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#B23636",
-    top: 10,
-  },
-
-  territoryHydrantBoltLeft: {
-    left: -4,
-  },
-
-  territoryHydrantBoltRight: {
-    right: -4,
-  },
-
-  territoryHydrantBase: {
-    width: 28,
-    height: 7,
-    borderRadius: 3,
-    backgroundColor: "#B23636",
-    marginTop: -2,
-  },
-
-  territoryDrip: {
-    position: "absolute",
-    bottom: -2,
-    fontSize: 16,
-  },
-
-  territoryDogEmoji: {
-    fontSize: 32,
-    marginTop: 6,
-  },
-
-  territoryBustedOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(122,20,20,0.45)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  territoryBustedText: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#fff",
-    textAlign: "center",
-  },
-
-  territoryMeterLabel: {
-    marginTop: 14,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-
-  territoryMeterTrack: {
-    width: TERR_TRACK_WIDTH,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: "rgba(0,0,0,0.12)",
+    // Clips the house image's sides when the scaled image ends up wider
+    // than the box (tall/portrait viewports) — height is always locked to
+    // fill the box exactly (see MarkYourTerritoryGame), so only the sides
+    // ever need clipping, never the top or bottom.
     overflow: "hidden",
-    marginTop: 6,
+    ...(Platform.OS === "web" ? { minHeight: "100vh" as any } : null),
   },
 
-  territoryMeterFill: {
-    height: 14,
-    borderRadius: 7,
+  // Floats over the scene instead of sitting inline above a card (there's
+  // no card in full-screen mode) — top/left are overridden per-render with
+  // safe-area insets so it clears the notch/status bar on every device.
+  territoryExitButton: {
+    position: "absolute",
+    backgroundColor: "#1C1C1E",
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
 });
