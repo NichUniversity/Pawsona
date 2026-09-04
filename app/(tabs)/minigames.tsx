@@ -57,7 +57,7 @@ const GAMES: {
     name: "Mark Your Territory",
     emoji: "🚩",
     available: true,
-    description: "Take a peek at the block — gameplay coming soon!",
+    description: "Hold the mailbox to mark it — let go before he looks up!",
   },
 ];
 
@@ -1260,8 +1260,14 @@ function PupParkourGame({ onExit }: { onExit: () => void }) {
 // Natural pixel size of the source file — needed below to replicate
 // resizeMode="cover"'s scale/crop math in JS.
 const TERR_HOUSE_IMAGE = require("../../assets/images/territory-house.png");
-const TERR_HOUSE_IMG_WIDTH = 900;
-const TERR_HOUSE_IMG_HEIGHT = 1198;
+// Swapped (2026-09-04) for a new hand-drawn blue two-story house. Natural
+// pixel size of THIS file — every anchor below was re-measured against
+// this image's own 1086x1316 pixel space by color-sampling the art
+// (porch-deck tan vs. grass green, mailbox blue vs. its surroundings,
+// sidewalk vs. road asphalt), the same method used for the original
+// house image. They are not portable to any other house art.
+const TERR_HOUSE_IMG_WIDTH = 1086;
+const TERR_HOUSE_IMG_HEIGHT = 1316;
 
 // Neighbor in a rocking chair reading the paper — each stage below is
 // cropped tight to his silhouette (transparent PNG, no padding). Each
@@ -1270,8 +1276,8 @@ const TERR_HOUSE_IMG_HEIGHT = 1198;
 // letterboxing/stretching, even though separately-generated stage
 // images won't come out pixel-identical in canvas size or crop margins
 // to one another. The three SRC_* constants below (shared by every
-// stage) are anchor points measured against TERR_HOUSE_IMAGE's real
-// 900x1198 pixels instead — the porch's own fixed floor line and the
+// stage) are anchor points measured against TERR_HOUSE_IMAGE's own real
+// pixel space instead — the porch's own fixed floor line and the
 // chair's horizontal position on it — so every stage renders at the
 // same spot and the same on-screen size on the porch regardless of
 // device, independent of any one stage image's own resolution.
@@ -1288,41 +1294,571 @@ const TERR_HOUSE_IMG_HEIGHT = 1198;
 // which one renders — nothing else needs to change.
 const TERR_PORCH_GUY_STAGES = [
   {
+    // Replaced (2026-09-04) with a new standalone illustration — same
+    // character, an "Elmore Daily" newspaper held up covering his face,
+    // seated cross-legged in a rocking chair with a curved-topper back.
+    // Not part of the earlier 5-pose reference sheet (that attempt was
+    // tried and fully reverted the same day — see the project doc).
+    // Cropped tight to 943x1271 (aspect 0.7419); topmost visible chair
+    // wood sits ~20.1% down from the top of frame, close to the old
+    // (pre-session) stage-1 art's 18.3% — should read closer in size to
+    // stage 2 (8.0%)/stage 3 (11.2%) at the shared render height than
+    // the previous newspaper-held-fully-up attempt (~0.5%) did.
     source: require("../../assets/images/territory-porch-guy.png"),
-    aspect: 644 / 900,
+    aspect: 943 / 1271,
   },
   {
+    // Replaced (2026-09-04) with a new standalone illustration matching
+    // the new stage-1 art's lineage exactly — same character, same
+    // rocking chair (curved-topper back), same art style — just with
+    // the newspaper lowered enough to reveal his eyes/eyebrows (annoyed
+    // glare) over the top. Unlike the old stage-2 art this replaces,
+    // this one's chair is the SAME chair as the new stage 1, so the
+    // stage-1-to-stage-2 chair-mismatch problem that motivated the
+    // (reverted) chair-transplant attempt earlier this session shouldn't
+    // apply here — see the project doc for that history. Cropped tight
+    // to 945x1142 (aspect 0.8275); topmost visible chair wood (the
+    // topper knob beside his head — a forehead-wrinkle detail briefly
+    // false-positived as "wood" during measurement and had to be
+    // excluded) sits ~9.6% down from the top of frame, close to the old
+    // stage 2's 8.0% and to the new stage 1's ~20.1% in the same
+    // direction (increasing from stage 1 to stage 2, as expected).
     source: require("../../assets/images/territory-porch-guy-stage-2.png"),
-    aspect: 981 / 1296,
+    aspect: 945 / 1142,
   },
   {
+    // Replaced (2026-09-04) with a new standalone illustration, same
+    // lineage as the new stage 1/2 art (same character, same rocking
+    // chair) — newspaper lowered further than stage 2, showing his full
+    // face (eyes, brow, mustache) in an annoyed glare. Cropped tight to
+    // 944x1137 (aspect 0.8303); topmost visible chair wood (the topper
+    // knob beside his head) sits ~13.2% down from the top of frame,
+    // in the same ballpark as the new stage 1 (~20.1%) and stage 2
+    // (~9.6%) — all comfortably closer to old stages 2/3's 8.0%/11.2%
+    // than the once-reverted stage-1 attempt's ~0.5% was.
     source: require("../../assets/images/territory-porch-guy-stage-3.png"),
-    aspect: 964 / 1265,
+    aspect: 944 / 1137,
+  },
+  {
+    // Replaced (2026-09-04) with a new standalone illustration, same
+    // lineage as the new stage 1/2/3 art (same character, same rocking
+    // chair) — newspaper lowered further still, showing his full face
+    // plus more of the shirt/suspenders below. Cropped tight to
+    // 945x1127 (aspect 0.8385); topmost visible chair wood (the topper
+    // knob beside his head) sits ~14.6% down from the top of frame,
+    // in the same ballpark as the new stages 1/2/3 (~20.1%/9.6%/13.2%).
+    source: require("../../assets/images/territory-porch-guy-stage-4.png"),
+    aspect: 945 / 1127,
+  },
+  {
+    // Replaced (2026-09-04) with a new standalone illustration, same
+    // lineage as the new stage 1/2/3/4 art (same character, same
+    // rocking chair). Visually very close to the new stage-4 art (same
+    // full-face pose/expression) — the user confirmed wiring it in
+    // as-is despite the similarity. Cropped tight to 945x1101 (aspect
+    // 0.8583); topmost visible chair wood (the topper knob beside his
+    // head) sits ~12.6% down from the top of frame, in the same
+    // ballpark as the new stages 1-4 (~20.1%/9.6%/13.2%/14.6%).
+    source: require("../../assets/images/territory-porch-guy-stage-5.png"),
+    aspect: 945 / 1101,
   },
 ];
-const TERR_PORCH_GUY_SRC_CENTER_X = 519;
-const TERR_PORCH_GUY_SRC_FLOOR_Y = 762;
-const TERR_PORCH_GUY_SRC_HEIGHT = 125;
+
+// Separate from the attentiveness sequence above — this is the "caught you
+// peeing" reaction (red-faced, furious, staring straight out), shown
+// (2026-09-03) when MarkYourTerritoryGame's stage loop reaches the last
+// entry in TERR_PORCH_GUY_STAGES while the player is still holding the
+// mailbox. Swapped in directly via `isCaught` rather than through
+// neighborStage/the stages array — it's a distinct busted state, not
+// another notch in the oblivious-to-attentive progression.
+const TERR_PORCH_GUY_CAUGHT = {
+  source: require("../../assets/images/territory-porch-guy-caught.png"),
+  aspect: 988 / 1350,
+};
+// Re-measured (2026-09-04) against the new house art: the porch deck's
+// tan/gray surface reads cleanly from source y~787 down to y~804 before
+// giving way to grass, and the open stretch of blue wall clear of the
+// door, front window, and both support posts sits roughly x~765-845 —
+// so the chair is centered a bit left of that post to keep clearance.
+const TERR_PORCH_GUY_SRC_CENTER_X = 780;
+const TERR_PORCH_GUY_SRC_FLOOR_Y = 800;
+// Scaled from the previous house's 125 by the same ratio as the two
+// images' heights (1316/1198) so the character keeps the same visual
+// size relative to the porch rather than shrinking/growing with the
+// new art's own resolution.
+const TERR_PORCH_GUY_SRC_HEIGHT = 137;
 // Manual nudge on top of the measured floor-line anchor above — per user
 // feedback he still read as sitting a touch low/forward on the porch.
 // Source-pixel units (like the anchors above), so it scales consistently
 // with everything else instead of drifting at different screen sizes.
-const TERR_PORCH_GUY_LIFT = 34;
+// Scaled from 34 by the same 1316/1198 ratio as the height above, to
+// preserve the same lift-to-height proportion on the new art.
+const TERR_PORCH_GUY_LIFT = 37;
+
+// Mailbox hold-target, measured the same way as the porch-guy anchors
+// above (fixed pixel coordinates in TERR_HOUSE_IMAGE's own 1086x1316
+// space, found by color-thresholding the mailbox's box against the
+// grass/sky around it) — so the touch target and the pee stream's
+// endpoint stay locked to the mailbox regardless of screen size.
+// Re-measured (2026-09-04) for the new house art: the mailbox box's post
+// sits at source x~552, and its blue box reads from y~807 (roof edge)
+// down to y~913 (where it gives way to the white post beneath).
+const TERR_MAILBOX_SRC_CENTER_X = 552;
+const TERR_MAILBOX_SRC_TOP_Y = 807;
+const TERR_MAILBOX_SRC_BOTTOM_Y = 913;
+
+// Where the dog character stands — the paved road at the very bottom of
+// TERR_HOUSE_IMAGE (measured by color-sampling the curb/asphalt line).
+// Same fixed-source-pixel anchor pattern as the porch guy/mailbox
+// anchors above. Horizontally the dog rests directly under the mailbox
+// (TERR_MAILBOX_SRC_CENTER_X), so the pee stream — already anchored to
+// that same x — reads as coming from him.
+// Re-measured (2026-09-04) for the new house art: the sidewalk gives way
+// to the road at source y~1195-1200, so 1255 sits comfortably inside the
+// road band below that, matching the old image's ~60px curb clearance.
+const TERR_DOG_SRC_Y = 1255;
+// Emoji glyphs don't have their own aspect/anchor data like the PNG
+// stages, so this is just a chosen on-screen size in the same
+// source-pixel scale as everything else, tuned to look proportionate
+// next to the mailbox rather than measured from art. Original value (110)
+// was tuned against the old mailbox's 92px-tall box; scaled up to 127 to
+// match the new mailbox's ~106px-tall box at the same proportion.
+const TERR_DOG_SRC_HEIGHT = 127;
+const TERR_DOG_EMOJI = "🐕";
+const TERR_DOG_ENTRANCE_MS = 1200;
+const TERR_DOG_HOP_MS = 150;
+const TERR_DOG_LEG_LIFT_MS = 160;
+
+// How often the neighbor's attentiveness advances a stage, in ms — a
+// random value in this range is rolled after every tick so the rhythm
+// isn't perfectly predictable, but never so fast/slow it feels unfair.
+// Slowed down overall per feedback: the floor is kept the same (still
+// occasionally snappy/near-instant, especially right after a long wait —
+// that contrast is the "slowly or instantly, randomly" feel that was
+// asked for) but the ceiling was raised a lot, roughly tripling the
+// average wait between stage changes (was ~2000ms, now ~4200ms) and
+// widening the spread so the rhythm reads as genuinely unpredictable
+// rather than a narrow, easy-to-learn band. Keeping the floor unchanged
+// also keeps the fairness invariant on TERR_MARK_FILL_MS below intact
+// with no other numbers needing to move: the guaranteed-worst-case
+// time-to-bust (4 stage advances all rolling the minimum) is still
+// 4 x TERR_STAGE_MIN_INTERVAL_MS = 5600ms, unchanged from before.
+const TERR_STAGE_MIN_INTERVAL_MS = 1400;
+const TERR_STAGE_MAX_INTERVAL_MS = 7000;
+
+// Coins for releasing safely before he reaches the last (most-attentive)
+// stage — same ballpark as Paw Pattern's per-round reward, since this is
+// also a quick, repeatable round rather than a one-time win.
+const TERR_MARK_REWARD = 5;
+
+// Total accumulated holding time (ms) needed to fill the "Marking"
+// progress meter all the way and complete the round. Progress only
+// accrues while the mailbox is actively held, but is never reset by
+// releasing — same no-arbitrary-resets philosophy as the neighbor's
+// attentiveness clock (see the fix-round note above) — so several short
+// holds add up exactly like one long one. Kept below the *minimum*
+// possible time-to-bust (4 stage advances x TERR_STAGE_MIN_INTERVAL_MS =
+// 5600ms) so a player who holds continuously from a fresh round can
+// always finish in time on an unlucky-fast roll; slower rolls just add
+// margin. Ticks every TERR_MARK_TICK_MS while held.
+const TERR_MARK_FILL_MS = 5000;
+const TERR_MARK_TICK_MS = 100;
+
+// One-time bonus for fully filling the meter (completing the round)
+// instead of just banking per-release marks — bigger than TERR_MARK_REWARD
+// since it's the round's actual win condition, same idea as Minesweeper's
+// WIN_REWARD vs. its smaller incidental rewards.
+const TERR_COMPLETE_REWARD = 20;
+
+// A gentle pulsing ring around the mailbox while nothing else is going
+// on, purely so the touch target reads as tappable at a glance. Mounted
+// only while idle (not holding, not caught) — starts/stops with the
+// component's own lifecycle rather than an internal isHolding check.
+function TerritoryMailboxHint({ x, midY }: { x: number; midY: number }) {
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 900, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [pulse]);
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        left: x - 26,
+        top: midY - 26,
+        width: 52,
+        height: 52,
+        borderRadius: 26,
+        backgroundColor: "#FFFFFF",
+        opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.12, 0.3] }),
+        transform: [
+          { scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) },
+        ],
+      }}
+    />
+  );
+}
+
+// Simple placeholder "pee" stream — a thin translucent line from the
+// player's implied position at the bottom of the scene up to the
+// mailbox, plus a few small droplets rising along it on a staggered
+// loop. Mounted only while actively holding, so its animations start
+// fresh each time rather than needing an internal enabled/disabled gate.
+function TerritoryPeeStream({
+  x,
+  bottomY,
+  topY,
+}: {
+  x: number;
+  bottomY: number;
+  topY: number;
+}) {
+  const drop1 = useRef(new Animated.Value(0)).current;
+  const drop2 = useRef(new Animated.Value(0)).current;
+  const drop3 = useRef(new Animated.Value(0)).current;
+  const trunkPulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const makeDropLoop = (val: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(val, { toValue: 1, duration: 600, useNativeDriver: true }),
+          Animated.timing(val, { toValue: 0, duration: 0, useNativeDriver: true }),
+        ])
+      );
+    const anims = [
+      makeDropLoop(drop1, 0),
+      makeDropLoop(drop2, 200),
+      makeDropLoop(drop3, 400),
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(trunkPulse, { toValue: 1, duration: 350, useNativeDriver: true }),
+          Animated.timing(trunkPulse, { toValue: 0, duration: 350, useNativeDriver: true }),
+        ])
+      ),
+    ];
+    anims.forEach((a) => a.start());
+    return () => anims.forEach((a) => a.stop());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const dropStyle = (val: Animated.Value, xOffset: number) => ({
+    position: "absolute" as const,
+    top: 0,
+    left: x + xOffset - 3,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#F5E050",
+    opacity: val.interpolate({
+      inputRange: [0, 0.15, 0.85, 1],
+      outputRange: [0, 1, 1, 0],
+    }),
+    transform: [
+      {
+        translateY: val.interpolate({ inputRange: [0, 1], outputRange: [bottomY, topY] }),
+      },
+    ],
+  });
+
+  return (
+    <>
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          left: x - 2,
+          top: topY,
+          width: 4,
+          height: Math.max(bottomY - topY, 0),
+          borderRadius: 2,
+          backgroundColor: "#F5E050",
+          opacity: trunkPulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.55] }),
+        }}
+      />
+      <Animated.View pointerEvents="none" style={dropStyle(drop1, -6)} />
+      <Animated.View pointerEvents="none" style={dropStyle(drop2, 0)} />
+      <Animated.View pointerEvents="none" style={dropStyle(drop3, 6)} />
+    </>
+  );
+}
+
+// The dog itself — an emoji character (no new image asset) that hops in
+// from off-screen left along the road once on mount, settles at its
+// resting spot under the mailbox, and lifts a leg (a rotate+lift proxy —
+// an emoji glyph can't swap poses like the drawn porch-guy stages can)
+// whenever the player is holding the mailbox.
+function TerritoryDog({
+  x,
+  y,
+  size,
+  isHolding,
+}: {
+  x: number;
+  y: number;
+  size: number;
+  isHolding: boolean;
+}) {
+  // 0 -> 1 once, on mount: carries the entrance slide from off-screen left
+  // to the resting spot. Never replayed after that — he's already there
+  // for the rest of the round, whatever happens with holding/busts.
+  const entrance = useRef(new Animated.Value(0)).current;
+  // Small up/down bob, looped only while the entrance slide is playing —
+  // makes the approach read as a hop/trot rather than a flat slide across
+  // the screen. Stopped and zeroed once he arrives.
+  const hop = useRef(new Animated.Value(0)).current;
+  // 0 = standing normally, 1 = leg-lifted "marking" pose.
+  const legLift = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const hopLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(hop, { toValue: 1, duration: TERR_DOG_HOP_MS, useNativeDriver: true }),
+        Animated.timing(hop, { toValue: 0, duration: TERR_DOG_HOP_MS, useNativeDriver: true }),
+      ])
+    );
+    hopLoop.start();
+    Animated.timing(entrance, {
+      toValue: 1,
+      duration: TERR_DOG_ENTRANCE_MS,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (!finished) return;
+      hopLoop.stop();
+      hop.setValue(0);
+    });
+    return () => hopLoop.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    Animated.timing(legLift, {
+      toValue: isHolding ? 1 : 0,
+      duration: TERR_DOG_LEG_LIFT_MS,
+      useNativeDriver: true,
+    }).start();
+  }, [isHolding, legLift]);
+
+  // How far left (in screen px) the entrance has to start from to
+  // guarantee he's actually off-screen, not just off *his resting spot* —
+  // a fixed offset (the original -180) wasn't enough on a wide/letterboxed
+  // layout, where the mailbox (and so his resting x) can sit hundreds of
+  // px in from the real left edge. Derived from his own rest position (x)
+  // and size rather than the container width: starting at -(x + size)
+  // always places his right edge at x - size/2 - size, i.e. a full extra
+  // half-size past the screen's x=0 with margin to spare, regardless of
+  // how wide the container actually is.
+  const entranceStartX = -(x + size);
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        left: x - size / 2,
+        top: y - size,
+        width: size,
+        height: size,
+        alignItems: "center",
+        justifyContent: "center",
+        transform: [
+          // World-space move across the screen for the entrance — listed
+          // before the local flip/rotate below so it isn't affected by
+          // them (transform functions compose local-to-world in reverse
+          // list order, same as CSS): he always enters from the left
+          // regardless of which way he's facing.
+          { translateX: entrance.interpolate({ inputRange: [0, 1], outputRange: [entranceStartX, 0] }) },
+          { translateY: hop.interpolate({ inputRange: [0, 1], outputRange: [0, -8] }) },
+          // The raw glyph faces left; flipped so he faces right, toward
+          // the mailbox he's walking up to and, later, marking.
+          { scaleX: -1 },
+          { rotate: legLift.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "-16deg"] }) },
+        ],
+      }}
+    >
+      <Text style={{ fontSize: size, lineHeight: size }}>{TERR_DOG_EMOJI}</Text>
+    </Animated.View>
+  );
+}
 
 function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
   const { accentColor, theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const { earnCoins } = usePets();
 
   // Which "attentiveness" stage the neighbor is showing — 0 is the most
   // oblivious (paper fully up), rising toward the last entry in
-  // TERR_PORCH_GUY_STAGES (looking straight at the player). Not wired to
-  // any gameplay yet (there isn't any at the moment — see the file
-  // header), so this just always shows stage 0 for now; whatever
-  // mechanic gets built on top of this scene later will drive it via
-  // setNeighborStage instead of the hardcoded 0 default.
+  // TERR_PORCH_GUY_STAGES (looking straight at the player). Advances on
+  // its own random-interval timer below (see the mount effect that owns
+  // `stageLoopRef`/`stageTimeoutRef`), independent of whether the player
+  // is currently holding — holding only matters for what happens *when*
+  // he reaches the last stage.
   const [neighborStage, setNeighborStage] = useState(0);
-  const currentNeighborStage =
-    TERR_PORCH_GUY_STAGES[Math.min(neighborStage, TERR_PORCH_GUY_STAGES.length - 1)];
+  const [isHolding, setIsHolding] = useState(false);
+  const [isCaught, setIsCaught] = useState(false);
+  const [markFeedback, setMarkFeedback] = useState<string | null>(null);
+  // 0..1 fill level of the "Marking" progress meter — accrues while held,
+  // persists across releases, resets only on Try Again / Play Again. See
+  // TERR_MARK_FILL_MS above.
+  const [markProgress, setMarkProgress] = useState(0);
+  // Round-complete (won by fully filling the meter) — distinct from
+  // isCaught (lost). Both stop the neighbor's stage clock.
+  const [isComplete, setIsComplete] = useState(false);
+
+  // Refs mirror the state above for the setTimeout-driven loop below to
+  // read at fire time — its callback is scheduled outside of React's
+  // render cycle (it reschedules itself from inside its own timeout
+  // callback), so it can't rely on values captured in a render's closure
+  // without risking stale reads.
+  const isHoldingRef = useRef(isHolding);
+  isHoldingRef.current = isHolding;
+  const isCaughtRef = useRef(isCaught);
+  isCaughtRef.current = isCaught;
+  const neighborStageRef = useRef(neighborStage);
+  neighborStageRef.current = neighborStage;
+  const markProgressRef = useRef(markProgress);
+  markProgressRef.current = markProgress;
+  const isCompleteRef = useRef(isComplete);
+  isCompleteRef.current = isComplete;
+
+  const stageTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Ticks up markProgress while the mailbox is held — started on press-in,
+  // cleared on press-out/bust/completion (see handlers below).
+  const markIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Holds the "advance one stage, then either bust or reschedule itself"
+  // function — set once by the mount effect below, but also called from
+  // outside it (restartStageLoop, on a safe release or Try Again), so it
+  // lives in a ref rather than a local closure.
+  const stageLoopRef = useRef<() => void>(() => {});
+
+  const randomStageDelay = () =>
+    TERR_STAGE_MIN_INTERVAL_MS +
+    Math.random() * (TERR_STAGE_MAX_INTERVAL_MS - TERR_STAGE_MIN_INTERVAL_MS);
+
+  const restartStageLoop = useCallback(() => {
+    if (stageTimeoutRef.current) clearTimeout(stageTimeoutRef.current);
+    neighborStageRef.current = 0;
+    setNeighborStage(0);
+    stageTimeoutRef.current = setTimeout(() => stageLoopRef.current(), randomStageDelay());
+  }, []);
+
+  useEffect(() => {
+    stageLoopRef.current = () => {
+      if (isCaughtRef.current || isCompleteRef.current) return;
+      const next = (neighborStageRef.current + 1) % TERR_PORCH_GUY_STAGES.length;
+      neighborStageRef.current = next;
+      setNeighborStage(next);
+      if (next === TERR_PORCH_GUY_STAGES.length - 1 && isHoldingRef.current) {
+        // Busted: he hit the most-attentive stage while the player was
+        // still holding. Stop the loop instead of scheduling another tick,
+        // and stop the meter from ticking further too — bust overrides an
+        // in-progress mark, it doesn't race it.
+        isCaughtRef.current = true;
+        setIsCaught(true);
+        isHoldingRef.current = false;
+        setIsHolding(false);
+        if (markIntervalRef.current) {
+          clearInterval(markIntervalRef.current);
+          markIntervalRef.current = null;
+        }
+        return;
+      }
+      stageTimeoutRef.current = setTimeout(() => stageLoopRef.current(), randomStageDelay());
+    };
+    stageTimeoutRef.current = setTimeout(() => stageLoopRef.current(), randomStageDelay());
+    return () => {
+      if (stageTimeoutRef.current) clearTimeout(stageTimeoutRef.current);
+      if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
+      if (markIntervalRef.current) clearInterval(markIntervalRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const showMarkFeedback = (text: string) => {
+    setMarkFeedback(text);
+    if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
+    feedbackTimeoutRef.current = setTimeout(() => setMarkFeedback(null), 900);
+  };
+
+  const handleMailboxPressIn = () => {
+    if (isCaughtRef.current || isCompleteRef.current) return;
+    isHoldingRef.current = true;
+    setIsHolding(true);
+    // Start ticking the marking meter. Progress carries over from any
+    // earlier holds this round (see markProgressRef — never reset here),
+    // so this just resumes accruing where it left off.
+    if (markIntervalRef.current) clearInterval(markIntervalRef.current);
+    markIntervalRef.current = setInterval(() => {
+      const next = Math.min(1, markProgressRef.current + TERR_MARK_TICK_MS / TERR_MARK_FILL_MS);
+      markProgressRef.current = next;
+      setMarkProgress(next);
+      if (next >= 1) {
+        // Meter filled while still safely holding — round won. Stop
+        // everything else (neighbor clock, holding) the same way a bust
+        // does, just via the success path instead.
+        if (markIntervalRef.current) {
+          clearInterval(markIntervalRef.current);
+          markIntervalRef.current = null;
+        }
+        if (stageTimeoutRef.current) clearTimeout(stageTimeoutRef.current);
+        isHoldingRef.current = false;
+        setIsHolding(false);
+        isCompleteRef.current = true;
+        setIsComplete(true);
+        earnCoins(TERR_COMPLETE_REWARD);
+      }
+    }, TERR_MARK_TICK_MS);
+  };
+
+  const handleMailboxPressOut = () => {
+    const wasHolding = isHoldingRef.current;
+    isHoldingRef.current = false;
+    setIsHolding(false);
+    if (markIntervalRef.current) {
+      clearInterval(markIntervalRef.current);
+      markIntervalRef.current = null;
+    }
+    if (isCaughtRef.current || isCompleteRef.current || !wasHolding) return;
+    // Released safely before he caught on — award the mark. His stage
+    // keeps advancing on its own ambient clock either way (it's never
+    // paused or reset by holding/releasing — only a bust or Try Again
+    // resets it), so nothing here touches neighborStage. The marking
+    // meter's progress is left exactly where it was too — only the
+    // interval that was ticking it stops; the accumulated fill stays.
+    earnCoins(TERR_MARK_REWARD);
+    showMarkFeedback(`+${TERR_MARK_REWARD}`);
+  };
+
+  const handleTryAgain = () => {
+    isCaughtRef.current = false;
+    setIsCaught(false);
+    markProgressRef.current = 0;
+    setMarkProgress(0);
+    restartStageLoop();
+  };
+
+  const handlePlayAgain = () => {
+    isCompleteRef.current = false;
+    setIsComplete(false);
+    markProgressRef.current = 0;
+    setMarkProgress(0);
+    restartStageLoop();
+  };
+
+  const currentNeighborStage = isCaught
+    ? TERR_PORCH_GUY_CAUGHT
+    : TERR_PORCH_GUY_STAGES[Math.min(neighborStage, TERR_PORCH_GUY_STAGES.length - 1)];
 
   // Measure the container's own rendered box instead of trusting
   // useWindowDimensions(). On native those two normally match, but on
@@ -1365,6 +1901,21 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
   const guyBottom = (TERR_PORCH_GUY_SRC_FLOOR_Y - TERR_PORCH_GUY_LIFT) * scale;
   const guyTop = guyBottom - guyHeight;
 
+  // Mailbox on-screen position, from the fixed source-pixel anchors above
+  // — same scale/offset math as the porch guy, so it stays locked to the
+  // mailbox art regardless of screen size.
+  const mailboxCenterX = TERR_MAILBOX_SRC_CENTER_X * scale + houseOffsetX;
+  const mailboxTopY = TERR_MAILBOX_SRC_TOP_Y * scale;
+  const mailboxBottomY = TERR_MAILBOX_SRC_BOTTOM_Y * scale;
+  const mailboxMidY = (mailboxTopY + mailboxBottomY) / 2;
+
+  // Dog's on-screen position — same x column as the mailbox (see the
+  // constant's comment above), standing on the road below it. Size is
+  // clamped so he doesn't shrink to nothing on a very short/letterboxed
+  // layout.
+  const dogY = TERR_DOG_SRC_Y * scale;
+  const dogSize = Math.max(46, TERR_DOG_SRC_HEIGHT * scale);
+
   return (
     <View
       style={styles.territoryFullScreen}
@@ -1399,15 +1950,46 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
           />
           <Image
             source={currentNeighborStage.source}
-            style={{
-              position: "absolute",
-              left: guyLeft,
-              top: guyTop,
-              width: guyWidth,
-              height: guyHeight,
-            }}
+            style={{ position: "absolute", left: guyLeft, top: guyTop, width: guyWidth, height: guyHeight }}
             resizeMode="stretch"
           />
+
+          <TerritoryDog x={mailboxCenterX} y={dogY} size={dogSize} isHolding={isHolding && !isCaught} />
+
+          {isHolding && !isCaught && !isComplete && (
+            <TerritoryPeeStream x={mailboxCenterX} bottomY={dogY} topY={mailboxMidY} />
+          )}
+          {!isHolding && !isCaught && !isComplete && (
+            <TerritoryMailboxHint x={mailboxCenterX} midY={mailboxMidY} />
+          )}
+
+          {/* Fixed on-screen hit size (not scaled from the source pixels)
+              so the mailbox stays comfortably tappable even when the
+              scene itself renders small. */}
+          <Pressable
+            onPressIn={handleMailboxPressIn}
+            onPressOut={handleMailboxPressOut}
+            disabled={isCaught || isComplete}
+            style={{
+              position: "absolute",
+              left: mailboxCenterX - 32,
+              top: mailboxMidY - 55,
+              width: 64,
+              height: 110,
+            }}
+          />
+
+          {markFeedback && (
+            <Text
+              pointerEvents="none"
+              style={[
+                styles.territoryMarkFeedback,
+                { left: mailboxCenterX - 30, top: mailboxTopY - 36 },
+              ]}
+            >
+              {markFeedback} <CoinIcon size={13} />
+            </Text>
+          )}
         </>
       )}
 
@@ -1425,6 +2007,49 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
       >
         <Text style={[styles.exitButtonText, { color: accentColor }]}>← Back to Games</Text>
       </PressableScale>
+
+      {/* Marking progress meter — fills while the mailbox is held (see
+          handleMailboxPressIn) and never drains on release, only on Try
+          Again / Play Again. Hidden once the round has already ended
+          either way, since neither overlay below needs it showing through. */}
+      {!isCaught && !isComplete && (
+        <View pointerEvents="none" style={[styles.territoryMeterWrap, { top: insets.top + 12 }]}>
+          <Text style={styles.territoryMeterLabel}>Marking progress</Text>
+          <View style={styles.territoryMeterTrack}>
+            <View style={[styles.territoryMeterFill, { width: `${markProgress * 100}%` }]} />
+          </View>
+        </View>
+      )}
+
+      {isCaught && (
+        <View style={styles.territoryCaughtOverlay} pointerEvents="box-none">
+          <View style={styles.territoryCaughtCard}>
+            <Text style={styles.territoryCaughtTitle}>Busted! 🚨</Text>
+            <Text style={styles.gameOverText}>He caught you marking his mailbox.</Text>
+            <PressableScale
+              style={[styles.primaryButton, { backgroundColor: accentColor }]}
+              onPress={handleTryAgain}
+            >
+              <Text style={styles.primaryButtonText}>Try Again</Text>
+            </PressableScale>
+          </View>
+        </View>
+      )}
+
+      {isComplete && (
+        <View style={styles.territoryCaughtOverlay} pointerEvents="box-none">
+          <View style={styles.territoryCaughtCard}>
+            <Text style={styles.territoryCaughtTitle}>Marked! 🐾</Text>
+            <Text style={styles.gameOverText}>You fully marked his mailbox without getting caught.</Text>
+            <PressableScale
+              style={[styles.primaryButton, { backgroundColor: accentColor }]}
+              onPress={handlePlayAgain}
+            >
+              <Text style={styles.primaryButtonText}>Play Again</Text>
+            </PressableScale>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -1928,5 +2553,79 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
+  },
+
+  // "+5" popup that floats above the mailbox on a safe release, fading
+  // out on its own via the markFeedback timeout rather than an animation.
+  territoryMarkFeedback: {
+    position: "absolute",
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 16,
+    textShadowColor: "rgba(0,0,0,0.45)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+
+  // Centered top-of-screen meter showing markProgress. left/right: 0 +
+  // alignItems: "center" centers it regardless of the bar's own fixed
+  // width, without needing to know the screen width up front.
+  territoryMeterWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+
+  territoryMeterLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#fff",
+    marginBottom: 4,
+    textShadowColor: "rgba(0,0,0,0.45)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+
+  territoryMeterTrack: {
+    width: 180,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "rgba(255,255,255,0.35)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.6)",
+    overflow: "hidden",
+  },
+
+  // Width is set per-render as a `${markProgress * 100}%` string rather
+  // than an Animated value — ticks in fixed 100ms steps alongside the
+  // markIntervalRef loop, not a smooth continuous animation, so a plain
+  // state-driven width keeps the two in lockstep with no extra machinery.
+  territoryMeterFill: {
+    height: "100%",
+    borderRadius: 7,
+    backgroundColor: "#F5E050",
+  },
+
+  territoryCaughtOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  territoryCaughtCard: {
+    backgroundColor: "#1C1C1E",
+    borderRadius: 20,
+    paddingVertical: 24,
+    paddingHorizontal: 28,
+    alignItems: "center",
+    maxWidth: 300,
+  },
+
+  territoryCaughtTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#fff",
   },
 });
