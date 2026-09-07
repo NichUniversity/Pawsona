@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "expo-router/react-navigation";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
@@ -149,7 +149,7 @@ function Firefly({ config }: { config: FireflyConfig }) {
 // current area's background art.
 function FireflyField({ fireflies }: { fireflies: FireflyConfig[] }) {
   return (
-    <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
       {fireflies.map((firefly) => (
         <Firefly key={firefly.id} config={firefly} />
       ))}
@@ -652,7 +652,7 @@ export default function Adventure() {
 
 const styles = StyleSheet.create({
   background: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
 
   container: {
@@ -782,7 +782,7 @@ const styles = StyleSheet.create({
   // shows the whole image with no cropping/zoom; the wrap's backgroundColor
   // fills any letterbox space so it doesn't show as transparent/orange.
   fullScreenBackgroundWrap: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "#1B3B2F",
   },
 
@@ -924,7 +924,7 @@ const styles = StyleSheet.create({
   },
 
   transitionOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "#000",
     alignItems: "center",
     justifyContent: "center",

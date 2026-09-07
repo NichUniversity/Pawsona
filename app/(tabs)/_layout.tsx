@@ -1,9 +1,9 @@
 import type {
   MaterialTopTabNavigationEventMap,
   MaterialTopTabNavigationOptions,
-} from '@react-navigation/material-top-tabs';
-import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
-import type { ParamListBase, TabNavigationState } from '@react-navigation/native';
+} from 'expo-router/js-top-tabs';
+import { createMaterialTopTabNavigator } from 'expo-router/js-top-tabs';
+import type { ParamListBase, TabNavigationState } from 'expo-router/react-navigation';
 import * as Haptics from 'expo-haptics';
 import { withLayoutContext } from 'expo-router';
 import React, { useRef, useState } from 'react';
@@ -150,7 +150,7 @@ export default function TabLayout() {
       tabBarPosition="bottom"
       initialLayout={{ width: screenWidth }}
       screenListeners={{
-        tabPress: (e) => {
+        tabPress: (e: { preventDefault: () => void }) => {
           // Always acknowledge the touch, even if the transition below
           // ends up getting debounced away — see fireHaptic's comment.
           fireHaptic();

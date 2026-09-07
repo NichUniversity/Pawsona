@@ -1723,7 +1723,7 @@ function PupParkourFPGame({ onExit }: { onExit: () => void }) {
 
 const styles = StyleSheet.create({
   background: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
 
   container: {

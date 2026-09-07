@@ -200,7 +200,7 @@ export default function DailyPawLog() {
       {!selectedPet ? (
         <TabBackground />
       ) : (
-        <View style={[StyleSheet.absoluteFillObject, styles.almanacBackdrop]} />
+        <View style={[StyleSheet.absoluteFill, styles.almanacBackdrop]} />
       )}
 
       <ScrollView
@@ -333,7 +333,7 @@ export default function DailyPawLog() {
                       <>
                         <View
                           style={[
-                            StyleSheet.absoluteFillObject,
+                            StyleSheet.absoluteFill,
                             { opacity: isAvatarWalking ? 0 : 1 },
                           ]}
                         >
@@ -341,7 +341,7 @@ export default function DailyPawLog() {
                         </View>
                         <View
                           style={[
-                            StyleSheet.absoluteFillObject,
+                            StyleSheet.absoluteFill,
                             { opacity: isAvatarWalking ? 1 : 0 },
                           ]}
                           pointerEvents="none"

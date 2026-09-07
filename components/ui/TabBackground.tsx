@@ -30,7 +30,7 @@ export function TabBackground() {
   const { top, mid, bottom, sheenColor, sheenOpacity } = theme.background;
 
   return (
-    <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <Svg width="100%" height="100%">
         <Defs>
           <LinearGradient id="tabFade" x1="0" y1="0" x2="0" y2="1">
