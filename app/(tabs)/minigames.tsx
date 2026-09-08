@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Image,
+  ImageSourcePropType,
   PanResponder,
   Platform,
   Pressable,
@@ -1266,8 +1267,43 @@ const TERR_HOUSE_IMAGE = require("../../assets/images/territory-house.png");
 // (porch-deck tan vs. grass green, mailbox blue vs. its surroundings,
 // sidewalk vs. road asphalt), the same method used for the original
 // house image. They are not portable to any other house art.
+//
+// Canvas extended upward (2026-09-07) from 1086x1316 to 1086x2262 — 946px
+// of plain background added above the original art, matching its own
+// near-white/cream color and faint paper-grain texture (sampled from a
+// clean corner patch, not tiled from real rows, since the top rows
+// turned out to contain part of the roofline's decorative pendant and a
+// first attempt at tiling them produced an obviously repeated diamond
+// pattern climbing the extension — caught by looking at the result
+// before shipping it, not assumed clean). This is the actual fix for the
+// phone-screen tradeoff described in the TERR_HOUSE_ZOOM/scale comments
+// below: rather than mathematically shrinking the whole scene to force
+// more width into frame (which was always going to cost either a top
+// gap or a side crop, see the history there), the image's OWN aspect
+// ratio is now close to a typical phone's (1086/2262 ≈ 0.48, vs. common
+// phones' ~0.45-0.56), so a plain height-locked fit shows nearly the
+// full width — including the fence — AND fills the full height with
+// zero gap, on most real phone sizes, without needing to trade one for
+// the other anymore. Checked against several common device sizes'
+// logical points (iPhone SE 375x667 through iPhone 14 Pro Max 430x932)
+// before shipping: 94-100% of the width shows uncropped on every one of
+// them, zero top/bottom letterboxing on all of them.
 const TERR_HOUSE_IMG_WIDTH = 1086;
-const TERR_HOUSE_IMG_HEIGHT = 1316;
+const TERR_HOUSE_IMG_HEIGHT = 2262;
+// This is a genuine two-way tradeoff between 1 and anything less than 1,
+// not a bug to keep chasing — bounced between both values once already
+// (2026-09-07): at 1, the house exactly fills the container height with
+// zero top gap, at the cost of cropping proportionally more off both
+// sides on narrower phones (reported as "zoomed it in too far"); at
+// 0.98, the sides crop a little less, at the cost of a small gap
+// showing only at the top (house is bottom-anchored, so any shrink here
+// shows up above it and nowhere else — reported as "the top of the
+// screen is showing again"). Currently 1 (zero top gap) per the most
+// recent request — if the side crop becomes the bigger complaint again,
+// the real fix is extending TERR_HOUSE_IMG_HEIGHT further (bringing the
+// image's own aspect ratio even closer to a phone's) rather than
+// continuing to toggle this value back and forth.
+const TERR_HOUSE_ZOOM = 1;
 
 // Neighbor in a rocking chair reading the paper — each stage below is
 // cropped tight to his silhouette (transparent PNG, no padding). Each
@@ -1294,73 +1330,67 @@ const TERR_HOUSE_IMG_HEIGHT = 1316;
 // which one renders — nothing else needs to change.
 const TERR_PORCH_GUY_STAGES = [
   {
-    // Replaced (2026-09-04) with a new standalone illustration — same
-    // character, an "Elmore Daily" newspaper held up covering his face,
-    // seated cross-legged in a rocking chair with a curved-topper back.
-    // Not part of the earlier 5-pose reference sheet (that attempt was
-    // tried and fully reverted the same day — see the project doc).
-    // Cropped tight to 943x1271 (aspect 0.7419); topmost visible chair
-    // wood sits ~20.1% down from the top of frame, close to the old
-    // (pre-session) stage-1 art's 18.3% — should read closer in size to
-    // stage 2 (8.0%)/stage 3 (11.2%) at the shared render height than
-    // the previous newspaper-held-fully-up attempt (~0.5%) did.
+    // Full replacement (2026-09-07) — all 6 poses (stages 1-5 + caught)
+    // now come from a single 3x2 reference sheet the user supplied, one
+    // generation pass, same character/chair/art-style drawn consistently
+    // across every cell (top-left through bottom-right = most-oblivious
+    // to busted). Background was already transparent in the source; each
+    // cell was split at its nominal 512x512 grid boundary, a ~1px stray
+    // seam artifact at the stage-2/stage-3 boundary (a duplicated sliver
+    // of outline-colored pixels sitting exactly on the cut line, present
+    // in both neighboring cells) was zeroed out, then each cell was
+    // trimmed tight to its own opaque content with a 3px soft-alpha
+    // margin. Verified clean: alpha-channel connected-component check
+    // found exactly one main silhouette per cell (no stray dots/holes),
+    // and the mid-alpha (anti-aliased edge) pixels average near-black,
+    // not near-white — i.e. real edge softening, not a white-background
+    // halo. Supersedes the 2026-09-04/2026-09-07 standalone-illustration
+    // art and its padding-based size-jump fix below — this new sheet's
+    // poses render at consistent chair/character scale at a shared fixed
+    // height without needing any top-padding (confirmed by resizing all
+    // 6 trimmed images to one common height and compositing them
+    // side-by-side: chair size and seat height line up across every
+    // stage). Top-left cell = newspaper fully covering his face, seated
+    // in the rocking chair. Re-trimmed (2026-09-07, see the
+    // horizontal-jitter note on TERR_PORCH_GUY_CAUGHT below) to 425x497 —
+    // this stage's own left/right margins were already close to even, so
+    // barely changed size.
     source: require("../../assets/images/territory-porch-guy.png"),
-    aspect: 943 / 1271,
+    aspect: 425 / 497,
   },
   {
-    // Replaced (2026-09-04) with a new standalone illustration matching
-    // the new stage-1 art's lineage exactly — same character, same
-    // rocking chair (curved-topper back), same art style — just with
-    // the newspaper lowered enough to reveal his eyes/eyebrows (annoyed
-    // glare) over the top. Unlike the old stage-2 art this replaces,
-    // this one's chair is the SAME chair as the new stage 1, so the
-    // stage-1-to-stage-2 chair-mismatch problem that motivated the
-    // (reverted) chair-transplant attempt earlier this session shouldn't
-    // apply here — see the project doc for that history. Cropped tight
-    // to 945x1142 (aspect 0.8275); topmost visible chair wood (the
-    // topper knob beside his head — a forehead-wrinkle detail briefly
-    // false-positived as "wood" during measurement and had to be
-    // excluded) sits ~9.6% down from the top of frame, close to the old
-    // stage 2's 8.0% and to the new stage 1's ~20.1% in the same
-    // direction (increasing from stage 1 to stage 2, as expected).
+    // From the same 3x2 sheet (top-middle cell) — newspaper lowered
+    // slightly, eyes/eyebrows visible over the top in an annoyed glare.
+    // Re-trimmed (2026-09-07) from 493x494 to 423x490 — had 68px of dead
+    // transparent margin on the right vs 8px on the left (see the note
+    // below), now trimmed tight and even on both sides.
     source: require("../../assets/images/territory-porch-guy-stage-2.png"),
-    aspect: 945 / 1142,
+    aspect: 423 / 490,
   },
   {
-    // Replaced (2026-09-04) with a new standalone illustration, same
-    // lineage as the new stage 1/2 art (same character, same rocking
-    // chair) — newspaper lowered further than stage 2, showing his full
-    // face (eyes, brow, mustache) in an annoyed glare. Cropped tight to
-    // 944x1137 (aspect 0.8303); topmost visible chair wood (the topper
-    // knob beside his head) sits ~13.2% down from the top of frame,
-    // in the same ballpark as the new stage 1 (~20.1%) and stage 2
-    // (~9.6%) — all comfortably closer to old stages 2/3's 8.0%/11.2%
-    // than the once-reverted stage-1 attempt's ~0.5% was.
+    // From the same 3x2 sheet (top-right cell) — newspaper lowered
+    // further, full face visible (eyes, brow, mustache) in an annoyed
+    // glare. Re-trimmed (2026-09-07) from 489x491 to 414x487 — had 78px
+    // of dead margin on the right vs 0px on the left, the worst offender
+    // of the six (see the note below).
     source: require("../../assets/images/territory-porch-guy-stage-3.png"),
-    aspect: 944 / 1137,
+    aspect: 414 / 487,
   },
   {
-    // Replaced (2026-09-04) with a new standalone illustration, same
-    // lineage as the new stage 1/2/3 art (same character, same rocking
-    // chair) — newspaper lowered further still, showing his full face
-    // plus more of the shirt/suspenders below. Cropped tight to
-    // 945x1127 (aspect 0.8385); topmost visible chair wood (the topper
-    // knob beside his head) sits ~14.6% down from the top of frame,
-    // in the same ballpark as the new stages 1/2/3 (~20.1%/9.6%/13.2%).
+    // From the same 3x2 sheet (bottom-left cell) — newspaper lowered
+    // further still, more shirt/suspenders visible below the face.
+    // Re-trimmed (2026-09-07) to 425x487 — like stage 1, this one's
+    // margins were already close to even.
     source: require("../../assets/images/territory-porch-guy-stage-4.png"),
-    aspect: 945 / 1127,
+    aspect: 425 / 487,
   },
   {
-    // Replaced (2026-09-04) with a new standalone illustration, same
-    // lineage as the new stage 1/2/3/4 art (same character, same
-    // rocking chair). Visually very close to the new stage-4 art (same
-    // full-face pose/expression) — the user confirmed wiring it in
-    // as-is despite the similarity. Cropped tight to 945x1101 (aspect
-    // 0.8583); topmost visible chair wood (the topper knob beside his
-    // head) sits ~12.6% down from the top of frame, in the same
-    // ballpark as the new stages 1-4 (~20.1%/9.6%/13.2%/14.6%).
+    // From the same 3x2 sheet (bottom-middle cell) — most-attentive
+    // non-caught pose, full glare, newspaper held lowest of the five.
+    // Re-trimmed (2026-09-07) from 449x501 to 426x495 — had 23px of dead
+    // margin on the right vs 6px on the left.
     source: require("../../assets/images/territory-porch-guy-stage-5.png"),
-    aspect: 945 / 1101,
+    aspect: 426 / 495,
   },
 ];
 
@@ -1370,18 +1400,70 @@ const TERR_PORCH_GUY_STAGES = [
 // entry in TERR_PORCH_GUY_STAGES while the player is still holding the
 // mailbox. Swapped in directly via `isCaught` rather than through
 // neighborStage/the stages array — it's a distinct busted state, not
-// another notch in the oblivious-to-attentive progression.
+// another notch in the oblivious-to-attentive progression. Replaced
+// (2026-09-07) along with the 5 stages above, from the same 3x2 reference
+// sheet's bottom-right cell — red/flushed face, furious glare, same
+// processing (seam-artifact cleanup, tight trim). Re-trimmed again later
+// the same day (see note below) from 461x504 to 382x501 — had 54px of
+// dead margin on the right vs 31px on the left.
+//
+// Horizontal-jitter fix (2026-09-07, applies to all 6 files above and
+// this one): user reported the character visibly shifts left/right at
+// every stage transition, even though CENTER_X/guyLeft math centers each
+// stage's BOUNDING BOX at the exact same screen x regardless of its own
+// width (guyLeft = CENTER_X*scale + houseOffsetX - guyWidth/2, so the box
+// center is provably fixed). Root cause was upstream of that math: when
+// the 3x2 sheet was originally split and each cell trimmed to its own
+// tight bounding box, the vertical (top/bottom) trim came out tight and
+// consistent (3-7px margin) on every stage, but the horizontal trim did
+// not — measured directly, several stages had wildly uneven left/right
+// margins (e.g. stage 3: 0px left vs 78px right; caught: 31px left vs
+// 54px right; stage 1/4 were fine, ~5-6px both sides). Since the box
+// CENTER is what's pinned to CENTER_X, not the visible content, a big gap
+// of dead transparent space on one side of a stage's own file pushes that
+// stage's actual drawn character off from the box's true center — and
+// that offset differs stage to stage, reading as a left/right jitter on
+// every transition even though the anchor math itself was already
+// correct. Fixed by re-measuring each file's real content bounding box
+// (alpha>15 threshold, same as every other cleanup pass in this doc) and
+// re-cropping tight with a uniform 3px margin on all four sides —
+// verified after the fact by resizing all 6 to a common height and
+// drawing each one's own box-center line over it: the chair/character
+// silhouette now lines up under that line consistently across every
+// stage, where before the fix stage 2/3 in particular sat visibly left
+// of it. No code changes needed beyond the `aspect` value each file's own
+// section records above (and this one, just below) — CENTER_X/LIFT and
+// the render math are untouched.
 const TERR_PORCH_GUY_CAUGHT = {
   source: require("../../assets/images/territory-porch-guy-caught.png"),
-  aspect: 988 / 1350,
+  aspect: 382 / 501,
 };
 // Re-measured (2026-09-04) against the new house art: the porch deck's
 // tan/gray surface reads cleanly from source y~787 down to y~804 before
 // giving way to grass, and the open stretch of blue wall clear of the
 // door, front window, and both support posts sits roughly x~765-845 —
 // so the chair is centered a bit left of that post to keep clearance.
-const TERR_PORCH_GUY_SRC_CENTER_X = 780;
-const TERR_PORCH_GUY_SRC_FLOOR_Y = 800;
+// Nudged further left in small steps (2026-09-07, per user feedback) from
+// 780 down to 726 — 765, 758, 748, 736, 726. Then the user asked for him
+// centered on the porch instead ("i want him to be in the middle so to
+// the left alot more"), a much bigger jump than the small steps before
+// it: set to 555, roughly the midpoint of the porch's full open floor
+// (door-side post ~235 to corner post ~858). This deliberately puts him
+// square in front of the window rather than beside it — the window-
+// overlap concern flagged at 758+ (see the earlier history this replaces)
+// is no longer a nudge-by-nudge accident at this point, it's the explicit
+// ask, so not re-flagging it the same way going forward unless it reads
+// wrong live. One more small nudge left after that, to 540 — then a
+// nudge back the other way, to 560, after the user clarified they'd
+// actually meant right — then set directly to 600, then 650, then 670,
+// per successive requests.
+const TERR_PORCH_GUY_SRC_CENTER_X = 670;
+// Shifted from 800 to 1746 (2026-09-07) — the +946 the canvas-extension
+// section above added to the top of the image moved every existing
+// y-anchor down by that same amount, since none of the real content
+// moved, only the blank space above it grew. Horizontal anchors (CENTER_X
+// above) are untouched — the extension only added rows, not columns.
+const TERR_PORCH_GUY_SRC_FLOOR_Y = 1746;
 // Scaled from the previous house's 125 by the same ratio as the two
 // images' heights (1316/1198) so the character keeps the same visual
 // size relative to the porch rather than shrinking/growing with the
@@ -1392,8 +1474,14 @@ const TERR_PORCH_GUY_SRC_HEIGHT = 137;
 // Source-pixel units (like the anchors above), so it scales consistently
 // with everything else instead of drifting at different screen sizes.
 // Scaled from 34 by the same 1316/1198 ratio as the height above, to
-// preserve the same lift-to-height proportion on the new art.
-const TERR_PORCH_GUY_LIFT = 37;
+// preserve the same lift-to-height proportion on the new art. Reduced
+// (2026-09-07) from 37 to 20, then to 8, then to 3, then to -2, across
+// four rounds of user feedback to nudge him further down — less lift
+// means guyBottom (= (FLOOR_Y - LIFT) * scale) grows, which moves him
+// further down toward the floor line. Negative is fine here — it's just
+// added back to FLOOR_Y rather than subtracted, nudging him slightly
+// past the originally-measured floor line rather than up off of it.
+const TERR_PORCH_GUY_LIFT = -2;
 
 // Mailbox hold-target, measured the same way as the porch-guy anchors
 // above (fixed pixel coordinates in TERR_HOUSE_IMAGE's own 1086x1316
@@ -1402,10 +1490,12 @@ const TERR_PORCH_GUY_LIFT = 37;
 // endpoint stay locked to the mailbox regardless of screen size.
 // Re-measured (2026-09-04) for the new house art: the mailbox box's post
 // sits at source x~552, and its blue box reads from y~807 (roof edge)
-// down to y~913 (where it gives way to the white post beneath).
+// down to y~913 (where it gives way to the white post beneath). Both Y
+// values shifted by +946 (2026-09-07, same canvas-extension shift as
+// TERR_PORCH_GUY_SRC_FLOOR_Y above — see that comment).
 const TERR_MAILBOX_SRC_CENTER_X = 552;
-const TERR_MAILBOX_SRC_TOP_Y = 807;
-const TERR_MAILBOX_SRC_BOTTOM_Y = 913;
+const TERR_MAILBOX_SRC_TOP_Y = 1753;
+const TERR_MAILBOX_SRC_BOTTOM_Y = 1859;
 
 // Where the dog character stands — the paved road at the very bottom of
 // TERR_HOUSE_IMAGE (measured by color-sampling the curb/asphalt line).
@@ -1416,7 +1506,9 @@ const TERR_MAILBOX_SRC_BOTTOM_Y = 913;
 // Re-measured (2026-09-04) for the new house art: the sidewalk gives way
 // to the road at source y~1195-1200, so 1255 sits comfortably inside the
 // road band below that, matching the old image's ~60px curb clearance.
-const TERR_DOG_SRC_Y = 1255;
+// Shifted by +946 (2026-09-07, same canvas-extension shift as the other
+// Y anchors above).
+const TERR_DOG_SRC_Y = 2201;
 // Emoji glyphs don't have their own aspect/anchor data like the PNG
 // stages, so this is just a chosen on-screen size in the same
 // source-pixel scale as everything else, tuned to look proportionate
@@ -1424,10 +1516,23 @@ const TERR_DOG_SRC_Y = 1255;
 // was tuned against the old mailbox's 92px-tall box; scaled up to 127 to
 // match the new mailbox's ~106px-tall box at the same proportion.
 const TERR_DOG_SRC_HEIGHT = 127;
+// Purpose-drawn art for this scene's dog (2026-09-07), replacing the
+// earlier approach of borrowing the player's own pet's avatar/walk-cycle
+// art as a stand-in — this pair was hand-drawn specifically as this dog's
+// two states: standing/walking, and the leg-lifted "marking" pose used at
+// the mailbox. Background was keyed out to transparent and each image
+// trimmed to its own content, same treatment as the porch-guy stage art
+// above. Source art faces left (nose toward the left edge of the frame),
+// so TerritoryDog flips it horizontally to face right toward the mailbox,
+// same as the emoji fallback below always needed.
+const TERR_DOG_IDLE_IMAGE = require("../../assets/images/territory-dog-idle.png");
+const TERR_DOG_PEEING_IMAGE = require("../../assets/images/territory-dog-peeing.png");
+// Fallback only, for the (currently unreachable) case TerritoryDog is ever
+// used without the art above — kept as a cheap safety net rather than
+// deleted outright.
 const TERR_DOG_EMOJI = "🐕";
 const TERR_DOG_ENTRANCE_MS = 1200;
 const TERR_DOG_HOP_MS = 150;
-const TERR_DOG_LEG_LIFT_MS = 160;
 
 // How often the neighbor's attentiveness advances a stage, in ms — a
 // random value in this range is rolled after every tick so the rhythm
@@ -1593,21 +1698,25 @@ function TerritoryPeeStream({
   );
 }
 
-// The dog itself — an emoji character (no new image asset) that hops in
-// from off-screen left along the road once on mount, settles at its
-// resting spot under the mailbox, and lifts a leg (a rotate+lift proxy —
-// an emoji glyph can't swap poses like the drawn porch-guy stages can)
-// whenever the player is holding the mailbox.
+// The dog itself — hops in from off-screen left along the road once on
+// mount, settles at its resting spot under the mailbox, and swaps to the
+// leg-lifted "marking" pose image (TERR_DOG_PEEING_IMAGE) whenever the
+// player is holding the mailbox, same discrete-pose-swap pattern the
+// porch-guy stages use rather than faking a pose with a rotate transform.
 function TerritoryDog({
   x,
   y,
   size,
   isHolding,
+  idleImage,
+  peeingImage,
 }: {
   x: number;
   y: number;
   size: number;
   isHolding: boolean;
+  idleImage?: ImageSourcePropType;
+  peeingImage?: ImageSourcePropType;
 }) {
   // 0 -> 1 once, on mount: carries the entrance slide from off-screen left
   // to the resting spot. Never replayed after that — he's already there
@@ -1617,8 +1726,6 @@ function TerritoryDog({
   // makes the approach read as a hop/trot rather than a flat slide across
   // the screen. Stopped and zeroed once he arrives.
   const hop = useRef(new Animated.Value(0)).current;
-  // 0 = standing normally, 1 = leg-lifted "marking" pose.
-  const legLift = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const hopLoop = Animated.loop(
@@ -1637,17 +1744,11 @@ function TerritoryDog({
       hopLoop.stop();
       hop.setValue(0);
     });
-    return () => hopLoop.stop();
+    return () => {
+      hopLoop.stop();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    Animated.timing(legLift, {
-      toValue: isHolding ? 1 : 0,
-      duration: TERR_DOG_LEG_LIFT_MS,
-      useNativeDriver: true,
-    }).start();
-  }, [isHolding, legLift]);
 
   // How far left (in screen px) the entrance has to start from to
   // guarantee he's actually off-screen, not just off *his resting spot* —
@@ -1660,33 +1761,51 @@ function TerritoryDog({
   // how wide the container actually is.
   const entranceStartX = -(x + size);
 
+  // Which pose is showing right now. Recomputed every render (not cached)
+  // so it tracks isHolding live, same as the porch guy swapping stage
+  // images. Each pose is its own trimmed art with its own aspect ratio
+  // (the peeing pose's raised leg makes it wider/shorter than idle), read
+  // via Image.resolveAssetSource (synchronous for a local require(), no
+  // network/async involved) rather than hardcoded — `size` continues to
+  // mean the on-screen HEIGHT budget; width follows from that + aspect.
+  const poseImage = isHolding && peeingImage ? peeingImage : idleImage;
+  const aspect = poseImage ? Image.resolveAssetSource(poseImage).width / Image.resolveAssetSource(poseImage).height : 1;
+  const width = size * aspect;
+
+  const content = poseImage ? (
+    <Image source={poseImage} style={{ width, height: size }} resizeMode="contain" />
+  ) : (
+    // Fallback — only reachable if TerritoryDog is ever used without the
+    // dedicated pose art above.
+    <Text style={{ fontSize: size, lineHeight: size }}>{TERR_DOG_EMOJI}</Text>
+  );
+
   return (
     <Animated.View
       pointerEvents="none"
       style={{
         position: "absolute",
-        left: x - size / 2,
+        left: x - width / 2,
         top: y - size,
-        width: size,
+        width,
         height: size,
         alignItems: "center",
         justifyContent: "center",
         transform: [
           // World-space move across the screen for the entrance — listed
-          // before the local flip/rotate below so it isn't affected by
-          // them (transform functions compose local-to-world in reverse
-          // list order, same as CSS): he always enters from the left
-          // regardless of which way he's facing.
+          // before the local flip below so it isn't affected by it
+          // (transform functions compose local-to-world in reverse list
+          // order, same as CSS): he always enters from the left regardless
+          // of which way he's facing.
           { translateX: entrance.interpolate({ inputRange: [0, 1], outputRange: [entranceStartX, 0] }) },
           { translateY: hop.interpolate({ inputRange: [0, 1], outputRange: [0, -8] }) },
-          // The raw glyph faces left; flipped so he faces right, toward
-          // the mailbox he's walking up to and, later, marking.
+          // Both the pose art and the emoji fallback face left in their
+          // source form, so always flip to face right toward the mailbox.
           { scaleX: -1 },
-          { rotate: legLift.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "-16deg"] }) },
         ],
       }}
     >
-      <Text style={{ fontSize: size, lineHeight: size }}>{TERR_DOG_EMOJI}</Text>
+      {content}
     </Animated.View>
   );
 }
@@ -1871,49 +1990,77 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
   // on every platform.
   const [layout, setLayout] = useState<{ width: number; height: number } | null>(null);
 
-  // Scale is always locked to the container's HEIGHT (never the width).
-  // That guarantees the full scene — roofline all the way down to the
-  // street — is always in frame, on every device: a plain resizeMode
-  // "cover" fill (scale = max(width ratio, height ratio)) crops whichever
-  // axis is "extra" once the other is filled, and on a wide/landscape
-  // window that's the height — the roof and the street both get cut off,
-  // leaving a tight, zoomed-in crop of just the porch. Locking to height
-  // means the box's WIDTH is what adjusts instead: on a tall phone
-  // viewport the scaled image ends up wider than the box and the sides
-  // get cropped (same look as before there — phones were already
-  // height-bound under plain cover); on a wide desktop window the scaled
-  // image ends up narrower than the box and the leftover width is
-  // letterboxed (centered, with the container's own background color
-  // showing on each side) instead of ever cropping the top or bottom.
-  const scale = layout ? layout.height / TERR_HOUSE_IMG_HEIGHT : 0;
+  // Scale is locked to the container's HEIGHT (never the width) — see the
+  // long history in the TERR_HOUSE_IMG_WIDTH/_HEIGHT comment above for
+  // how this stopped being a real width-vs-height tradeoff once the
+  // canvas itself was extended to a phone-like aspect ratio: two earlier
+  // 2026-09-07 attempts (a straight zoom-out, then a never-crop "contain"
+  // fit) both fought the SAME underlying mismatch — this art's original
+  // 1086x1316 proportions vs. a phone screen's — by shrinking/reflowing
+  // the rendered scene at runtime, which unavoidably traded one visible
+  // gap (top letterbox) against another (side crop, hiding the fence).
+  // Fixing the source image's own aspect ratio instead means a plain
+  // height-locked fit already lands close to full-width on real phone
+  // sizes, so this is back to the simple original formula — just against
+  // a taller TERR_HOUSE_IMG_HEIGHT now. TERR_HOUSE_ZOOM stays as a small
+  // (2%) safety margin, not a load-bearing part of the fix anymore.
+  const scale = layout ? (layout.height / TERR_HOUSE_IMG_HEIGHT) * TERR_HOUSE_ZOOM : 0;
   const scaledHouseWidth = TERR_HOUSE_IMG_WIDTH * scale;
+  const scaledHouseHeight = TERR_HOUSE_IMG_HEIGHT * scale;
   // Positive = letterboxed (image narrower than box, padded left/right).
   // Negative = cropped (image wider than box, overflow clipped left/right
-  // by territoryFullScreen's own overflow:"hidden").
+  // by territoryFullScreen's own overflow:"hidden") — the normal case on
+  // a narrow phone screen, per the tradeoff explained above.
   const houseOffsetX = layout ? (layout.width - scaledHouseWidth) / 2 : 0;
+  // Vertically, though, NOT centered — pinned to the BOTTOM instead (all
+  // the leftover height goes above the roofline as top-only letterboxing,
+  // none below the street) per user feedback that centering it left a
+  // visible gap of the screen's own background peeking out beneath the
+  // road. The full gap (layout.height - scaledHouseHeight) sits above the
+  // house; the house's own bottom edge (the street) then lands exactly on
+  // the container's bottom edge, same as the original always-flush-top
+  // height-locked behavior did on wide screens, just flipped to flush-
+  // bottom so the letterboxing (when there is any) reads as "sky/margin
+  // above the roof" instead of "gap below the road."
+  const houseOffsetY = layout ? layout.height - scaledHouseHeight : 0;
+
+  // At TERR_HOUSE_ZOOM=1, scaledHouseHeight is algebraically identical to
+  // layout.height (TERR_HOUSE_IMG_HEIGHT * (layout.height /
+  // TERR_HOUSE_IMG_HEIGHT) === layout.height) so houseOffsetY should be
+  // exactly 0 — but the user still reported a faint blue sliver at the
+  // top on real mobile viewports even with that. Not the same tradeoff
+  // as before: this is float/sub-pixel rounding (the container and the
+  // absolutely-positioned image can each round their computed height to
+  // the nearest device pixel independently, e.g. web `vh` units and RN's
+  // own layout rounding don't always agree to the sub-pixel), not a
+  // deliberate percentage-of-height shrink like TERR_HOUSE_ZOOM was. A
+  // fixed few-pixel overscan applied only to the rendered <Image>'s own
+  // top/height (not to houseOffsetY itself, which every other anchor
+  // — porch guy, mailbox, dog — still keys off) guarantees the image
+  // always overshoots the container's top edge by a hair regardless of
+  // rounding, and resizeMode="cover" just crops that sliver of extra
+  // content off invisibly rather than stretching anything.
+  const houseTopOverscan = 3;
 
   const guyHeight = TERR_PORCH_GUY_SRC_HEIGHT * scale;
   const guyWidth = guyHeight * currentNeighborStage.aspect;
   const guyLeft = TERR_PORCH_GUY_SRC_CENTER_X * scale + houseOffsetX - guyWidth / 2;
-  // No vertical offset needed — the house image's top always sits flush
-  // with the container's top (height is matched exactly), so the source
-  // floor-line anchor maps straight through the scale factor.
-  const guyBottom = (TERR_PORCH_GUY_SRC_FLOOR_Y - TERR_PORCH_GUY_LIFT) * scale;
+  const guyBottom = (TERR_PORCH_GUY_SRC_FLOOR_Y - TERR_PORCH_GUY_LIFT) * scale + houseOffsetY;
   const guyTop = guyBottom - guyHeight;
 
   // Mailbox on-screen position, from the fixed source-pixel anchors above
   // — same scale/offset math as the porch guy, so it stays locked to the
   // mailbox art regardless of screen size.
   const mailboxCenterX = TERR_MAILBOX_SRC_CENTER_X * scale + houseOffsetX;
-  const mailboxTopY = TERR_MAILBOX_SRC_TOP_Y * scale;
-  const mailboxBottomY = TERR_MAILBOX_SRC_BOTTOM_Y * scale;
+  const mailboxTopY = TERR_MAILBOX_SRC_TOP_Y * scale + houseOffsetY;
+  const mailboxBottomY = TERR_MAILBOX_SRC_BOTTOM_Y * scale + houseOffsetY;
   const mailboxMidY = (mailboxTopY + mailboxBottomY) / 2;
 
   // Dog's on-screen position — same x column as the mailbox (see the
   // constant's comment above), standing on the road below it. Size is
   // clamped so he doesn't shrink to nothing on a very short/letterboxed
   // layout.
-  const dogY = TERR_DOG_SRC_Y * scale;
+  const dogY = TERR_DOG_SRC_Y * scale + houseOffsetY;
   const dogSize = Math.max(46, TERR_DOG_SRC_HEIGHT * scale);
 
   return (
@@ -1927,24 +2074,30 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
       {layout && (
         <>
           {/* Sized to the exact scaled dimensions computed above (height
-              locked to the container, width following the source aspect
-              ratio) and offset by houseOffsetX, rather than filling the
-              container and letting resizeMode do the fit/crop — React
-              Native Web's Image, given StyleSheet.absoluteFillObject or
-              any style without explicit width/height, falls back to the
-              source asset's own natural pixel size instead of filling its
-              parent (confirmed live via DOM inspection), so explicit
-              numeric dimensions are what's needed on web regardless. Since
+              locked to the container, times TERR_HOUSE_ZOOM, width
+              following the source aspect ratio) and offset by
+              houseOffsetX/houseOffsetY (bottom-anchored vertically,
+              centered horizontally), rather than filling the container
+              and letting resizeMode do the fit/crop — React Native Web's
+              Image, given StyleSheet.absoluteFillObject or any style
+              without explicit width/height, falls back to the source
+              asset's own natural pixel size instead of filling its parent
+              (confirmed live via DOM inspection), so explicit numeric
+              dimensions are what's needed on web regardless. Since
               width/height here already match the source aspect exactly,
               resizeMode has no extra fitting left to do. */}
           <Image
             source={TERR_HOUSE_IMAGE}
             style={{
               position: "absolute",
-              top: 0,
+              // top/height overshoot the container's real top edge by
+              // houseTopOverscan (see that constant's comment above) to
+              // absorb sub-pixel rounding — houseOffsetY/scaledHouseHeight
+              // themselves (used by every other anchor) are untouched.
+              top: houseOffsetY - houseTopOverscan,
               left: houseOffsetX,
               width: scaledHouseWidth,
-              height: layout.height,
+              height: scaledHouseHeight + houseTopOverscan,
             }}
             resizeMode="cover"
           />
@@ -1954,7 +2107,14 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
             resizeMode="stretch"
           />
 
-          <TerritoryDog x={mailboxCenterX} y={dogY} size={dogSize} isHolding={isHolding && !isCaught} />
+          <TerritoryDog
+            x={mailboxCenterX}
+            y={dogY}
+            size={dogSize}
+            isHolding={isHolding && !isCaught}
+            idleImage={TERR_DOG_IDLE_IMAGE}
+            peeingImage={TERR_DOG_PEEING_IMAGE}
+          />
 
           {isHolding && !isCaught && !isComplete && (
             <TerritoryPeeStream x={mailboxCenterX} bottomY={dogY} topY={mailboxMidY} />
