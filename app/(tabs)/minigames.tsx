@@ -1,4 +1,4 @@
-import { useFocusEffect, useNavigation } from "expo-router/react-navigation";
+import { useFocusEffect, useNavigation } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
@@ -1509,6 +1509,20 @@ const TERR_MAILBOX_SRC_BOTTOM_Y = 1859;
 // Shifted by +946 (2026-09-07, same canvas-extension shift as the other
 // Y anchors above).
 const TERR_DOG_SRC_Y = 2201;
+// Where the dog stands while actively marking (isHolding is true) —
+// beside the mailbox post itself rather than his far-away resting spot
+// on the road, so the peeing pose reads as him actually marking the
+// mailbox instead of aiming a long stream at it from the street.
+// TERR_MAILBOX_SRC_BOTTOM_Y is only where the visible blue box gives way
+// to the post beneath it, not where the post meets the ground — no exact
+// "post meets lawn" pixel has been measured for this art, so the Y offset
+// below is an approximation. The X offset stands him to the mailbox's
+// right rather than directly in front of the post, so both stay visible.
+// Nudge either by eye if he doesn't land right at the post's base.
+const TERR_DOG_AT_MAILBOX_Y = TERR_MAILBOX_SRC_BOTTOM_Y + 130;
+const TERR_DOG_AT_MAILBOX_X_OFFSET = 70;
+// How long the slide to/from the mailbox takes when isHolding toggles.
+const TERR_DOG_APPROACH_MS = 220;
 // Emoji glyphs don't have their own aspect/anchor data like the PNG
 // stages, so this is just a chosen on-screen size in the same
 // source-pixel scale as everything else, tuned to look proportionate
@@ -1527,6 +1541,35 @@ const TERR_DOG_SRC_HEIGHT = 127;
 // same as the emoji fallback below always needed.
 const TERR_DOG_IDLE_IMAGE = require("../../assets/images/territory-dog-idle.png");
 const TERR_DOG_PEEING_IMAGE = require("../../assets/images/territory-dog-peeing.png");
+// Known intrinsic aspect ratios (width / height) for the two pose images,
+// measured from the source PNGs. Used as the web fallback below since
+// react-native-web's Image has no resolveAssetSource to read this from the
+// asset itself — native keeps reading the exact value from the asset.
+const TERR_DOG_IDLE_ASPECT = 1029 / 821;
+const TERR_DOG_PEEING_ASPECT = 1056 / 781;
+// Hand-drawn pee-stream + splash animation (user-provided sprite sheet,
+// 2026-09-08): 6 frames, each de-keyed to a transparent background and
+// cropped to a shared union bounding box so every frame lines up exactly
+// the same way (same treatment as the porch-guy/dog art above — no
+// per-frame jitter from mismatched crops). Drawn top-to-bottom (stream
+// falling from the top of the frame into a splash at the bottom), which
+// is why TerritoryPeeStream below anchors the top of this art to the dog
+// and the bottom to the mailbox, then rotates the whole strip to point
+// between wherever those two things actually are on screen.
+const TERR_PEE_STREAM_FRAMES = [
+  require("../../assets/images/territory-pee-stream-1.png"),
+  require("../../assets/images/territory-pee-stream-2.png"),
+  require("../../assets/images/territory-pee-stream-3.png"),
+  require("../../assets/images/territory-pee-stream-4.png"),
+  require("../../assets/images/territory-pee-stream-5.png"),
+  require("../../assets/images/territory-pee-stream-6.png"),
+];
+// Measured intrinsic size of the cropped frames above (width / height) —
+// same web-fallback reasoning as TERR_DOG_IDLE_ASPECT: react-native-web
+// has no resolveAssetSource, so the aspect is hardcoded here instead of
+// read from the asset at runtime.
+const TERR_PEE_STREAM_FRAME_ASPECT = 249 / 295;
+const TERR_PEE_STREAM_FPS = 10;
 // Fallback only, for the (currently unreachable) case TerritoryDog is ever
 // used without the art above — kept as a cheap safety net rather than
 // deleted outright.
@@ -1543,12 +1586,14 @@ const TERR_DOG_HOP_MS = 150;
 // asked for) but the ceiling was raised a lot, roughly tripling the
 // average wait between stage changes (was ~2000ms, now ~4200ms) and
 // widening the spread so the rhythm reads as genuinely unpredictable
-// rather than a narrow, easy-to-learn band. Keeping the floor unchanged
-// also keeps the fairness invariant on TERR_MARK_FILL_MS below intact
-// with no other numbers needing to move: the guaranteed-worst-case
-// time-to-bust (4 stage advances all rolling the minimum) is still
-// 4 x TERR_STAGE_MIN_INTERVAL_MS = 5600ms, unchanged from before.
-const TERR_STAGE_MIN_INTERVAL_MS = 1400;
+// rather than a narrow, easy-to-learn band.
+// Floor raised again (2026-09-08) alongside TERR_MARK_FILL_MS below going
+// up, to preserve the same fairness invariant that constant's comment
+// describes: the guaranteed-worst-case time-to-bust (4 stage advances all
+// rolling the minimum) is 4 x TERR_STAGE_MIN_INTERVAL_MS = 8000ms, kept
+// comfortably above the new, longer fill time so holding continuously
+// from a fresh round can still always finish even on the unluckiest roll.
+const TERR_STAGE_MIN_INTERVAL_MS = 2000;
 const TERR_STAGE_MAX_INTERVAL_MS = 7000;
 
 // Coins for releasing safely before he reaches the last (most-attentive)
@@ -1561,12 +1606,14 @@ const TERR_MARK_REWARD = 5;
 // accrues while the mailbox is actively held, but is never reset by
 // releasing — same no-arbitrary-resets philosophy as the neighbor's
 // attentiveness clock (see the fix-round note above) — so several short
-// holds add up exactly like one long one. Kept below the *minimum*
-// possible time-to-bust (4 stage advances x TERR_STAGE_MIN_INTERVAL_MS =
-// 5600ms) so a player who holds continuously from a fresh round can
-// always finish in time on an unlucky-fast roll; slower rolls just add
-// margin. Ticks every TERR_MARK_TICK_MS while held.
-const TERR_MARK_FILL_MS = 5000;
+// holds add up exactly like one long one. Raised from 5000 (2026-09-08,
+// per feedback) to make marking take noticeably longer — still kept below
+// the *minimum* possible time-to-bust (4 stage advances x
+// TERR_STAGE_MIN_INTERVAL_MS = 8000ms, see that constant's comment, which
+// was raised alongside this one) so a player who holds continuously from
+// a fresh round can always finish in time on an unlucky-fast roll; slower
+// rolls just add margin. Ticks every TERR_MARK_TICK_MS while held.
+const TERR_MARK_FILL_MS = 7500;
 const TERR_MARK_TICK_MS = 100;
 
 // One-time bonus for fully filling the meter (completing the round)
@@ -1613,110 +1660,125 @@ function TerritoryMailboxHint({ x, midY }: { x: number; midY: number }) {
   );
 }
 
-// Simple placeholder "pee" stream — a thin translucent line from the
-// player's implied position at the bottom of the scene up to the
-// mailbox, plus a few small droplets rising along it on a staggered
-// loop. Mounted only while actively holding, so its animations start
+// The pee-stream effect: cycles through the hand-drawn 6-frame sprite
+// (TERR_PEE_STREAM_FRAMES) stretched and rotated into a strip that runs
+// from the dog's actual current position to the mailbox, so it reads as
+// coming out of him rather than a line drawn from a fixed screen spot.
+// The art is drawn top-to-bottom (stream at top, splash at bottom), so
+// `origin` (the dog) anchors the top of the strip and `target` (the
+// mailbox) anchors the bottom; the strip is then rotated around its own
+// center so that top-to-bottom axis points exactly from origin to target,
+// covering every relative position the two could be in (left/right of
+// each other, closer/farther) without needing a separate mirrored asset.
+// Frame-cycling reuses the same rAF-driven, drift-free approach as
+// WalkingSprite, reimplemented inline rather than wrapping that component
+// directly since its built-in bob/sway gait motion doesn't belong on a
+// liquid effect. Mounted only while actively holding, so playback starts
 // fresh each time rather than needing an internal enabled/disabled gate.
 function TerritoryPeeStream({
-  x,
-  bottomY,
-  topY,
+  originX,
+  originY,
+  targetX,
+  targetY,
 }: {
-  x: number;
-  bottomY: number;
-  topY: number;
+  originX: number;
+  originY: number;
+  targetX: number;
+  targetY: number;
 }) {
-  const drop1 = useRef(new Animated.Value(0)).current;
-  const drop2 = useRef(new Animated.Value(0)).current;
-  const drop3 = useRef(new Animated.Value(0)).current;
-  const trunkPulse = useRef(new Animated.Value(0)).current;
+  const [frameIndex, setFrameIndex] = useState(0);
 
   useEffect(() => {
-    const makeDropLoop = (val: Animated.Value, delay: number) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(delay),
-          Animated.timing(val, { toValue: 1, duration: 600, useNativeDriver: true }),
-          Animated.timing(val, { toValue: 0, duration: 0, useNativeDriver: true }),
-        ])
-      );
-    const anims = [
-      makeDropLoop(drop1, 0),
-      makeDropLoop(drop2, 200),
-      makeDropLoop(drop3, 400),
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(trunkPulse, { toValue: 1, duration: 350, useNativeDriver: true }),
-          Animated.timing(trunkPulse, { toValue: 0, duration: 350, useNativeDriver: true }),
-        ])
-      ),
-    ];
-    anims.forEach((a) => a.start());
-    return () => anims.forEach((a) => a.stop());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const frameDuration = 1000 / TERR_PEE_STREAM_FPS;
+    let rafId: number;
+    let lastTime: number | null = null;
+    let stopped = false;
+
+    const tick = (time: number) => {
+      if (stopped) return;
+      if (lastTime === null) lastTime = time;
+      const elapsed = time - lastTime;
+      if (elapsed >= frameDuration) {
+        const steps = Math.floor(elapsed / frameDuration);
+        lastTime += steps * frameDuration;
+        setFrameIndex((prev) => (prev + steps) % TERR_PEE_STREAM_FRAMES.length);
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => {
+      stopped = true;
+      cancelAnimationFrame(rafId);
+    };
   }, []);
 
-  const dropStyle = (val: Animated.Value, xOffset: number) => ({
-    position: "absolute" as const,
-    top: 0,
-    left: x + xOffset - 3,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#F5E050",
-    opacity: val.interpolate({
-      inputRange: [0, 0.15, 0.85, 1],
-      outputRange: [0, 1, 1, 0],
-    }),
-    transform: [
-      {
-        translateY: val.interpolate({ inputRange: [0, 1], outputRange: [bottomY, topY] }),
-      },
-    ],
-  });
+  const dx = targetX - originX;
+  const dy = targetY - originY;
+  const distance = Math.max(Math.hypot(dx, dy), 1);
+  // Rotation (degrees, clockwise per RN/CSS convention) that points the
+  // strip's built-in top-to-bottom ("down") axis at (dx, dy) instead of
+  // straight down — see the derivation in the component doc comment above:
+  // rotating (0, 1) clockwise by theta gives (-sin theta, cos theta), so
+  // matching that to (dx, dy) needs theta = atan2(-dx, dy).
+  const angleDeg = (Math.atan2(-dx, dy) * 180) / Math.PI;
+  const height = distance;
+  const width = distance * TERR_PEE_STREAM_FRAME_ASPECT;
+  const centerX = (originX + targetX) / 2;
+  const centerY = (originY + targetY) / 2;
 
   return (
-    <>
-      <Animated.View
-        pointerEvents="none"
-        style={{
-          position: "absolute",
-          left: x - 2,
-          top: topY,
-          width: 4,
-          height: Math.max(bottomY - topY, 0),
-          borderRadius: 2,
-          backgroundColor: "#F5E050",
-          opacity: trunkPulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.55] }),
-        }}
+    <View
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        left: centerX - width / 2,
+        top: centerY - height / 2,
+        width,
+        height,
+        transform: [{ rotate: `${angleDeg}deg` }],
+      }}
+    >
+      <Image
+        source={TERR_PEE_STREAM_FRAMES[frameIndex]}
+        // Mirrored left-right in its own local space — independent of the
+        // outer View's rotate above, which only orients the strip toward
+        // the target, so this flip doesn't change where the stream points.
+        style={{ width: "100%", height: "100%", transform: [{ scaleX: -1 }] }}
+        resizeMode="stretch"
       />
-      <Animated.View pointerEvents="none" style={dropStyle(drop1, -6)} />
-      <Animated.View pointerEvents="none" style={dropStyle(drop2, 0)} />
-      <Animated.View pointerEvents="none" style={dropStyle(drop3, 6)} />
-    </>
+    </View>
   );
 }
 
 // The dog itself — hops in from off-screen left along the road once on
-// mount, settles at its resting spot under the mailbox, and swaps to the
-// leg-lifted "marking" pose image (TERR_DOG_PEEING_IMAGE) whenever the
-// player is holding the mailbox, same discrete-pose-swap pattern the
-// porch-guy stages use rather than faking a pose with a rotate transform.
+// mount, settles at its resting spot under the mailbox, then steps up
+// right next to the mailbox post (and swaps to the leg-lifted "marking"
+// pose image, TERR_DOG_PEEING_IMAGE) whenever the player is holding the
+// mailbox, so marking reads as him actually at the mailbox rather than
+// aiming a stream at it from the street — and steps back to his resting
+// spot on release.
 function TerritoryDog({
-  x,
-  y,
+  restX,
+  restY,
+  atMailboxX,
+  atMailboxY,
   size,
   isHolding,
   idleImage,
   peeingImage,
+  idleAspect = 1,
+  peeingAspect = 1,
 }: {
-  x: number;
-  y: number;
+  restX: number;
+  restY: number;
+  atMailboxX: number;
+  atMailboxY: number;
   size: number;
   isHolding: boolean;
   idleImage?: ImageSourcePropType;
   peeingImage?: ImageSourcePropType;
+  idleAspect?: number;
+  peeingAspect?: number;
 }) {
   // 0 -> 1 once, on mount: carries the entrance slide from off-screen left
   // to the resting spot. Never replayed after that — he's already there
@@ -1726,6 +1788,12 @@ function TerritoryDog({
   // makes the approach read as a hop/trot rather than a flat slide across
   // the screen. Stopped and zeroed once he arrives.
   const hop = useRef(new Animated.Value(0)).current;
+  // 0 -> 1 while isHolding is true (and back on release): slides him from
+  // his resting spot up to right beside the mailbox post, additively on
+  // top of the entrance/hop above. Independent of those — can fire many
+  // times per round as the player presses in/out, unlike the one-shot
+  // entrance.
+  const atMailbox = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const hopLoop = Animated.loop(
@@ -1750,26 +1818,43 @@ function TerritoryDog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    Animated.timing(atMailbox, {
+      toValue: isHolding ? 1 : 0,
+      duration: TERR_DOG_APPROACH_MS,
+      useNativeDriver: true,
+    }).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHolding]);
+
   // How far left (in screen px) the entrance has to start from to
   // guarantee he's actually off-screen, not just off *his resting spot* —
   // a fixed offset (the original -180) wasn't enough on a wide/letterboxed
   // layout, where the mailbox (and so his resting x) can sit hundreds of
-  // px in from the real left edge. Derived from his own rest position (x)
-  // and size rather than the container width: starting at -(x + size)
-  // always places his right edge at x - size/2 - size, i.e. a full extra
-  // half-size past the screen's x=0 with margin to spare, regardless of
-  // how wide the container actually is.
-  const entranceStartX = -(x + size);
+  // px in from the real left edge. Derived from his own rest position
+  // (restX) and size rather than the container width: starting at
+  // -(restX + size) always places his right edge at restX - size/2 - size,
+  // i.e. a full extra half-size past the screen's x=0 with margin to
+  // spare, regardless of how wide the container actually is.
+  const entranceStartX = -(restX + size);
 
   // Which pose is showing right now. Recomputed every render (not cached)
   // so it tracks isHolding live, same as the porch guy swapping stage
   // images. Each pose is its own trimmed art with its own aspect ratio
   // (the peeing pose's raised leg makes it wider/shorter than idle), read
   // via Image.resolveAssetSource (synchronous for a local require(), no
-  // network/async involved) rather than hardcoded — `size` continues to
-  // mean the on-screen HEIGHT budget; width follows from that + aspect.
+  // network/async involved) on native. react-native-web doesn't implement
+  // resolveAssetSource at all (it throws "is not a function"), so on web
+  // we fall back to the pose's known intrinsic aspect ratio instead —
+  // `size` continues to mean the on-screen HEIGHT budget; width follows
+  // from that + aspect.
   const poseImage = isHolding && peeingImage ? peeingImage : idleImage;
-  const aspect = poseImage ? Image.resolveAssetSource(poseImage).width / Image.resolveAssetSource(poseImage).height : 1;
+  const fallbackAspect = isHolding && peeingImage ? peeingAspect : idleAspect;
+  const aspect = poseImage
+    ? Platform.OS === "web" || typeof Image.resolveAssetSource !== "function"
+      ? fallbackAspect
+      : Image.resolveAssetSource(poseImage).width / Image.resolveAssetSource(poseImage).height
+    : 1;
   const width = size * aspect;
 
   const content = poseImage ? (
@@ -1785,20 +1870,23 @@ function TerritoryDog({
       pointerEvents="none"
       style={{
         position: "absolute",
-        left: x - width / 2,
-        top: y - size,
+        left: restX - width / 2,
+        top: restY - size,
         width,
         height: size,
         alignItems: "center",
         justifyContent: "center",
         transform: [
-          // World-space move across the screen for the entrance — listed
-          // before the local flip below so it isn't affected by it
-          // (transform functions compose local-to-world in reverse list
-          // order, same as CSS): he always enters from the left regardless
-          // of which way he's facing.
+          // World-space moves across the screen — both listed before the
+          // local flip below so neither is affected by it (transform
+          // functions compose local-to-world in reverse list order, same
+          // as CSS): he always enters from the left regardless of which
+          // way he's facing, and slides the same screen-space amount to
+          // reach the mailbox regardless of facing too.
           { translateX: entrance.interpolate({ inputRange: [0, 1], outputRange: [entranceStartX, 0] }) },
+          { translateX: atMailbox.interpolate({ inputRange: [0, 1], outputRange: [0, atMailboxX - restX] }) },
           { translateY: hop.interpolate({ inputRange: [0, 1], outputRange: [0, -8] }) },
+          { translateY: atMailbox.interpolate({ inputRange: [0, 1], outputRange: [0, atMailboxY - restY] }) },
           // Both the pose art and the emoji fallback face left in their
           // source form, so always flip to face right toward the mailbox.
           { scaleX: -1 },
@@ -2056,12 +2144,22 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
   const mailboxBottomY = TERR_MAILBOX_SRC_BOTTOM_Y * scale + houseOffsetY;
   const mailboxMidY = (mailboxTopY + mailboxBottomY) / 2;
 
-  // Dog's on-screen position — same x column as the mailbox (see the
-  // constant's comment above), standing on the road below it. Size is
+  // Dog's resting on-screen position — same x column as the mailbox (see
+  // the constant's comment above), standing on the road below it. Size is
   // clamped so he doesn't shrink to nothing on a very short/letterboxed
   // layout.
-  const dogY = TERR_DOG_SRC_Y * scale + houseOffsetY;
+  const dogRestY = TERR_DOG_SRC_Y * scale + houseOffsetY;
   const dogSize = Math.max(46, TERR_DOG_SRC_HEIGHT * scale);
+  // Where he slides to while actively marking — right beside the mailbox
+  // post (see TERR_DOG_AT_MAILBOX_Y/X_OFFSET above).
+  const dogAtMailboxX = mailboxCenterX + TERR_DOG_AT_MAILBOX_X_OFFSET * scale;
+  const dogAtMailboxY = TERR_DOG_AT_MAILBOX_Y * scale + houseOffsetY;
+  // Width of the peeing-pose art at its current on-screen size, used below
+  // to offset the pee stream's origin toward the dog's rear rather than
+  // his horizontal center. He's flipped to face right (see TerritoryDog's
+  // scaleX: -1), so his rear/tail sits on the LEFT side of his own
+  // bounding box — conveniently the side closer to the mailbox already.
+  const dogPeeingWidth = dogSize * TERR_DOG_PEEING_ASPECT;
 
   return (
     <View
@@ -2108,16 +2206,37 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
           />
 
           <TerritoryDog
-            x={mailboxCenterX}
-            y={dogY}
+            restX={mailboxCenterX}
+            restY={dogRestY}
+            atMailboxX={dogAtMailboxX}
+            atMailboxY={dogAtMailboxY}
             size={dogSize}
             isHolding={isHolding && !isCaught}
             idleImage={TERR_DOG_IDLE_IMAGE}
             peeingImage={TERR_DOG_PEEING_IMAGE}
+            idleAspect={TERR_DOG_IDLE_ASPECT}
+            peeingAspect={TERR_DOG_PEEING_ASPECT}
           />
 
           {isHolding && !isCaught && !isComplete && (
-            <TerritoryPeeStream x={mailboxCenterX} bottomY={dogY} topY={mailboxMidY} />
+            // Origin is shifted toward the dog's rear (left, toward the
+            // mailbox, since he faces right) rather than his horizontal
+            // center, and raised to roughly back/hip height — high enough
+            // above the ground to give the stream real length to fall
+            // through. Target is TERR_DOG_AT_MAILBOX_Y (the same
+            // approximate "post meets ground" anchor the dog himself
+            // stands on) rather than mailboxBottomY (where the visible box
+            // meets the post): that point sits well ABOVE the dog, which
+            // made the stream visibly run uphill from him to the mailbox.
+            // Keeping the target at ground level — below the raised origin
+            // — keeps the flow reading top-to-bottom like actual falling
+            // liquid, landing at the base of the mailbox post.
+            <TerritoryPeeStream
+              originX={dogAtMailboxX - dogPeeingWidth * 0.4}
+              originY={dogAtMailboxY - dogSize * 0.4}
+              targetX={mailboxCenterX + dogSize * 0.12}
+              targetY={dogAtMailboxY + dogSize * 0.15}
+            />
           )}
           {!isHolding && !isCaught && !isComplete && (
             <TerritoryMailboxHint x={mailboxCenterX} midY={mailboxMidY} />
@@ -2171,12 +2290,40 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
       {/* Marking progress meter — fills while the mailbox is held (see
           handleMailboxPressIn) and never drains on release, only on Try
           Again / Play Again. Hidden once the round has already ended
-          either way, since neither overlay below needs it showing through. */}
+          either way, since neither overlay below needs it showing through.
+          Moved down onto the road (2026-09-08, was pinned under the top
+          safe-area inset alongside the exit button) and redesigned as a
+          small dark HUD "card" — a rounded, semi-opaque panel behind the
+          bar — so it stays legible against the road art at its new lower
+          spot instead of relying on empty sky behind it. */}
       {!isCaught && !isComplete && (
-        <View pointerEvents="none" style={[styles.territoryMeterWrap, { top: insets.top + 12 }]}>
-          <Text style={styles.territoryMeterLabel}>Marking progress</Text>
-          <View style={styles.territoryMeterTrack}>
-            <View style={[styles.territoryMeterFill, { width: `${markProgress * 100}%` }]} />
+        <View
+          pointerEvents="none"
+          style={[
+            styles.territoryMeterWrap,
+            // houseOffsetX (not just insets.left) so this lands on the
+            // actual house/road art rather than the blue letterbox
+            // background beside it — houseOffsetX is 0-or-negative on a
+            // real phone (the art is scaled to overflow width, no
+            // letterbox), where insets.left alone is already correct, but
+            // goes positive on a wide/landscape viewport (like a desktop
+            // browser during `expo start --web` testing), where the art
+            // is narrower than the screen and sits inset from the edges —
+            // exactly the case that was putting this outside the picture.
+            // The max() keeps it from ever landing off the left edge of
+            // the screen itself on the no-letterbox phone case.
+            { left: Math.max(houseOffsetX + 16, insets.left + 16), bottom: insets.bottom + 28 },
+          ]}
+        >
+          <View style={styles.territoryMeterCard}>
+            <Text style={styles.territoryMeterLabel}>🐾 Marking progress</Text>
+            <View style={styles.territoryMeterTrack}>
+              <View style={[styles.territoryMeterFill, { width: `${markProgress * 100}%` }]}>
+                {/* Thin lighter strip near the top of the fill — a cheap
+                    glossy-pill look without pulling in a gradient library. */}
+                <View style={styles.territoryMeterFillShine} />
+              </View>
+            </View>
           </View>
         </View>
       )}
@@ -2220,7 +2367,7 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
 
 const styles = StyleSheet.create({
   background: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
   },
 
   container: {
@@ -2727,33 +2874,54 @@ const styles = StyleSheet.create({
     textShadowRadius: 3,
   },
 
-  // Centered top-of-screen meter showing markProgress. left/right: 0 +
-  // alignItems: "center" centers it regardless of the bar's own fixed
-  // width, without needing to know the screen width up front.
+  // Anchored to `left`/`bottom` offsets (see the inline style at the call
+  // site) so it sits down on the road instead of the top-of-screen spot it
+  // used to occupy. Pulled over to the left edge (2026-09-08) rather than
+  // centered — centered put it right on top of the dog at his on-screen
+  // position. No `right`/alignItems centering needed: with only `left` set
+  // the box is exactly as wide as its card content.
   territoryMeterWrap: {
     position: "absolute",
-    left: 0,
-    right: 0,
+  },
+
+  // Dark rounded panel behind the label + bar — added when the meter moved
+  // down onto the road art, so it reads clearly against whatever happens
+  // to be behind it there instead of relying on plain sky. Sized down
+  // (2026-09-08) for mobile screens — this card sits off to the left at a
+  // fixed size regardless of screen width, so on a phone-width viewport
+  // the original size read as oversized/hard to keep track of at a glance.
+  territoryMeterCard: {
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    borderRadius: 12,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
     alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
 
   territoryMeterLabel: {
-    fontSize: 12,
+    fontSize: 9,
     fontWeight: "700",
     color: "#fff",
-    marginBottom: 4,
+    marginBottom: 3,
     textShadowColor: "rgba(0,0,0,0.45)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
 
   territoryMeterTrack: {
-    width: 180,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: "rgba(255,255,255,0.35)",
+    width: 110,
+    height: 11,
+    borderRadius: 6,
+    backgroundColor: "rgba(255,255,255,0.25)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.6)",
+    borderColor: "rgba(255,255,255,0.5)",
     overflow: "hidden",
   },
 
@@ -2763,12 +2931,27 @@ const styles = StyleSheet.create({
   // state-driven width keeps the two in lockstep with no extra machinery.
   territoryMeterFill: {
     height: "100%",
-    borderRadius: 7,
+    borderRadius: 6,
     backgroundColor: "#F5E050",
+    overflow: "hidden",
+  },
+
+  // Thin lighter strip near the top of the fill (see the JSX comment above
+  // it) — a cheap glossy-pill highlight, positioned/sized as an inset from
+  // the fill's own edges rather than a fixed on-screen size so it scales
+  // sensibly with territoryMeterTrack's height above.
+  territoryMeterFillShine: {
+    position: "absolute",
+    top: 1,
+    left: 1,
+    right: 1,
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: "rgba(255,255,255,0.55)",
   },
 
   territoryCaughtOverlay: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.45)",
     alignItems: "center",
     justifyContent: "center",

@@ -45,8 +45,6 @@
       ],
       "expo-font",
       "expo-video",
-      "expo-image",
-      "expo-status-bar",
       "expo-web-browser"
     ],
     "experiments": {
