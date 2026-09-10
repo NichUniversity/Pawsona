@@ -2,6 +2,7 @@ import { useFocusEffect, useNavigation } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
+  Easing,
   Image,
   ImageSourcePropType,
   PanResponder,
@@ -1577,6 +1578,104 @@ const TERR_DOG_EMOJI = "🐕";
 const TERR_DOG_ENTRANCE_MS = 1200;
 const TERR_DOG_HOP_MS = 150;
 
+// Ambient background birds (2026-09-10), purely decorative — no gameplay
+// tie-in, just life in the sky above the roofline. Hand-drawn 6-frame
+// wing-flap cycle (user-provided sheet, same 3x2-grid-of-poses shape as
+// the neighbor reference sheet was), each frame background-removed via
+// flood-fill from the border inward (threshold 30 against white) rather
+// than a global brightness cutoff — same reasoning as the dog-art cleanup
+// above, though this source had no enclosed light-colored content to
+// protect either way. Verified clean (one connected component per frame,
+// no cross-cell seam artifacts, no white halo on a sky-blue or dark
+// composite) before wiring in. Unlike the pee-stream frames (cropped to a
+// shared union bbox so that strip never changes size), each bird frame
+// keeps its OWN tight trim — the wings genuinely take up a different
+// silhouette width open vs. tucked, so letting width follow each frame's
+// own aspect at a fixed render height (same pattern TERR_PORCH_GUY_STAGES
+// and the dog's idle/peeing poses already use) reads as the wing motion
+// itself rather than a resize glitch.
+const TERR_BIRD_FRAMES = [
+  require("../../assets/images/territory-bird-1.png"),
+  require("../../assets/images/territory-bird-2.png"),
+  require("../../assets/images/territory-bird-3.png"),
+  require("../../assets/images/territory-bird-4.png"),
+  require("../../assets/images/territory-bird-5.png"),
+  require("../../assets/images/territory-bird-6.png"),
+];
+// Web fallback aspects (width/height), measured from the trimmed source
+// files — same reasoning as TERR_DOG_IDLE_ASPECT above: react-native-web
+// has no resolveAssetSource, so native reads the exact value from the
+// asset at runtime and web falls back to this hardcoded table instead.
+const TERR_BIRD_FRAME_ASPECTS = [320 / 261, 320 / 196, 320 / 187, 320 / 230, 320 / 205, 320 / 249];
+// A single fixed aspect used for the bird's on-screen BOX size (2026-09-10,
+// added after the user reported the bird visibly growing/shrinking through
+// its own wing-flap — sizing the box off each frame's own trim, as the
+// render originally did, means a wings-spread frame (aspect ~1.71) and a
+// wings-tucked one (~1.23) produce boxes ~40% apart in width at the same
+// fixed height, which reads as pulsing rather than flapping. Averaging all
+// 6 frames' aspects gives one representative box size that stays constant
+// for the whole animation; each frame's own true proportions still render
+// correctly and without distortion inside that fixed box via the Image's
+// existing resizeMode="contain" (letterboxed within the box rather than
+// stretched to fill it) — so the wing motion itself is unaffected, only
+// the surrounding box stops resizing frame to frame.
+const TERR_BIRD_FIXED_ASPECT =
+  TERR_BIRD_FRAME_ASPECTS.reduce((sum, a) => sum + a, 0) / TERR_BIRD_FRAME_ASPECTS.length;
+
+// Module-level cache for Image.resolveAssetSource(...).width/height lookups
+// (2026-09-10, added while chasing a "things go invisible/flashy after the
+// minigame screen's been open a while" report). TerritoryBird and
+// TerritoryDog both called resolveAssetSource fresh on every render to read
+// each pose/frame's exact aspect ratio — cheap-looking, but a real native
+// bridge round trip each time, and TerritoryBird's wing-flap cycling alone
+// was doing that up to 16x/second (2 birds x up to 8fps) for as long as
+// this screen stayed mounted, which — since switching to another bottom tab
+// doesn't actually unmount it (the tab navigator keeps inactive tab screens
+// alive) — could be far longer than the visible play time suggests. A
+// local require() resolves to a stable numeric module id on native, so it's
+// a safe cache key; on web (no resolveAssetSource at all) this is never
+// consulted, same as before. Caching removes the repeated bridge calls
+// without changing any visible sizing — same numbers, just computed once
+// per asset instead of every render/frame.
+const territoryAssetAspectCache = new Map<number, number>();
+function resolveTerritoryAssetAspect(source: ImageSourcePropType, fallbackAspect: number): number {
+  if (Platform.OS === "web" || typeof Image.resolveAssetSource !== "function") return fallbackAspect;
+  if (typeof source !== "number") {
+    // Not a local require() (shouldn't happen for this file's own art, but
+    // fall back rather than risk caching something that could change).
+    const resolved = Image.resolveAssetSource(source);
+    return resolved.width / resolved.height;
+  }
+  const cached = territoryAssetAspectCache.get(source);
+  if (cached !== undefined) return cached;
+  const resolved = Image.resolveAssetSource(source);
+  const aspect = resolved.width / resolved.height;
+  territoryAssetAspectCache.set(source, aspect);
+  return aspect;
+}
+
+const TERR_BIRD_FPS = 8;
+// On-screen size (the fixed HEIGHT budget — width follows each frame's own
+// aspect, see above), in the same everything-scales-with-screen-height
+// spirit as the dog/porch-guy, but not tied to any TERR_HOUSE_IMAGE source
+// pixel anchor the way those are — birds are free-floating sky decoration,
+// not registered against a specific spot in the art, so this is chosen
+// directly as a fraction of the container height in the render below
+// rather than scaled from a source-pixel constant.
+const TERR_BIRD_SIZE_FRACTION = 0.05;
+// Each bird flies a single crossing (TERR_BIRD_FLIGHT_MS-ish, tuned per
+// instance below) and then sits idle off-screen before flying again. The
+// idle wait is re-rolled fresh after every flight to a random value in
+// [_MIN_CYCLE_MS, _MAX_CYCLE_MS] — "fly by at random" (per the user's ask)
+// rather than a fixed ~10s metronome — same random-interval-per-tick
+// pattern TERR_STAGE_MIN/MAX_INTERVAL_MS already uses for the neighbor's
+// attentiveness clock. The range is centered around the original ~10s ask
+// (average wait ≈ 11s) so it still feels like "about every 10 seconds,"
+// just not mechanically so.
+const TERR_BIRD_CYCLE_MIN_MS = 6000;
+const TERR_BIRD_CYCLE_MAX_MS = 16000;
+const TERR_BIRD_FLIGHT_MS = 4200;
+
 // How often the neighbor's attentiveness advances a stage, in ms — a
 // random value in this range is rolled after every tick so the rhythm
 // isn't perfectly predictable, but never so fast/slow it feels unfair.
@@ -1621,6 +1720,14 @@ const TERR_MARK_TICK_MS = 100;
 // since it's the round's actual win condition, same idea as Minesweeper's
 // WIN_REWARD vs. its smaller incidental rewards.
 const TERR_COMPLETE_REWARD = 20;
+
+// Marking-meter redesign (2026-09-10): once markProgress crosses this
+// fraction, the meter card gets a pulsing amber glow — a visual "almost
+// there" urgency cue, the win-side counterpart to the neighbor's own
+// approaching-bust tension (there's still no equivalent cue for THAT risk,
+// see the open-follow-ups note elsewhere in the project doc — this only
+// covers the meter).
+const TERR_METER_URGENT_THRESHOLD = 0.85;
 
 // A gentle pulsing ring around the mailbox while nothing else is going
 // on, purely so the touch target reads as tappable at a glance. Mounted
@@ -1750,6 +1857,181 @@ function TerritoryPeeStream({
   );
 }
 
+// One ambient background bird: cycles the 6-frame wing-flap sprite on an
+// rAF loop (same drift-free approach as TerritoryPeeStream's frame-cycling
+// above) while making a single crossing of the sky at constant speed
+// (Easing.linear), then sits idle off-screen for a randomized wait before
+// flying again — "fly by at random" (per the user's ask), rather than
+// either an endless back-to-back stream or a metronomic fixed interval.
+// `direction` controls both which edge he starts/ends at and whether the
+// art (drawn facing right in its source form, same orientation as every
+// other character in this file) gets flipped to face left. Purely
+// decorative — no gameplay tie-in, mounted unconditionally alongside the
+// rest of the scene once it's laid out.
+function TerritoryBird({
+  containerWidth,
+  y,
+  size,
+  direction,
+  flightMs,
+  minCycleMs,
+  maxCycleMs,
+  startDelayMs = 0,
+}: {
+  containerWidth: number;
+  y: number;
+  size: number;
+  direction: "left-to-right" | "right-to-left";
+  flightMs: number;
+  minCycleMs: number;
+  maxCycleMs: number;
+  startDelayMs?: number;
+}) {
+  const [frameIndex, setFrameIndex] = useState(0);
+  // 0 -> 1: one single crossing (see the scheduling useEffect below, which
+  // resets this to 0 and re-animates it up to 1 once per cycle rather than
+  // using Animated.loop — a loop can't insert an idle pause between
+  // iterations the way a manual setTimeout-driven repeat can).
+  const progress = useRef(new Animated.Value(0)).current;
+
+  // Wing-flap frame cycling — started/stopped by the flight-scheduling
+  // effect below, exactly bracketing each flight, rather than running for
+  // this component's entire mounted lifetime (2026-09-10, changed while
+  // chasing a "screen glitches/things go invisible after a while" report).
+  // The bird sits fully off-screen (see startX/endX below — progress is 0
+  // or 1 the whole time it isn't mid-flight) for the idle pause between
+  // flights, which with the random 6-17.6s cycle against a ~4.2-5.5s
+  // flight is 60-75% of the time — ticking invisible wing frames through
+  // that whole stretch, forever, for as long as this screen stays mounted
+  // (switching to another bottom tab doesn't unmount it — see the
+  // project doc), was pure wasted work: a React state update plus an
+  // aspect-ratio lookup up to 8x/second per bird, with nothing on screen
+  // to show for most of it.
+  const wingRafRef = useRef<number | null>(null);
+  const startWingFlap = () => {
+    if (wingRafRef.current !== null) return;
+    const frameDuration = 1000 / TERR_BIRD_FPS;
+    let lastTime: number | null = null;
+    const tick = (time: number) => {
+      if (lastTime === null) lastTime = time;
+      const elapsed = time - lastTime;
+      if (elapsed >= frameDuration) {
+        const steps = Math.floor(elapsed / frameDuration);
+        lastTime += steps * frameDuration;
+        setFrameIndex((prev) => (prev + steps) % TERR_BIRD_FRAMES.length);
+      }
+      wingRafRef.current = requestAnimationFrame(tick);
+    };
+    wingRafRef.current = requestAnimationFrame(tick);
+  };
+  const stopWingFlap = () => {
+    if (wingRafRef.current !== null) {
+      cancelAnimationFrame(wingRafRef.current);
+      wingRafRef.current = null;
+    }
+  };
+  // Safety net only — the flight effect below is what normally starts/stops
+  // this; this just guarantees no rAF survives past unmount.
+  useEffect(() => stopWingFlap, []);
+
+  // Flies once (0 -> 1 over flightMs), then — once actually landed off the
+  // far edge, not just "duration elapsed" (the `finished` check skips
+  // rescheduling if this effect got torn down/re-run mid-flight) — rolls a
+  // fresh random wait in [minCycleMs, maxCycleMs] (re-rolled every time,
+  // same pattern as the neighbor's own randomStageDelay()) and schedules
+  // the next flight after it. A recursive setTimeout chain (same pattern
+  // the neighbor's stageLoopRef uses elsewhere in this file) rather than
+  // Animated.loop, since a loop has no built-in way to pause between
+  // iterations, let alone a randomized one.
+  useEffect(() => {
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const randomPauseMs = () =>
+      Math.max(0, minCycleMs + Math.random() * (maxCycleMs - minCycleMs) - flightMs);
+
+    const flyOnce = () => {
+      if (cancelled) return;
+      progress.setValue(0);
+      startWingFlap();
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: flightMs,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        stopWingFlap();
+        if (cancelled || !finished) return;
+        timeoutId = setTimeout(flyOnce, randomPauseMs());
+      });
+    };
+
+    timeoutId = setTimeout(flyOnce, startDelayMs);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+      progress.stopAnimation();
+      stopWingFlap();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flightMs, minCycleMs, maxCycleMs, startDelayMs]);
+
+  const frameSource = TERR_BIRD_FRAMES[frameIndex];
+  // Box size is fixed across every frame (TERR_BIRD_FIXED_ASPECT, see its
+  // own comment above) rather than each frame's own trimmed aspect. This
+  // alone turned out NOT to be enough (2026-09-10, second pass at this same
+  // bug): with resizeMode="contain", a frame whose own aspect doesn't
+  // exactly match the fixed box's aspect still gets letterboxed DOWN within
+  // it — contain preserves the image's true proportions by shrinking
+  // whichever axis doesn't fit, so the visible bird still grew/shrank
+  // frame to frame even though the invisible bounding box no longer did
+  // (worse in one respect than before this fix: previously at least the
+  // height was rock-solid and only width varied; a fixed-aspect box with
+  // contain let BOTH axes drift depending on which side of the average a
+  // given frame's aspect fell on). Switched to resizeMode="stretch" so the
+  // artwork fills the fixed box completely on every frame, full stop — no
+  // letterboxing, no shrink-to-fit, so the box size IS the visible size,
+  // every frame. This does mean each frame is stretched slightly off its
+  // own true aspect (±~16% at the extremes vs. the 1.468 average) rather
+  // than rendered pixel-perfect, but at this art's actual on-screen size
+  // (a few dozen px tall) that's the same tradeoff already accepted
+  // elsewhere in this file (the neighbor's own Image also uses
+  // resizeMode="stretch") and reads as far less wrong than a visibly
+  // pulsing bird. No per-frame Image.resolveAssetSource call is needed
+  // here at all anymore either way — one less native-bridge round trip per
+  // frame step on top of the wing-flap-only-while-flying fix from the
+  // round before.
+  const aspect = TERR_BIRD_FIXED_ASPECT;
+  const width = size * aspect;
+
+  // Off-screen at both ends regardless of container width — same
+  // -(x + size)-style derivation TerritoryDog's entranceStartX uses for
+  // its own off-screen guarantee, just for both edges here since this
+  // loops continuously instead of arriving once.
+  const startX = direction === "left-to-right" ? -width : containerWidth + width;
+  const endX = direction === "left-to-right" ? containerWidth + width : -width;
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        top: y,
+        left: 0,
+        width,
+        height: size,
+        transform: [
+          { translateX: progress.interpolate({ inputRange: [0, 1], outputRange: [startX, endX] }) },
+          // Drawn facing right in its source form — flip only when flying
+          // right-to-left so he always faces the direction he's headed.
+          { scaleX: direction === "right-to-left" ? -1 : 1 },
+        ],
+      }}
+    >
+      <Image source={frameSource} style={{ width, height: size }} resizeMode="stretch" />
+    </Animated.View>
+  );
+}
+
 // The dog itself — hops in from off-screen left along the road once on
 // mount, settles at its resting spot under the mailbox, then steps up
 // right next to the mailbox post (and swaps to the leg-lifted "marking"
@@ -1843,18 +2125,19 @@ function TerritoryDog({
   // images. Each pose is its own trimmed art with its own aspect ratio
   // (the peeing pose's raised leg makes it wider/shorter than idle), read
   // via Image.resolveAssetSource (synchronous for a local require(), no
-  // network/async involved) on native. react-native-web doesn't implement
-  // resolveAssetSource at all (it throws "is not a function"), so on web
-  // we fall back to the pose's known intrinsic aspect ratio instead —
-  // `size` continues to mean the on-screen HEIGHT budget; width follows
-  // from that + aspect.
+  // network/async involved) on native, through the same module-level cache
+  // TerritoryBird uses (resolveTerritoryAssetAspect, see its comment above)
+  // rather than a fresh native-bridge call every render — this component
+  // re-renders on every markProgress tick (every 100ms) while the mailbox
+  // is held, so uncached this was a real, avoidable, frequent cost, same
+  // class of issue as the bird's wing-flap loop. react-native-web doesn't
+  // implement resolveAssetSource at all (it throws "is not a function"),
+  // so on web we fall back to the pose's known intrinsic aspect ratio
+  // instead — `size` continues to mean the on-screen HEIGHT budget; width
+  // follows from that + aspect.
   const poseImage = isHolding && peeingImage ? peeingImage : idleImage;
   const fallbackAspect = isHolding && peeingImage ? peeingAspect : idleAspect;
-  const aspect = poseImage
-    ? Platform.OS === "web" || typeof Image.resolveAssetSource !== "function"
-      ? fallbackAspect
-      : Image.resolveAssetSource(poseImage).width / Image.resolveAssetSource(poseImage).height
-    : 1;
+  const aspect = poseImage ? resolveTerritoryAssetAspect(poseImage, fallbackAspect) : 1;
   const width = size * aspect;
 
   const content = poseImage ? (
@@ -1921,6 +2204,18 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
   // Round-complete (won by fully filling the meter) — distinct from
   // isCaught (lost). Both stop the neighbor's stage clock.
   const [isComplete, setIsComplete] = useState(false);
+  // Whether the dog has actually finished sliding up beside the mailbox —
+  // deliberately separate from isHolding. TerritoryDog's own on-screen
+  // position takes TERR_DOG_APPROACH_MS to animate from his resting spot
+  // to atMailboxX/Y (see its `atMailbox` Animated.Value), but isHolding
+  // itself flips true the instant the mailbox is pressed. The pee stream
+  // below is anchored to the dog's *final* at-mailbox coordinates, so
+  // gating it on isHolding directly made the splash appear at that spot
+  // immediately — before he'd actually slid there — reading as the pee
+  // starting before the dog reached the mailbox. Mirrors isHolding but
+  // delayed on the way up (matching the slide-in duration) and instant on
+  // the way down, so the stream disappears the moment the player releases.
+  const [isDogAtMailbox, setIsDogAtMailbox] = useState(false);
 
   // Refs mirror the state above for the setTimeout-driven loop below to
   // read at fire time — its callback is scheduled outside of React's
@@ -1991,6 +2286,49 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Drives isDogAtMailbox off isHolding: delayed by TERR_DOG_APPROACH_MS on
+  // the rising edge (so it flips true right as TerritoryDog's own slide
+  // animation finishes), immediate on the falling edge. isHolding is set
+  // false on every path that ends a hold — release, bust, and meter
+  // completion (see handleMailboxPressOut and the two branches below) — so
+  // this single effect covers all of them without needing to duplicate the
+  // reset in each spot.
+  useEffect(() => {
+    if (!isHolding) {
+      setIsDogAtMailbox(false);
+      return;
+    }
+    const t = setTimeout(() => setIsDogAtMailbox(true), TERR_DOG_APPROACH_MS);
+    return () => clearTimeout(t);
+  }, [isHolding]);
+
+  // Drives the marking-meter's "almost there" glow pulse (part of the
+  // 2026-09-10 meter redesign — see the meter's own render/style comments
+  // below). A single Animated.Value looped opacity, mounted only while
+  // genuinely urgent (progress past the threshold and the round still
+  // live) rather than always-looping-but-invisible, so there's no pulsing
+  // animation quietly ticking in the background for the entire rest of a
+  // round that already finished or busted.
+  const meterGlow = useRef(new Animated.Value(0)).current;
+  const isMeterUrgent = markProgress >= TERR_METER_URGENT_THRESHOLD && !isCaught && !isComplete;
+  useEffect(() => {
+    if (!isMeterUrgent) {
+      meterGlow.setValue(0);
+      return;
+    }
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(meterGlow, { toValue: 1, duration: 500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(meterGlow, { toValue: 0, duration: 500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    );
+    pulse.start();
+    return () => {
+      pulse.stop();
+      meterGlow.setValue(0);
+    };
+  }, [isMeterUrgent, meterGlow]);
 
   const showMarkFeedback = (text: string) => {
     setMarkFeedback(text);
@@ -2199,6 +2537,43 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
             }}
             resizeMode="cover"
           />
+
+          {/* Ambient sky birds — purely decorative, not registered against
+              any TERR_HOUSE_IMAGE source-pixel anchor the way the porch
+              guy/mailbox/dog are (see TERR_BIRD_SIZE_FRACTION's comment),
+              just placed as a fraction of the container itself. Both
+              y-fractions (0.08, 0.16) sit well above where the roofline
+              lands (~42% down the container at every screen size, per the
+              house-canvas-extension section in the project doc, since
+              TERR_HOUSE_ZOOM=1 makes scale purely height-locked) so they
+              never visually cross in front of the house art. One flies
+              left-to-right, one right-to-left, per the user's ask; each
+              also flies by at a random interval (TERR_BIRD_CYCLE_MIN/_MAX)
+              rather than a fixed cadence, re-rolled after every flight —
+              with a slightly different flight length/range/start-delay
+              on each so they don't read as a mirrored, synced pair even
+              when their random waits happen to land close together. */}
+          <TerritoryBird
+            containerWidth={layout.width}
+            y={layout.height * 0.08}
+            size={layout.height * TERR_BIRD_SIZE_FRACTION}
+            direction="left-to-right"
+            flightMs={TERR_BIRD_FLIGHT_MS}
+            minCycleMs={TERR_BIRD_CYCLE_MIN_MS}
+            maxCycleMs={TERR_BIRD_CYCLE_MAX_MS}
+            startDelayMs={0}
+          />
+          <TerritoryBird
+            containerWidth={layout.width}
+            y={layout.height * 0.16}
+            size={layout.height * TERR_BIRD_SIZE_FRACTION * 0.85}
+            direction="right-to-left"
+            flightMs={TERR_BIRD_FLIGHT_MS * 1.15}
+            minCycleMs={TERR_BIRD_CYCLE_MIN_MS * 1.1}
+            maxCycleMs={TERR_BIRD_CYCLE_MAX_MS * 1.1}
+            startDelayMs={3200}
+          />
+
           <Image
             source={currentNeighborStage.source}
             style={{ position: "absolute", left: guyLeft, top: guyTop, width: guyWidth, height: guyHeight }}
@@ -2218,9 +2593,15 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
             peeingAspect={TERR_DOG_PEEING_ASPECT}
           />
 
-          {isHolding && !isCaught && !isComplete && (
-            // Origin is shifted toward the dog's rear (left, toward the
-            // mailbox, since he faces right) rather than his horizontal
+          {isDogAtMailbox && !isCaught && !isComplete && (
+            // Gated on isDogAtMailbox rather than isHolding directly — see
+            // that state's own comment above — so the stream doesn't mount
+            // until TerritoryDog has actually finished sliding up next to
+            // the mailbox; otherwise it was drawn at his at-mailbox
+            // coordinates for the ~TERR_DOG_APPROACH_MS he was still
+            // visibly mid-slide, reading as the pee starting before he got
+            // there. Origin is shifted toward the dog's rear (left, toward
+            // the mailbox, since he faces right) rather than his horizontal
             // center, and raised to roughly back/hip height — high enough
             // above the ground to give the stream real length to fall
             // through. Target is TERR_DOG_AT_MAILBOX_Y (the same
@@ -2292,10 +2673,18 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
           Again / Play Again. Hidden once the round has already ended
           either way, since neither overlay below needs it showing through.
           Moved down onto the road (2026-09-08, was pinned under the top
-          safe-area inset alongside the exit button) and redesigned as a
-          small dark HUD "card" — a rounded, semi-opaque panel behind the
-          bar — so it stays legible against the road art at its new lower
-          spot instead of relying on empty sky behind it. */}
+          safe-area inset alongside the exit button); redesigned again
+          (2026-09-10, per the user's "redesign the marking progress meter"
+          ask) — same dark HUD-card anchoring as before, but the bar itself
+          is now a two-tone pill with a leading-edge cap (like a slider
+          thumb, so the current fill point reads clearly rather than just
+          "the bar is this long"), a live percentage readout next to the
+          label, and a pulsing amber glow around the whole card once
+          progress crosses TERR_METER_URGENT_THRESHOLD — an "almost
+          marked" tension cue, the win-side counterpart the project doc had
+          flagged as missing (that doc's note was about the neighbor's
+          approaching-bust risk specifically; this covers the meter's own
+          approaching-win side, not that one). */}
       {!isCaught && !isComplete && (
         <View
           pointerEvents="none"
@@ -2315,14 +2704,56 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
             { left: Math.max(houseOffsetX + 16, insets.left + 16), bottom: insets.bottom + 28 },
           ]}
         >
+          {/* Glow ring: sits behind the card, same rounded footprint but
+              slightly larger via a negative inset, opacity driven straight
+              off meterGlow (0 whenever not urgent, per that effect's own
+              comment, so this is inert — no always-on loop — for nearly
+              the whole round). */}
+          <Animated.View
+            style={[
+              styles.territoryMeterGlow,
+              { opacity: meterGlow.interpolate({ inputRange: [0, 1], outputRange: [0, 0.85] }) },
+            ]}
+          />
           <View style={styles.territoryMeterCard}>
-            <Text style={styles.territoryMeterLabel}>🐾 Marking progress</Text>
-            <View style={styles.territoryMeterTrack}>
-              <View style={[styles.territoryMeterFill, { width: `${markProgress * 100}%` }]}>
-                {/* Thin lighter strip near the top of the fill — a cheap
-                    glossy-pill look without pulling in a gradient library. */}
-                <View style={styles.territoryMeterFillShine} />
+            <View style={styles.territoryMeterHeaderRow}>
+              <Text style={styles.territoryMeterLabel}>🐾 Marking</Text>
+              <Text style={styles.territoryMeterPercent}>{Math.round(markProgress * 100)}%</Text>
+            </View>
+            {/* Outer wrapper has no overflow clipping (unlike the track
+                below it) so the leading-edge cap can sit right on the fill
+                boundary, including hanging slightly past 0%/100%, without
+                being cut off — only the fill bar itself needs the pill
+                clip. */}
+            <View style={styles.territoryMeterTrackOuter}>
+              <View style={styles.territoryMeterTrack}>
+                <View style={[styles.territoryMeterFillBase, { width: `${markProgress * 100}%` }]}>
+                  {/* Lighter top band for a glossy-pill look, plus the
+                      thin brighter shine strip right at its own top edge —
+                      two stacked layers standing in for a real gradient
+                      (no gradient library in this project — see the
+                      house-art/porch-guy sections of the project doc for
+                      the same reasoning applied to image assets). */}
+                  <View style={styles.territoryMeterFillShineBand} />
+                  <View style={styles.territoryMeterFillShineLine} />
+                </View>
               </View>
+              {/* Leading-edge cap — a small round marker at the current
+                  fill point. `left` is the percentage string, and the
+                  circle is centered on that point via a fixed negative
+                  margin (half its own size) baked into the style below —
+                  RN doesn't support percentage-based transforms on
+                  native, so this is the portable way to center a
+                  fixed-size dot on a percent-based position, rather than
+                  `transform: [{ translateX: '-50%' }]`. Reads as "you are
+                  here" rather than just the bar's own end. */}
+              <View
+                style={[
+                  styles.territoryMeterCap,
+                  { left: `${markProgress * 100}%` },
+                  isMeterUrgent && styles.territoryMeterCapUrgent,
+                ]}
+              />
             </View>
           </View>
         </View>
@@ -2884,20 +3315,38 @@ const styles = StyleSheet.create({
     position: "absolute",
   },
 
+  // Soft amber halo behind the card, negative-inset so it peeks out past
+  // the card's own rounded corners. Opacity is driven entirely off
+  // meterGlow at the call site (0 whenever not urgent), so this box is
+  // visually inert — fully transparent, no perceptible cost — for nearly
+  // the whole round; it only becomes visible in the last stretch before
+  // completion.
+  territoryMeterGlow: {
+    position: "absolute",
+    top: -7,
+    left: -7,
+    right: -7,
+    bottom: -7,
+    borderRadius: 18,
+    backgroundColor: "#FFA500",
+  },
+
   // Dark rounded panel behind the label + bar — added when the meter moved
   // down onto the road art, so it reads clearly against whatever happens
   // to be behind it there instead of relying on plain sky. Sized down
   // (2026-09-08) for mobile screens — this card sits off to the left at a
   // fixed size regardless of screen width, so on a phone-width viewport
   // the original size read as oversized/hard to keep track of at a glance.
+  // No `alignItems: "center"` anymore (2026-09-10 redesign) — the header
+  // row and track now stretch to the card's own content width instead of
+  // centering, so the live percentage can sit flush to the right edge.
   territoryMeterCard: {
-    paddingVertical: 5,
-    paddingHorizontal: 9,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     borderRadius: 12,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    backgroundColor: "rgba(0,0,0,0.45)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.25)",
-    alignItems: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -2905,14 +3354,41 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
 
+  // Label + live percentage side by side above the bar (2026-09-10
+  // redesign — previously just the label, centered, with no readout).
+  territoryMeterHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+
   territoryMeterLabel: {
     fontSize: 9,
     fontWeight: "700",
     color: "#fff",
-    marginBottom: 3,
     textShadowColor: "rgba(0,0,0,0.45)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
+  },
+
+  territoryMeterPercent: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.8)",
+    marginLeft: 8,
+    textShadowColor: "rgba(0,0,0,0.45)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+
+  // Un-clipped wrapper around the track, sized to match it exactly, so the
+  // leading-edge cap (a sibling of the track, not a child) can sit right on
+  // the fill boundary — including hanging slightly past either end — without
+  // being cut off by the track's own `overflow: "hidden"` pill clip.
+  territoryMeterTrackOuter: {
+    width: 110,
+    justifyContent: "center",
   },
 
   territoryMeterTrack: {
@@ -2929,25 +3405,75 @@ const styles = StyleSheet.create({
   // than an Animated value — ticks in fixed 100ms steps alongside the
   // markIntervalRef loop, not a smooth continuous animation, so a plain
   // state-driven width keeps the two in lockstep with no extra machinery.
-  territoryMeterFill: {
+  // Renamed from territoryMeterFill (2026-09-10) now that it hosts two
+  // shine layers instead of one, for the two-tone glossy-pill look.
+  territoryMeterFillBase: {
     height: "100%",
     borderRadius: 6,
     backgroundColor: "#F5E050",
     overflow: "hidden",
   },
 
-  // Thin lighter strip near the top of the fill (see the JSX comment above
-  // it) — a cheap glossy-pill highlight, positioned/sized as an inset from
-  // the fill's own edges rather than a fixed on-screen size so it scales
-  // sensibly with territoryMeterTrack's height above.
-  territoryMeterFillShine: {
+  // Wider, softer top band — the bulk of the glossy-pill look, standing in
+  // for a real gradient (no gradient library in this project — see the
+  // house-art/porch-guy sections of the project doc for the same reasoning
+  // applied to image assets).
+  territoryMeterFillShineBand: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: "55%",
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
+    backgroundColor: "rgba(255,255,255,0.25)",
+  },
+
+  // Thin brighter strip right at the fill's own top edge, layered over the
+  // band above for a sharper highlight — this is the old territoryMeterFillShine,
+  // renamed and kept as-is (2026-09-10) alongside the new band.
+  territoryMeterFillShineLine: {
     position: "absolute",
     top: 1,
     left: 1,
     right: 1,
     height: 2,
     borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.55)",
+    backgroundColor: "rgba(255,255,255,0.6)",
+  },
+
+  // Leading-edge "you are here" marker (2026-09-10 redesign). Fixed 14px
+  // circle; `left` is set per-render as the same percentage string as the
+  // fill, and the -7 top/left margins (half the circle's own size) recenter
+  // it on that point — see the JSX comment at the call site for why this is
+  // a margin rather than a percentage transform.
+  territoryMeterCap: {
+    position: "absolute",
+    top: "50%",
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    marginTop: -7,
+    marginLeft: -7,
+    backgroundColor: "#fff",
+    borderWidth: 2,
+    borderColor: "#F5E050",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.4,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+
+  // Swapped colors once markProgress crosses TERR_METER_URGENT_THRESHOLD —
+  // paired with the pulsing territoryMeterGlow behind the whole card for the
+  // "almost marked" tension cue.
+  territoryMeterCapUrgent: {
+    backgroundColor: "#FFD400",
+    borderColor: "#FF7A00",
+    shadowColor: "#FF7A00",
+    shadowOpacity: 0.85,
+    shadowRadius: 4,
   },
 
   territoryCaughtOverlay: {
