@@ -25,18 +25,7 @@ type Props = {
   style?: StyleProp<ViewStyle>;
 };
 
-/**
- * Plays a simple looping sprite animation — e.g. a pet's walk cycle — by
- * swapping through a list of same-size, same-alignment PNG frames.
- *
- * Frames are shown crisp (no cross-fade blending — dissolving between two
- * differently-posed cartoon frames just looks like a blurry double
- * exposure). Smoothness instead comes from a requestAnimationFrame-driven
- * clock (tighter, drift-free timing vs. setInterval) plus a gentle native
- * bob applied to the whole sprite, which reads as fluid motion without
- * touching the art itself. Not tied to any specific pet; pass whichever
- * `frames` array you want (see data/walkAnimations.ts).
- */
+/** Plays a looping sprite animation (e.g. a pet's walk cycle) by swapping through crisp PNG frames, with a gentle bob for fluid motion. */
 export function WalkingSprite({
   frames,
   size = 96,
@@ -93,12 +82,7 @@ export function WalkingSprite({
     };
   }, [frames, fps, loop]);
 
-  // Subtle continuous bob + sway, timed to the walk cycle, so the sprite
-  // still feels alive/fluid between the discrete frame steps. A real
-  // quadruped's body dips once per footfall (~2x per full gait cycle) and
-  // sways side to side once per full stride, so bob runs twice as fast as
-  // sway — that slight phase mismatch is what reads as a natural gait
-  // instead of a robotic single up-down bounce.
+  // Continuous bob + sway timed to the walk cycle (bob at 2x sway's rate) so the gait reads as natural, not robotic.
   useEffect(() => {
     if (frames.length <= 1) return;
     const cycleDuration = (1000 / fps) * frames.length;

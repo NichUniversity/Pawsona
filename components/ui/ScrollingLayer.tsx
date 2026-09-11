@@ -10,12 +10,7 @@ type Props = {
   direction?: "left" | "right";
 };
 
-/**
- * Infinite horizontal scroller: renders two copies of the same tileable
- * image back-to-back and slides them together. The instant the lead copy
- * has moved a full tile-width off screen, we snap the offset back to 0 —
- * since the image tiles seamlessly, the snap is invisible.
- */
+/** Infinite horizontal scroller: two tiled copies slide together, snapping back to 0 once the lead copy scrolls fully off screen. */
 export function ScrollingLayer({
   source,
   width,
@@ -50,9 +45,7 @@ export function ScrollingLayer({
     loop();
 
     return () => anim.current?.stop();
-    // `offset` is the .current of a useRef — stable across renders, so
-    // including it here doesn't cause extra effect runs, it just satisfies
-    // exhaustive-deps.
+    // `offset` is a stable ref, included only to satisfy exhaustive-deps.
   }, [running, speed, width, direction, offset]);
 
   return (

@@ -290,13 +290,7 @@ export default function DailyPawLog() {
                 onPressIn={() => setIsAvatarWalking(true)}
                 onPressOut={() => setIsAvatarWalking(false)}
               >
-                {/* Off-screen decode pass for sprite-based pets: mounting
-                    these as soon as the pet is selected means each walk
-                    frame is already decoded/cached by the time the user
-                    holds the avatar, instead of decoding on first use
-                    (which showed up as a black flash for the first cycle
-                    or two). Skipped for pets with a video clip — WalkingVideo
-                    below handles its own warm-up by staying mounted. */}
+                {/* Off-screen decode pass so walk frames are pre-cached before the user holds the avatar (avoids a black flash); skipped for video pets. */}
                 {walkFrames && !walkVideo && (
                   <View
                     style={{ position: "absolute", width: 1, height: 1, opacity: 0 }}
@@ -521,8 +515,7 @@ const styles = StyleSheet.create({
     paddingTop: 80,
   },
 
-  // Doubles the old text title's fontSize (32 -> 64), same convention as
-  // the Home tab, Login screen, and Mini Games logo swaps.
+  // Doubles the old text title's fontSize (32 -> 64), matching the Home/Login/Mini Games logo swaps.
   titleImage: {
     height: 64,
     aspectRatio: 1835 / 717,

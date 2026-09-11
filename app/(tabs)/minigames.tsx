@@ -1,5 +1,5 @@
 import { useFocusEffect, useNavigation } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Easing,
@@ -14,6 +14,7 @@ import {
   View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { ClipPath, Defs, G, Path, Rect } from "react-native-svg";
 
 import { CoinIcon } from "../../components/ui/CoinIcon";
 import { PressableScale } from "../../components/ui/PressableScale";
@@ -24,7 +25,7 @@ import { COSMETICS } from "../../data/cosmetics";
 import { useTabBarClearance } from "../../hooks/useTabBarClearance";
 import { getTabBarStyle } from "./_layout";
 
-type GameId = "simon" | "minesweeper" | "parkour" | "territory";
+type GameId = "simon" | "minesweeper" | "fetchfrenzy" | "tightsqueeze" | "territory";
 
 const GAMES: {
   id: GameId;
@@ -48,11 +49,18 @@ const GAMES: {
     description: "Dig up bones, dodge the skunks!",
   },
   {
-    id: "parkour",
-    name: "Pup Parkour",
-    emoji: "🏃",
+    id: "fetchfrenzy",
+    name: "Fetch Frenzy",
+    emoji: "🎾",
     available: true,
-    description: "Jump hurdles, dodge walls!",
+    description: "Slide to catch what falls — dodge the rocks!",
+  },
+  {
+    id: "tightsqueeze",
+    name: "Tight Squeeze",
+    emoji: "🕳️",
+    available: true,
+    description: "Navigate the narrow passage — one touch and it's over!",
   },
   {
     id: "territory",
@@ -71,12 +79,10 @@ export default function Minigames() {
 
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  const isTerritoryFullScreen = activeGame === "territory";
+  // Every game now takes over the whole screen (Mark Your Territory always did; the rest used to sit as a small card in a scrollable page) — anything other than the menu itself counts as full screen.
+  const isGameFullScreen = activeGame !== "menu";
 
-  // Same fade-the-floating-tab-bar pattern as adventure_tab.tsx: re-apply
-  // getTabBarStyle rather than `undefined` when restoring it (undefined
-  // drops the styling entirely instead of falling back to it — see
-  // _layout.tsx's comment on getTabBarStyle).
+  // Same fade-tab-bar pattern as adventure_tab.tsx: re-apply getTabBarStyle rather than `undefined` when restoring it.
   const restoredTabBarStyle = useMemo(
     () => getTabBarStyle(theme, insets.bottom),
     [theme, insets.bottom]
@@ -98,32 +104,43 @@ export default function Minigames() {
 
   useEffect(() => {
     Animated.timing(tabBarOpacity, {
-      toValue: isTerritoryFullScreen ? 0 : 1,
+      toValue: isGameFullScreen ? 0 : 1,
       duration: 300,
       useNativeDriver: false, // driving a JS listener, not a native style prop
     }).start();
-  }, [isTerritoryFullScreen, tabBarOpacity]);
+  }, [isGameFullScreen, tabBarOpacity]);
 
-  // Safety net: always restore the tab bar instantly when leaving this tab
-  // entirely (e.g. swiping to another tab mid-game), regardless of
-  // activeGame state or any in-flight fade — minigames stays mounted and
-  // its state persists across tab swaps, same as adventure_tab.tsx.
+  // Blocks swiping to another tab while a game is being played — a per-screen options override (same mechanism the tabBarStyle listener above already uses) takes precedence over _layout.tsx's own swipeEnabled default for as long as this screen is focused. Tapping another tab directly still works even with swiping disabled (swipeEnabled only gates the drag gesture), which is why the focus-effect safety net below also resets this — otherwise a game left "in progress" via a tap-away would leave swiping stuck off next time this tab regains focus.
+  useEffect(() => {
+    navigation.setOptions({ swipeEnabled: !isGameFullScreen });
+  }, [isGameFullScreen, navigation]);
+
+  // Safety net: instantly restores the tab bar (and swipe gesture) when leaving this tab entirely, since state persists across tab swaps.
   useFocusEffect(
     useCallback(() => {
       return () => {
         tabBarOpacity.stopAnimation();
         tabBarOpacity.setValue(1);
-        navigation.setOptions({ tabBarStyle: restoredTabBarStyle });
+        navigation.setOptions({ tabBarStyle: restoredTabBarStyle, swipeEnabled: true });
       };
     }, [navigation, restoredTabBarStyle, tabBarOpacity])
   );
 
-  // Mark Your Territory takes over the whole screen for an immersive porch
-  // scene — no TabBackground/ScrollView chrome, no coin badge, just the
-  // scene and the exit button. Every other game keeps the normal
-  // scrollable card layout.
-  if (isTerritoryFullScreen) {
+  // Every game takes over the whole screen now (no chrome/coin badge/scrollable page behind it) — only the menu itself keeps the scrollable layout.
+  if (activeGame === "territory") {
     return <MarkYourTerritoryGame onExit={() => setActiveGame("menu")} />;
+  }
+  if (activeGame === "simon") {
+    return <SimonSaysGame onExit={() => setActiveGame("menu")} />;
+  }
+  if (activeGame === "minesweeper") {
+    return <PetMinesweeperGame onExit={() => setActiveGame("menu")} />;
+  }
+  if (activeGame === "fetchfrenzy") {
+    return <FetchFrenzyGame onExit={() => setActiveGame("menu")} />;
+  }
+  if (activeGame === "tightsqueeze") {
+    return <TightSqueezeGame onExit={() => setActiveGame("menu")} />;
   }
 
   return (
@@ -141,64 +158,40 @@ export default function Minigames() {
         <Text style={[styles.coinText, { color: accentColor }]}> {coins}</Text>
       </View>
 
-      {activeGame === "menu" && (
-        <>
-          <PassiveActivitiesSection />
+      <PassiveActivitiesSection />
 
-          <Text style={[styles.sectionHeading, { color: theme.text.primary }]}>🎮 Games</Text>
-          <View style={styles.grid}>
-            {GAMES.map((game) => (
-              <Pressable
-                key={game.id}
-                style={[
-                  styles.gameCard,
-                  {
-                    backgroundColor: theme.card.background,
-                    borderColor: theme.card.border,
-                  },
-                  !game.available && styles.gameCardLocked,
-                ]}
-                onPress={() => game.available && setActiveGame(game.id)}
-                disabled={!game.available}
-              >
-                <Text style={styles.gameEmoji}>
-                  {game.available ? game.emoji : "🔒"}
-                </Text>
-                <Text style={[styles.gameName, { color: theme.text.primary }]}>{game.name}</Text>
-                <Text style={[styles.gameDescription, { color: theme.text.secondary }]}>
-                  {game.description}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </>
-      )}
-
-      {activeGame === "simon" && (
-        <SimonSaysGame onExit={() => setActiveGame("menu")} />
-      )}
-
-      {activeGame === "minesweeper" && (
-        <PetMinesweeperGame onExit={() => setActiveGame("menu")} />
-      )}
-
-      {activeGame === "parkour" && (
-        <PupParkourGame onExit={() => setActiveGame("menu")} />
-      )}
+      <Text style={[styles.sectionHeading, { color: theme.text.primary }]}>🎮 Games</Text>
+      <View style={styles.grid}>
+        {GAMES.map((game) => (
+          <Pressable
+            key={game.id}
+            style={[
+              styles.gameCard,
+              {
+                backgroundColor: theme.card.background,
+                borderColor: theme.card.border,
+              },
+              !game.available && styles.gameCardLocked,
+            ]}
+            onPress={() => game.available && setActiveGame(game.id)}
+            disabled={!game.available}
+          >
+            <Text style={styles.gameEmoji}>
+              {game.available ? game.emoji : "🔒"}
+            </Text>
+            <Text style={[styles.gameName, { color: theme.text.primary }]}>{game.name}</Text>
+            <Text style={[styles.gameDescription, { color: theme.text.secondary }]}>
+              {game.description}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
       </ScrollView>
     </View>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Passive Coins (idle-clicker style activities)                       */
-/*                                                                      */
-/* Each activity has its own 30s cooldown per pet, a small random coin */
-/* payout, and a chance to dig up a cosmetic the selected pet doesn't  */
-/* already own. Cooldowns live in a ref (not state) since they don't   */
-/* need to trigger a render themselves — a 1s ticker forces re-renders */
-/* so the countdown text stays live and buttons re-enable on time.     */
-/* ------------------------------------------------------------------ */
+// --- Passive Coins (idle-clicker activities): 30s cooldown per pet, random coin payout, chance at an unowned cosmetic; cooldowns live in a ref with a 1s ticker to keep countdowns live. ---
 
 const ACTIVITY_COOLDOWN_MS = 30 * 1000;
 
@@ -431,9 +424,7 @@ function PassiveActivitiesSection() {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Paw Pattern (Simon Says)                                            */
-/* ------------------------------------------------------------------ */
+// --- Paw Pattern (Simon Says) ---
 
 const PADS = [
   { id: 0, emoji: "🐾", color: "#FFB067" },
@@ -449,6 +440,7 @@ const GAP_DURATION = 250;
 function SimonSaysGame({ onExit }: { onExit: () => void }) {
   const { earnCoins } = usePets();
   const { accentColor, theme } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const [sequence, setSequence] = useState<number[]>([]);
   const [playerIndex, setPlayerIndex] = useState(0);
@@ -458,6 +450,8 @@ function SimonSaysGame({ onExit }: { onExit: () => void }) {
   const [gameState, setGameState] = useState<"idle" | "playing" | "gameover">(
     "idle"
   );
+  // Measured size of the play area below the title/round text — the pad grid is sized to fill it (see padGridSize below) instead of the old fixed 220x220 box.
+  const [playAreaSize, setPlayAreaSize] = useState({ width: 0, height: 0 });
 
   const timeouts = useRef<ReturnType<typeof setTimeout>[]>([]);
 
@@ -546,84 +540,112 @@ function SimonSaysGame({ onExit }: { onExit: () => void }) {
     onExit();
   };
 
+  // Pad grid fills the measured play area (a square inscribed in it, capped so pads don't balloon absurdly large on a big screen) instead of the old fixed 220-wide grid of 100x100 pads.
+  const padGridSize = Math.max(
+    160,
+    Math.min(playAreaSize.width, playAreaSize.height, 520) - 8
+  );
+  const padGap = Math.round(padGridSize * 0.06);
+  const padSize = Math.floor((padGridSize - padGap) / 2);
+
   return (
-    <View
-      style={[
-        styles.gameBox,
-        { backgroundColor: theme.card.background, borderColor: theme.card.border },
-      ]}
-    >
+    <View style={[styles.gameFullScreen, { backgroundColor: theme.card.background }]}>
       <PressableScale
         style={[
-          styles.exitButton,
-          { backgroundColor: theme.card.background, borderColor: theme.card.border },
+          styles.gameFullScreenExitButton,
+          {
+            top: insets.top + 12,
+            left: insets.left + 16,
+            backgroundColor: theme.card.background,
+            borderColor: theme.card.border,
+          },
         ]}
         onPress={handleExit}
       >
         <Text style={[styles.exitButtonText, { color: accentColor }]}>← Back to Games</Text>
       </PressableScale>
 
-      <Text style={[styles.gameTitle, { color: theme.text.primary }]}>🐾 Paw Pattern</Text>
+      <View
+        style={[
+          styles.gameFullScreenContent,
+          { paddingTop: insets.top + 64, paddingBottom: insets.bottom + 16 },
+        ]}
+      >
+        <Text style={[styles.gameTitle, { color: theme.text.primary }]}>🐾 Paw Pattern</Text>
 
-      {gameState === "idle" && (
-        <>
-          <Text style={[styles.gameSubtitle, { color: theme.text.secondary }]}>
-            Watch the pattern, then repeat it back. Every round earns{" "}
-            <CoinIcon size={13} /> {COINS_PER_ROUND}!
-          </Text>
-          <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
-            <Text style={styles.primaryButtonText}>Start Game</Text>
-          </PressableScale>
-        </>
-      )}
+        {gameState !== "idle" && (
+          <>
+            <Text style={[styles.roundText, { color: theme.text.primary }]}>
+              {gameState === "playing"
+                ? isShowingSequence
+                  ? "Watch closely..."
+                  : "Your turn!"
+                : "Game Over"}
+            </Text>
+            <Text style={[styles.roundSubtext, { color: theme.text.secondary }]}>Round {round}</Text>
+          </>
+        )}
 
-      {gameState !== "idle" && (
-        <>
-          <Text style={[styles.roundText, { color: theme.text.primary }]}>
-            {gameState === "playing"
-              ? isShowingSequence
-                ? "Watch closely..."
-                : "Your turn!"
-              : "Game Over"}
-          </Text>
-          <Text style={[styles.roundSubtext, { color: theme.text.secondary }]}>Round {round}</Text>
-
-          <View style={styles.padGrid}>
-            {PADS.map((pad) => (
-              <PressableScale
-                key={pad.id}
-                style={[
-                  styles.pad,
-                  { backgroundColor: pad.color },
-                  activePad === pad.id && styles.padActive,
-                ]}
-                onPress={() => handlePadPress(pad.id)}
-                disabled={gameState !== "playing" || isShowingSequence}
-              >
-                <Text style={styles.padEmoji}>{pad.emoji}</Text>
-              </PressableScale>
-            ))}
-          </View>
-
-          {gameState === "gameover" && (
-            <>
-              <Text style={[styles.gameOverText, { color: theme.text.primary }]}>
-                You made it to round {round}! 🎉
+        <View
+          style={styles.gameFullScreenPlayWrap}
+          onLayout={(e) => {
+            const width = Math.round(e.nativeEvent.layout.width);
+            const height = Math.round(e.nativeEvent.layout.height);
+            setPlayAreaSize((prev) =>
+              prev.width === width && prev.height === height ? prev : { width, height }
+            );
+          }}
+        >
+          {gameState === "idle" ? (
+            <View style={styles.gameFullScreenIdleContent}>
+              <Text style={[styles.gameSubtitle, { color: theme.text.secondary }]}>
+                Watch the pattern, then repeat it back. Every round earns{" "}
+                <CoinIcon size={13} /> {COINS_PER_ROUND}!
               </Text>
               <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
-                <Text style={styles.primaryButtonText}>Play Again</Text>
+                <Text style={styles.primaryButtonText}>Start Game</Text>
               </PressableScale>
-            </>
+            </View>
+          ) : (
+            playAreaSize.width > 0 && (
+              <View style={[styles.padGrid, { width: padGridSize, gap: padGap }]}>
+                {PADS.map((pad) => (
+                  <PressableScale
+                    key={pad.id}
+                    style={[
+                      styles.pad,
+                      { width: padSize, height: padSize, backgroundColor: pad.color },
+                      activePad === pad.id && styles.padActive,
+                    ]}
+                    onPress={() => handlePadPress(pad.id)}
+                    disabled={gameState !== "playing" || isShowingSequence}
+                  >
+                    <Text style={[styles.padEmoji, { fontSize: Math.round(36 * (padSize / 100)) }]}>
+                      {pad.emoji}
+                    </Text>
+                  </PressableScale>
+                ))}
+              </View>
+            )
           )}
-        </>
-      )}
+        </View>
+
+        {gameState === "gameover" && (
+          <>
+            <Text style={[styles.gameOverText, { color: theme.text.primary }]}>
+              You made it to round {round}! 🎉
+            </Text>
+            <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
+              <Text style={styles.primaryButtonText}>Play Again</Text>
+            </PressableScale>
+          </>
+        )}
+      </View>
     </View>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Sniff & Seek (pet-themed Minesweeper)                               */
-/* ------------------------------------------------------------------ */
+// --- Sniff & Seek (pet-themed Minesweeper) ---
 
 const GRID_SIZE = 6;
 const HAZARD_COUNT = 6;
@@ -705,12 +727,15 @@ function numberColor(n: number) {
 function PetMinesweeperGame({ onExit }: { onExit: () => void }) {
   const { earnCoins } = usePets();
   const { accentColor, theme } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const [grid, setGrid] = useState<Cell[][]>(() => makeGrid());
   const [gameState, setGameState] = useState<"playing" | "won" | "lost">(
     "playing"
   );
   const [revealedCount, setRevealedCount] = useState(0);
+  // Measured size of the play area below the title/subtitle — grid cells are sized to fill it (see cellSize below) instead of the old fixed 42px cells.
+  const [playAreaSize, setPlayAreaSize] = useState({ width: 0, height: 0 });
 
   const resetGame = () => {
     setGrid(makeGrid());
@@ -789,221 +814,222 @@ function PetMinesweeperGame({ onExit }: { onExit: () => void }) {
     setGrid(newGrid);
   };
 
+  // Each cell fills an equal share of the measured play area (a square inscribed in it, capped so cells don't balloon absurdly large on a big screen) instead of the old fixed 42px cells.
+  const boardSize = Math.max(180, Math.min(playAreaSize.width, playAreaSize.height, 540));
+  const cellSize = Math.floor(boardSize / GRID_SIZE);
+  const cellFontSize = Math.max(12, Math.round(16 * (cellSize / 42)));
+
   return (
-    <View
-      style={[
-        styles.gameBox,
-        { backgroundColor: theme.card.background, borderColor: theme.card.border },
-      ]}
-    >
+    <View style={[styles.gameFullScreen, { backgroundColor: theme.card.background }]}>
       <PressableScale
         style={[
-          styles.exitButton,
-          { backgroundColor: theme.card.background, borderColor: theme.card.border },
+          styles.gameFullScreenExitButton,
+          {
+            top: insets.top + 12,
+            left: insets.left + 16,
+            backgroundColor: theme.card.background,
+            borderColor: theme.card.border,
+          },
         ]}
         onPress={onExit}
       >
         <Text style={[styles.exitButtonText, { color: accentColor }]}>← Back to Games</Text>
       </PressableScale>
 
-      <Text style={[styles.gameTitle, { color: theme.text.primary }]}>🦴 Sniff & Seek</Text>
-      <Text style={[styles.gameSubtitle, { color: theme.text.secondary }]}>
-        Tap to dig. Long-press to mark a spot you think has a skunk 🦨. Clear
-        every safe square to earn <CoinIcon size={13} /> {WIN_REWARD}!
-      </Text>
+      <View
+        style={[
+          styles.gameFullScreenContent,
+          { paddingTop: insets.top + 64, paddingBottom: insets.bottom + 16 },
+        ]}
+      >
+        <Text style={[styles.gameTitle, { color: theme.text.primary }]}>🦴 Sniff & Seek</Text>
+        <Text style={[styles.gameSubtitle, { color: theme.text.secondary }]}>
+          Tap to dig. Long-press to mark a spot you think has a skunk 🦨. Clear
+          every safe square to earn <CoinIcon size={13} /> {WIN_REWARD}!
+        </Text>
 
-      <View style={styles.mineGrid}>
-        {grid.map((rowCells, r) => (
-          <View key={r} style={styles.mineRow}>
-            {rowCells.map((cell, c) => {
-              let content = "";
-              let textColor = "#333";
+        <View
+          style={styles.gameFullScreenPlayWrap}
+          onLayout={(e) => {
+            const width = Math.round(e.nativeEvent.layout.width);
+            const height = Math.round(e.nativeEvent.layout.height);
+            setPlayAreaSize((prev) =>
+              prev.width === width && prev.height === height ? prev : { width, height }
+            );
+          }}
+        >
+          {playAreaSize.width > 0 && (
+            <View style={styles.mineGrid}>
+              {grid.map((rowCells, r) => (
+                <View key={r} style={styles.mineRow}>
+                  {rowCells.map((cell, c) => {
+                    let content = "";
+                    let textColor = "#333";
 
-              if (cell.flagged && !cell.revealed) {
-                content = "🚩";
-              } else if (cell.revealed) {
-                if (cell.hazard) {
-                  content = "🦨";
-                } else if (cell.adjacent > 0) {
-                  content = String(cell.adjacent);
-                  textColor = numberColor(cell.adjacent);
-                } else {
-                  content = "";
-                }
-              }
+                    if (cell.flagged && !cell.revealed) {
+                      content = "🚩";
+                    } else if (cell.revealed) {
+                      if (cell.hazard) {
+                        content = "🦨";
+                      } else if (cell.adjacent > 0) {
+                        content = String(cell.adjacent);
+                        textColor = numberColor(cell.adjacent);
+                      } else {
+                        content = "";
+                      }
+                    }
 
-              return (
-                <PressableScale
-                  key={c}
-                  style={[
-                    styles.mineCell,
-                    cell.revealed && styles.mineCellRevealed,
-                    cell.revealed && cell.hazard && styles.mineCellHazard,
-                  ]}
-                  onPress={() => revealCell(r, c)}
-                  onLongPress={() => toggleFlag(r, c)}
-                  disabled={gameState !== "playing"}
-                >
-                  <Text style={[styles.mineCellText, { color: textColor }]}>
-                    {content}
-                  </Text>
-                </PressableScale>
-              );
-            })}
-          </View>
-        ))}
+                    return (
+                      <PressableScale
+                        key={c}
+                        style={[
+                          styles.mineCell,
+                          { width: cellSize, height: cellSize },
+                          cell.revealed && styles.mineCellRevealed,
+                          cell.revealed && cell.hazard && styles.mineCellHazard,
+                        ]}
+                        onPress={() => revealCell(r, c)}
+                        onLongPress={() => toggleFlag(r, c)}
+                        disabled={gameState !== "playing"}
+                      >
+                        <Text style={[styles.mineCellText, { color: textColor, fontSize: cellFontSize }]}>
+                          {content}
+                        </Text>
+                      </PressableScale>
+                    );
+                  })}
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {gameState === "won" && (
+          <>
+            <Text style={[styles.gameOverText, { color: theme.text.primary }]}>
+              You found every bone! 🎉 +{WIN_REWARD} coins
+            </Text>
+            <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={resetGame}>
+              <Text style={styles.primaryButtonText}>Play Again</Text>
+            </PressableScale>
+          </>
+        )}
+
+        {gameState === "lost" && (
+          <>
+            <Text style={[styles.gameOverText, { color: theme.text.primary }]}>
+              Uh oh, a skunk got startled! Try again.
+            </Text>
+            <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={resetGame}>
+              <Text style={styles.primaryButtonText}>Play Again</Text>
+            </PressableScale>
+          </>
+        )}
       </View>
-
-      {gameState === "won" && (
-        <>
-          <Text style={[styles.gameOverText, { color: theme.text.primary }]}>
-            You found every bone! 🎉 +{WIN_REWARD} coins
-          </Text>
-          <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={resetGame}>
-            <Text style={styles.primaryButtonText}>Play Again</Text>
-          </PressableScale>
-        </>
-      )}
-
-      {gameState === "lost" && (
-        <>
-          <Text style={[styles.gameOverText, { color: theme.text.primary }]}>
-            Uh oh, a skunk got startled! Try again.
-          </Text>
-          <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={resetGame}>
-            <Text style={styles.primaryButtonText}>Play Again</Text>
-          </PressableScale>
-        </>
-      )}
     </View>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Pup Parkour (endless lane-runner)                                   */
-/* ------------------------------------------------------------------ */
+// --- Fetch Frenzy (catch what falls) — replaces Pup Parkour. Template built from placeholder emoji visuals (🎾🦴🪨🐕); once sprite sheets are provided, swap FF_ITEM_VISUALS' `emoji` fields and the dog's <Text> below for <Image> sources — spawn/collision/scoring/health logic is all keyed off `kind` and the numeric layout constants below, so none of that needs to change. ---
 
-const LANE_COUNT = 3;
-const TRACK_WIDTH = 260;
-const TRACK_HEIGHT = 380;
-const LANE_WIDTH = TRACK_WIDTH / LANE_COUNT;
+// Base/reference design size Fetch Frenzy was originally built at — kept only as the denominator for the scale factor below. The actual on-screen track now fills whatever screen it's running full-screen on (see computeFetchFrenzyLayout), not this fixed size.
+const FF_TRACK_WIDTH = 280;
+const FF_TRACK_HEIGHT = 400;
 
-const DOG_SIZE = 46;
-const DOG_BOTTOM = 26;
-const DOG_CENTER_Y = TRACK_HEIGHT - DOG_BOTTOM - DOG_SIZE / 2;
-const COLLISION_HALF = 32;
+// The dog acts as a paddle: a falling item is "caught" when its center lands within the (screen-scaled) catch half-height of the dog's catch Y, and within half the dog's own (screen-scaled) width of its center — wider than the visual dog so catching feels fair even with a placeholder emoji that doesn't fill its box edge-to-edge. These BASE constants are the design-time sizes at FF_TRACK_WIDTH/HEIGHT; computeFetchFrenzyLayout scales them to the measured screen.
+const FF_DOG_WIDTH_BASE = 64;
+const FF_DOG_HEIGHT_BASE = 46;
+const FF_DOG_BOTTOM_BASE = 14;
+const FF_CATCH_HALF_HEIGHT_BASE = 22;
 
-const HURDLE_HEIGHT = 30;
-const BARRIER_HEIGHT = 34;
+const FF_ITEM_SIZE_BASE = 30;
 
-const TICK_MS = 33;
-const BASE_SPEED = 150; // px / second
-const MAX_SPEED = 360;
-const SPEED_RAMP_PER_POINT = 0.6;
+const FF_TICK_MS = 33;
+const FF_BASE_FALL_SPEED = 140; // px / second at FF_TRACK_HEIGHT's scale — scaled by the measured track's own height at runtime (computeFetchFrenzyLayout), so items take about the same time to cross the track on any screen size.
+const FF_MAX_FALL_SPEED = 320;
+const FF_SPEED_RAMP_PER_POINT = 3;
 
-const BASE_SPAWN_MS = 1300;
-const MIN_SPAWN_MS = 650;
-const SPAWN_RAMP_PER_POINT = 2;
+const FF_BASE_SPAWN_MS = 900;
+const FF_MIN_SPAWN_MS = 380;
+const FF_SPAWN_RAMP_PER_POINT = 6;
 
-const DODGE_BONUS = 15;
-const JUMP_DURATION = 480;
-const COINS_PER_DISTANCE = 25;
+const FF_MAX_HEALTH = 5;
+// Fraction of spawns that are a bad item (rock) rather than a good one (ball/bone, picked 50/50 between the two the rest of the time).
+const FF_ROCK_CHANCE = 0.3;
+// Coins on game over = floor(finalScore / this) — same "divide the score down" shape Pup Parkour used for COINS_PER_DISTANCE.
+const FF_COINS_PER_POINT = 4;
 
-type ParkourObstacle = {
-  id: number;
-  type: "hurdle" | "barrier";
-  lane: number; // for hurdles: the blocked lane
-  safeLane: number; // for barriers: the open lane
-  y: number;
-  scored: boolean;
+type FetchFrenzyItemKind = "ball" | "bone" | "rock";
+
+// Placeholder visuals keyed by kind — `good: true` items add to score when caught, `good: false` (rock) costs health. Swap `emoji` for a real sprite Image source here once the sheets arrive.
+const FF_ITEM_VISUALS: Record<FetchFrenzyItemKind, { emoji: string; good: boolean }> = {
+  ball: { emoji: "🎾", good: true },
+  bone: { emoji: "🦴", good: true },
+  rock: { emoji: "🪨", good: false },
 };
 
-function laneToLeft(lane: number) {
-  return lane * LANE_WIDTH + LANE_WIDTH / 2 - DOG_SIZE / 2;
+type FetchFrenzyItem = {
+  id: number;
+  kind: FetchFrenzyItemKind;
+  x: number; // left position within the track
+  y: number; // top position within the track
+};
+
+// Every pixel size/speed in Fetch Frenzy is derived from the actual measured play area (trackWidth/trackHeight) rather than the fixed BASE constants above, so the game genuinely fills whatever screen it's running full-screen on instead of sitting in a small fixed box. scaleX/scaleY compare the measured size against the original 280x400 design size.
+function computeFetchFrenzyLayout(trackWidth: number, trackHeight: number) {
+  const width = Math.max(220, trackWidth);
+  const height = Math.max(280, trackHeight);
+  const scaleX = width / FF_TRACK_WIDTH;
+  const scaleY = height / FF_TRACK_HEIGHT;
+  const dogWidth = FF_DOG_WIDTH_BASE * scaleX;
+  const dogHeight = FF_DOG_HEIGHT_BASE * scaleX;
+  const dogBottom = FF_DOG_BOTTOM_BASE * scaleY;
+  const dogCatchY = height - dogBottom - dogHeight / 2;
+  const catchHalfHeight = FF_CATCH_HALF_HEIGHT_BASE * scaleY;
+  const itemSize = FF_ITEM_SIZE_BASE * scaleX;
+  return { width, height, scaleX, scaleY, dogWidth, dogHeight, dogBottom, dogCatchY, catchHalfHeight, itemSize };
 }
 
-function spawnParkourObstacle(id: number): ParkourObstacle {
-  const isBarrier = Math.random() < 0.35;
-  if (isBarrier) {
-    const safeLane = Math.floor(Math.random() * LANE_COUNT);
-    return { id, type: "barrier", lane: -1, safeLane, y: -BARRIER_HEIGHT, scored: false };
-  }
-  const lane = Math.floor(Math.random() * LANE_COUNT);
-  return { id, type: "hurdle", lane, safeLane: -1, y: -HURDLE_HEIGHT, scored: false };
+function spawnFetchFrenzyItem(id: number, trackWidth: number, itemSize: number): FetchFrenzyItem {
+  const isRock = Math.random() < FF_ROCK_CHANCE;
+  const kind: FetchFrenzyItemKind = isRock ? "rock" : Math.random() < 0.5 ? "ball" : "bone";
+  const x = Math.random() * (trackWidth - itemSize);
+  return { id, kind, x, y: -itemSize };
 }
 
-function PupParkourGame({ onExit }: { onExit: () => void }) {
+function FetchFrenzyGame({ onExit }: { onExit: () => void }) {
   const { earnCoins } = usePets();
   const { accentColor, theme } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const [gameState, setGameState] = useState<"idle" | "playing" | "gameover">(
     "idle"
   );
-  const [obstacles, setObstacles] = useState<ParkourObstacle[]>([]);
-  const [dogLane, setDogLane] = useState(1);
-  const [isJumping, setIsJumping] = useState(false);
+  const [items, setItems] = useState<FetchFrenzyItem[]>([]);
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(0);
+  const [health, setHealth] = useState(FF_MAX_HEALTH);
   const [lastCoins, setLastCoins] = useState(0);
+  // Measured size of the play area below the title/score/health bar — the track is sized to fill it (see computeFetchFrenzyLayout) instead of the old fixed 280x400 box. Always mounted (even on the idle screen) so a size is already known the moment Start Game is pressed.
+  const [playAreaSize, setPlayAreaSize] = useState({ width: 0, height: 0 });
 
-  // Mutable refs mirror the state above so the interval tick (created once
-  // per "playing" session) always reads fresh values instead of a stale
-  // closure from whichever render started the interval.
+  // Mutable refs mirror state above so the interval tick and pan handlers always read fresh values, not a stale closure — same pattern Pup Parkour used.
   const gameStateRef = useRef(gameState);
-  const dogLaneRef = useRef(dogLane);
-  const isJumpingRef = useRef(isJumping);
   const scoreRef = useRef(0);
-  const scoreFloatRef = useRef(0);
+  const healthRef = useRef(FF_MAX_HEALTH);
   const spawnTimerRef = useRef(0);
   const nextIdRef = useRef(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const dogTranslateX = useRef(new Animated.Value(0)).current;
-  const dogTranslateY = useRef(new Animated.Value(0)).current;
+  // Mirrors playAreaSize into a ref so the PanResponder (created once and never recreated) and imperative functions like startGame always read the latest measured size rather than a stale closure.
+  const trackSizeRef = useRef({ width: FF_TRACK_WIDTH, height: FF_TRACK_HEIGHT });
+  // Dog's left position within the track — tracked in a plain ref (not React state) since it changes on every pan-move event; dogX (the Animated.Value below) drives the actual on-screen position via a native-driven transform, so dragging never triggers a re-render.
+  const dogXRef = useRef(0);
+  const dogDragStartXRef = useRef(0);
+  const dogX = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     gameStateRef.current = gameState;
   }, [gameState]);
-
-  const setDogLaneSynced = (lane: number) => {
-    setDogLane(lane);
-    dogLaneRef.current = lane;
-  };
-
-  const setIsJumpingSynced = (val: boolean) => {
-    setIsJumping(val);
-    isJumpingRef.current = val;
-  };
-
-  const moveLane = (targetLane: number) => {
-    if (gameStateRef.current !== "playing") return;
-    const clamped = Math.max(0, Math.min(LANE_COUNT - 1, targetLane));
-    if (clamped === dogLaneRef.current) return;
-    setDogLaneSynced(clamped);
-    Animated.spring(dogTranslateX, {
-      toValue: laneToLeft(clamped) - laneToLeft(1),
-      useNativeDriver: true,
-      friction: 6,
-      tension: 80,
-    }).start();
-  };
-
-  const jump = () => {
-    if (gameStateRef.current !== "playing" || isJumpingRef.current) return;
-    setIsJumpingSynced(true);
-    Animated.sequence([
-      Animated.timing(dogTranslateY, {
-        toValue: -56,
-        duration: JUMP_DURATION * 0.42,
-        useNativeDriver: true,
-      }),
-      Animated.timing(dogTranslateY, {
-        toValue: 0,
-        duration: JUMP_DURATION * 0.58,
-        useNativeDriver: true,
-      }),
-    ]).start(() => setIsJumpingSynced(false));
-  };
 
   const endGame = () => {
     if (gameStateRef.current !== "playing") return;
@@ -1013,28 +1039,25 @@ function PupParkourGame({ onExit }: { onExit: () => void }) {
     const finalScore = scoreRef.current;
     setBest((prev) => Math.max(prev, finalScore));
 
-    const coinsEarned = Math.floor(finalScore / COINS_PER_DISTANCE);
+    const coinsEarned = Math.floor(finalScore / FF_COINS_PER_POINT);
     if (coinsEarned > 0) earnCoins(coinsEarned);
     setLastCoins(coinsEarned);
   };
 
   const tick = () => {
-    const dt = TICK_MS / 1000;
-    const speed = Math.min(
-      MAX_SPEED,
-      BASE_SPEED + scoreRef.current * SPEED_RAMP_PER_POINT
+    const layout = computeFetchFrenzyLayout(trackSizeRef.current.width, trackSizeRef.current.height);
+    const dt = FF_TICK_MS / 1000;
+    const speedBase = Math.min(
+      FF_MAX_FALL_SPEED,
+      FF_BASE_FALL_SPEED + scoreRef.current * FF_SPEED_RAMP_PER_POINT
     );
+    const speed = speedBase * layout.scaleY;
 
-    // Advance the distance score.
-    scoreFloatRef.current += speed * dt * 0.1;
-    scoreRef.current = Math.floor(scoreFloatRef.current);
-    setScore(scoreRef.current);
-
-    // Spawn new obstacles on a difficulty-scaled timer.
-    spawnTimerRef.current += TICK_MS;
+    // Spawn new items on a difficulty-scaled timer.
+    spawnTimerRef.current += FF_TICK_MS;
     const spawnInterval = Math.max(
-      MIN_SPAWN_MS,
-      BASE_SPAWN_MS - scoreRef.current * SPAWN_RAMP_PER_POINT
+      FF_MIN_SPAWN_MS,
+      FF_BASE_SPAWN_MS - scoreRef.current * FF_SPAWN_RAMP_PER_POINT
     );
     let shouldSpawn = false;
     if (spawnTimerRef.current >= spawnInterval) {
@@ -1042,42 +1065,48 @@ function PupParkourGame({ onExit }: { onExit: () => void }) {
       shouldSpawn = true;
     }
 
-    setObstacles((prev) => {
-      let hit = false;
-      const moved = prev.map((o) => ({ ...o, y: o.y + speed * dt }));
+    setItems((prev) => {
+      const moved = prev.map((it) => ({ ...it, y: it.y + speed * dt }));
+      const dogCenterX = dogXRef.current + layout.dogWidth / 2;
 
-      for (const o of moved) {
-        if (o.scored) continue;
-        const height = o.type === "hurdle" ? HURDLE_HEIGHT : BARRIER_HEIGHT;
-        const centerY = o.y + height / 2;
-        if (Math.abs(centerY - DOG_CENTER_Y) <= COLLISION_HALF) {
-          o.scored = true;
-          const collided =
-            o.type === "hurdle"
-              ? o.lane === dogLaneRef.current && !isJumpingRef.current
-              : dogLaneRef.current !== o.safeLane;
-
-          if (collided) {
-            hit = true;
+      let scoreGained = 0;
+      let healthLost = 0;
+      const survivors = moved.filter((it) => {
+        const itemCenterY = it.y + layout.itemSize / 2;
+        const itemCenterX = it.x + layout.itemSize / 2;
+        const withinCatchY = Math.abs(itemCenterY - layout.dogCatchY) <= layout.catchHalfHeight;
+        const withinCatchX = Math.abs(itemCenterX - dogCenterX) <= layout.dogWidth / 2;
+        if (withinCatchY && withinCatchX) {
+          // Caught — good items score, the rock costs health. Either way it's removed here rather than continuing to fall.
+          if (FF_ITEM_VISUALS[it.kind].good) {
+            scoreGained += 1;
           } else {
-            scoreFloatRef.current += DODGE_BONUS;
-            scoreRef.current = Math.floor(scoreFloatRef.current);
+            healthLost += 1;
           }
+          return false;
+        }
+        // Not caught — keep it while it's still on-screen; anything that falls past the bottom uncaught is simply gone, good or bad, with no penalty either way.
+        return it.y < layout.height + layout.itemSize;
+      });
+
+      if (scoreGained > 0) {
+        scoreRef.current += scoreGained;
+        setScore(scoreRef.current);
+      }
+      if (healthLost > 0) {
+        healthRef.current = Math.max(0, healthRef.current - healthLost);
+        setHealth(healthRef.current);
+        if (healthRef.current <= 0) {
+          // Defer to avoid updating state mid-update-of-another-state, same as Pup Parkour's hit-triggered endGame.
+          setTimeout(endGame, 0);
         }
       }
 
-      const next = moved.filter((o) => o.y < TRACK_HEIGHT + 60);
-
       if (shouldSpawn) {
-        next.push(spawnParkourObstacle(nextIdRef.current++));
+        survivors.push(spawnFetchFrenzyItem(nextIdRef.current++, layout.width, layout.itemSize));
       }
 
-      if (hit) {
-        // Defer to avoid updating state mid-update-of-another-state.
-        setTimeout(endGame, 0);
-      }
-
-      return next;
+      return survivors;
     });
   };
 
@@ -1089,7 +1118,7 @@ function PupParkourGame({ onExit }: { onExit: () => void }) {
       }
       return;
     }
-    intervalRef.current = setInterval(tick, TICK_MS);
+    intervalRef.current = setInterval(tick, FF_TICK_MS);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
       intervalRef.current = null;
@@ -1098,465 +1127,656 @@ function PupParkourGame({ onExit }: { onExit: () => void }) {
   }, [gameState]);
 
   const startGame = () => {
-    setObstacles([]);
-    setDogLaneSynced(1);
-    setIsJumpingSynced(false);
+    const layout = computeFetchFrenzyLayout(trackSizeRef.current.width, trackSizeRef.current.height);
+    setItems([]);
     setScore(0);
     scoreRef.current = 0;
-    scoreFloatRef.current = 0;
+    setHealth(FF_MAX_HEALTH);
+    healthRef.current = FF_MAX_HEALTH;
     spawnTimerRef.current = 0;
     nextIdRef.current = 0;
-    dogTranslateX.setValue(0);
-    dogTranslateY.setValue(0);
+    dogXRef.current = (layout.width - layout.dogWidth) / 2;
+    dogX.setValue(dogXRef.current);
     setGameState("playing");
     gameStateRef.current = "playing";
   };
 
+  // Continuous 1:1 drag — the dog tracks the finger directly rather than snapping between lanes, matching "slide it across the screen" rather than Pup Parkour's discrete-lane swipe. Reads trackSizeRef (not React state) so the clamp bound always reflects the latest measured screen size even though the PanResponder itself is only ever created once.
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => gameStateRef.current === "playing",
       onMoveShouldSetPanResponder: (_evt, gesture) =>
-        gameStateRef.current === "playing" &&
-        (Math.abs(gesture.dx) > 8 || Math.abs(gesture.dy) > 8),
-      onPanResponderRelease: (_evt, gesture) => {
+        gameStateRef.current === "playing" && Math.abs(gesture.dx) > 2,
+      onPanResponderGrant: () => {
+        dogDragStartXRef.current = dogXRef.current;
+      },
+      onPanResponderMove: (_evt, gesture) => {
         if (gameStateRef.current !== "playing") return;
-        const { dx, dy } = gesture;
-        if (Math.abs(dx) < 24 && Math.abs(dy) < 24) {
-          jump();
-        } else if (dx > 24) {
-          moveLane(dogLaneRef.current + 1);
-        } else if (dx < -24) {
-          moveLane(dogLaneRef.current - 1);
-        }
+        const layout = computeFetchFrenzyLayout(trackSizeRef.current.width, trackSizeRef.current.height);
+        const next = Math.max(
+          0,
+          Math.min(layout.width - layout.dogWidth, dogDragStartXRef.current + gesture.dx)
+        );
+        dogXRef.current = next;
+        dogX.setValue(next);
       },
     })
   ).current;
 
+  const layout = computeFetchFrenzyLayout(
+    playAreaSize.width || trackSizeRef.current.width,
+    playAreaSize.height || trackSizeRef.current.height
+  );
+
   return (
-    <View
-      style={[
-        styles.gameBox,
-        { backgroundColor: theme.card.background, borderColor: theme.card.border },
-      ]}
-    >
+    <View style={[styles.gameFullScreen, { backgroundColor: theme.card.background }]}>
       <PressableScale
         style={[
-          styles.exitButton,
-          { backgroundColor: theme.card.background, borderColor: theme.card.border },
+          styles.gameFullScreenExitButton,
+          {
+            top: insets.top + 12,
+            left: insets.left + 16,
+            backgroundColor: theme.card.background,
+            borderColor: theme.card.border,
+          },
         ]}
         onPress={onExit}
       >
         <Text style={[styles.exitButtonText, { color: accentColor }]}>← Back to Games</Text>
       </PressableScale>
 
-      <Text style={[styles.gameTitle, { color: theme.text.primary }]}>🏃 Pup Parkour</Text>
+      <View
+        style={[
+          styles.gameFullScreenContent,
+          { paddingTop: insets.top + 64, paddingBottom: insets.bottom + 16 },
+        ]}
+      >
+        <Text style={[styles.gameTitle, { color: theme.text.primary }]}>🎾 Fetch Frenzy</Text>
 
-      {gameState === "idle" && (
-        <>
-          <Text style={[styles.gameSubtitle, { color: theme.text.secondary }]}>
-            Tap to jump over logs 🪵. Swipe left or right to slip through
-            gaps in the walls 🧱. Every bit of distance earns coins —{" "}
-            <CoinIcon size={13} /> 1 per {COINS_PER_DISTANCE} distance!
-          </Text>
-          <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
-            <Text style={styles.primaryButtonText}>Start Run</Text>
-          </PressableScale>
-        </>
-      )}
+        {gameState !== "idle" && (
+          <>
+            <View style={[styles.scoreRow, { width: layout.width }]}>
+              <Text style={[styles.scoreText, { color: theme.text.primary }]}>🎾 {score}</Text>
+              <Text style={[styles.bestScoreText, { color: theme.text.secondary }]}>Best {Math.max(best, score)}</Text>
+            </View>
 
-      {gameState !== "idle" && (
-        <>
-          <View style={styles.scoreRow}>
-            <Text style={[styles.scoreText, { color: theme.text.primary }]}>🐾 {score}</Text>
-            <Text style={[styles.bestScoreText, { color: theme.text.secondary }]}>Best {Math.max(best, score)}</Text>
-          </View>
+            {/* Plain placeholder health bar — restyle to match the sprite sheet's art once it's provided, same way the marking meter (TerritoryMeterScribbleTrack) later got its own hand-drawn treatment. */}
+            <View style={[styles.ffHealthTrack, { width: layout.width }]}>
+              <View style={[styles.ffHealthFill, { width: `${(health / FF_MAX_HEALTH) * 100}%` }]} />
+            </View>
+          </>
+        )}
 
-          <View
-            style={styles.parkourTrack}
-            {...panResponder.panHandlers}
-          >
-            <View style={styles.parkourLaneDivider1} />
-            <View style={styles.parkourLaneDivider2} />
-
-            {obstacles.map((o) =>
-              o.type === "hurdle" ? (
-                <View
-                  key={o.id}
-                  style={[
-                    styles.hurdleBlock,
-                    { left: o.lane * LANE_WIDTH + 6, top: o.y },
-                  ]}
-                >
-                  <Text style={styles.hurdleEmoji}>🪵</Text>
-                </View>
-              ) : (
-                <View key={o.id} style={[styles.barrierRow, { top: o.y }]}>
-                  {Array.from({ length: LANE_COUNT }).map((_, laneIdx) =>
-                    laneIdx === o.safeLane ? (
-                      <View key={laneIdx} style={styles.barrierGap} />
-                    ) : (
-                      <View key={laneIdx} style={styles.wallCell}>
-                        <Text style={styles.wallEmoji}>🧱</Text>
-                      </View>
-                    )
-                  )}
-                </View>
-              )
-            )}
-
-            <View style={styles.dogShadow} />
-            <Animated.View
-              style={[
-                styles.dogWrapper,
-                {
-                  transform: [
-                    { translateX: dogTranslateX },
-                    { translateY: dogTranslateY },
-                  ],
-                },
-              ]}
-            >
-              <Text style={styles.dogEmoji}>🐕</Text>
-            </Animated.View>
-          </View>
-
-          {gameState === "playing" && (
-            <Text style={[styles.instructionsText, { color: theme.text.secondary }]}>
-              Tap to jump · Swipe to dodge
-            </Text>
-          )}
-
-          {gameState === "gameover" && (
-            <>
-              <Text style={[styles.gameOverText, { color: theme.text.primary }]}>
-                You made it {score}m! 🎉{" "}
-                {lastCoins > 0 ? `+${lastCoins} coins` : "Go a bit further next time!"}
+        <View
+          style={styles.gameFullScreenPlayWrap}
+          onLayout={(e) => {
+            const width = Math.round(e.nativeEvent.layout.width);
+            const height = Math.round(e.nativeEvent.layout.height);
+            trackSizeRef.current = { width, height };
+            setPlayAreaSize((prev) =>
+              prev.width === width && prev.height === height ? prev : { width, height }
+            );
+          }}
+        >
+          {gameState === "idle" ? (
+            <View style={styles.gameFullScreenIdleContent}>
+              <Text style={[styles.gameSubtitle, { color: theme.text.secondary }]}>
+                Slide your dog side to side to catch tennis balls 🎾 and bones 🦴
+                as they fall — dodge the rocks 🪨, they cost you health! Fill your
+                score with catches to earn <CoinIcon size={13} /> coins.
               </Text>
               <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
-                <Text style={styles.primaryButtonText}>Run Again</Text>
+                <Text style={styles.primaryButtonText}>Start Game</Text>
               </PressableScale>
-            </>
+            </View>
+          ) : (
+            playAreaSize.width > 0 && (
+              <View
+                style={[styles.ffTrack, { width: layout.width, height: layout.height }]}
+                {...panResponder.panHandlers}
+              >
+                {items.map((it) => (
+                  <Text
+                    key={it.id}
+                    style={[
+                      styles.ffItemEmoji,
+                      {
+                        left: it.x,
+                        top: it.y,
+                        fontSize: layout.itemSize,
+                        width: layout.itemSize,
+                        height: layout.itemSize,
+                        lineHeight: layout.itemSize,
+                      },
+                    ]}
+                  >
+                    {FF_ITEM_VISUALS[it.kind].emoji}
+                  </Text>
+                ))}
+
+                <Animated.View
+                  style={[
+                    styles.ffDogWrapper,
+                    {
+                      width: layout.dogWidth,
+                      height: layout.dogHeight,
+                      bottom: layout.dogBottom,
+                      transform: [{ translateX: dogX }],
+                    },
+                  ]}
+                >
+                  <Text style={[styles.ffDogEmoji, { fontSize: Math.round(36 * layout.scaleX) }]}>🐕</Text>
+                </Animated.View>
+              </View>
+            )
           )}
-        </>
-      )}
+        </View>
+
+        {gameState === "playing" && (
+          <Text style={[styles.instructionsText, { color: theme.text.secondary }]}>
+            Slide to catch · Dodge the rocks
+          </Text>
+        )}
+
+        {gameState === "gameover" && (
+          <>
+            <Text style={[styles.gameOverText, { color: theme.text.primary }]}>
+              {health <= 0 ? "Out of health! " : ""}You caught {score}! 🎉{" "}
+              {lastCoins > 0 ? `+${lastCoins} coins` : "Catch a few more next time!"}
+            </Text>
+            <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
+              <Text style={styles.primaryButtonText}>Play Again</Text>
+            </PressableScale>
+          </>
+        )}
+      </View>
     </View>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Mark Your Territory (full-screen static porch scene — gameplay      */
-/* reworked later)                                                     */
-/*                                                                      */
-/* The old hold-to-mark-the-mailbox mechanic (Marked meter, neighbor    */
-/* safe/tell/danger phases, busted state, mailbox/hydrant targets, coin */
-/* payout) has been pulled out. This now just renders the block, full-  */
-/* bleed across the whole screen (Minigames swaps to this instead of    */
-/* its normal ScrollView layout, and fades the floating tab bar out —   */
-/* see isTerritoryFullScreen above): the house art (TERR_HOUSE_IMAGE)   */
-/* with the neighbor sitting on the porch reading the paper             */
-/* (TERR_PORCH_GUY_IMAGE). Gameplay gets rebuilt on top of this scene    */
-/* later.                                                                */
-/* ------------------------------------------------------------------ */
+// --- Tight Squeeze (narrow-passage navigation, one touch = game over) — Template built from a placeholder emoji dog (🐕) and SVG-drawn cave walls; once a real sprite sheet is provided, swap the dog's <Text> below for an <Image> — the wall rendering, spawn/collision logic is all driven by the numeric layout constants below and doesn't reference the dog's visuals at all. ---
 
-// Hand-illustrated house scene (porch, mailbox, picket-fenced yard).
-// Natural pixel size of the source file — needed below to replicate
-// resizeMode="cover"'s scale/crop math in JS.
+// Base/reference design size Tight Squeeze was originally built at — kept only as the denominator for the scale factor below. The actual on-screen track now fills whatever screen it's running full-screen on (see computeTightSqueezeLayout), not this fixed size.
+const TS_TRACK_WIDTH = 280;
+const TS_TRACK_HEIGHT = 400;
+
+// The dog sits at a fixed vertical position near the bottom of the track; the passage scrolls down past it. Collision is checked against this fixed Y every tick, interpolated between the two passage nodes bracketing it. These BASE constants are the design-time sizes at TS_TRACK_WIDTH/HEIGHT; computeTightSqueezeLayout scales them to the measured screen.
+const TS_DOG_WIDTH_BASE = 28;
+const TS_DOG_HEIGHT_BASE = 28;
+const TS_DOG_BOTTOM_BASE = 70;
+// Shrinks the dog's collision box in from its visual edges on each side, so a near-miss against the placeholder emoji (which doesn't fill its box edge-to-edge) still feels fair.
+const TS_DOG_COLLISION_INSET_BASE = 5;
+
+const TS_TICK_MS = 33;
+const TS_BASE_SPEED = 100; // px / second, how fast the passage scrolls down
+const TS_MAX_SPEED = 240;
+const TS_SPEED_RAMP_PER_POINT = 2;
+
+// Passage width (half-width in px either side of its center line) narrows as score climbs.
+const TS_BASE_HALF_WIDTH = 60;
+const TS_MIN_HALF_WIDTH = 24;
+const TS_NARROW_RAMP_PER_POINT = 0.5;
+
+// Vertical spacing between generated passage nodes, and how far the passage's center can drift left/right from one node to the next (a random walk).
+const TS_NODE_SPACING = 40;
+const TS_MAX_STEP = 24;
+
+// Score ticks up with distance traveled (1 point per this many px), not per-item like Fetch Frenzy — there's nothing to catch here, just distance survived.
+const TS_SCORE_DISTANCE = 30;
+// Coins on game over = floor(finalScore / this) — same "divide the score down" shape the other games use.
+const TS_COINS_PER_POINT = 10;
+
+type TightSqueezeNode = {
+  id: number;
+  y: number; // vertical position within the track; increases as the node scrolls down
+  centerX: number; // passage center line at this node
+  halfWidth: number; // passage half-width at this node
+};
+
+// Full-height seed of straight, comfortably-wide nodes spanning one screen above and through the visible track, so the player isn't dropped into narrow/winding terrain immediately. Nodes stay sorted ascending by y (topmost first) for the whole game — new nodes are always prepended with a smaller y than the current topmost, and every node moves down by the same amount each tick, so relative order is preserved without ever needing to re-sort. Takes the measured/scaled track dimensions rather than the fixed module constants, so the seed fills whatever screen it's running on.
+function buildTightSqueezeSeedNodes(
+  trackWidth: number,
+  trackHeight: number,
+  nodeSpacing: number,
+  halfWidth: number
+): TightSqueezeNode[] {
+  const nodes: TightSqueezeNode[] = [];
+  let id = 0;
+  for (let y = -trackHeight; y <= trackHeight + nodeSpacing; y += nodeSpacing) {
+    nodes.push({ id: id++, y, centerX: trackWidth / 2, halfWidth });
+  }
+  return nodes;
+}
+
+// Linearly interpolates the passage's center/half-width at an arbitrary y between the two nodes bracketing it — used every tick to test the dog's fixed Y against the (scrolling) passage.
+function tightSqueezeBoundsAtY(
+  nodes: TightSqueezeNode[],
+  y: number
+): { centerX: number; halfWidth: number } | null {
+  if (nodes.length === 0) return null;
+  if (y <= nodes[0].y) return { centerX: nodes[0].centerX, halfWidth: nodes[0].halfWidth };
+  for (let i = 0; i < nodes.length - 1; i++) {
+    const a = nodes[i];
+    const b = nodes[i + 1];
+    if (y >= a.y && y <= b.y) {
+      const span = b.y - a.y;
+      const t = span > 0 ? (y - a.y) / span : 0;
+      return {
+        centerX: a.centerX + (b.centerX - a.centerX) * t,
+        halfWidth: a.halfWidth + (b.halfWidth - a.halfWidth) * t,
+      };
+    }
+  }
+  const last = nodes[nodes.length - 1];
+  return { centerX: last.centerX, halfWidth: last.halfWidth };
+}
+
+// Builds one wall as a filled SVG polygon: a straight outer edge along the track's own edge, and a jagged inner edge tracing the passage boundary through every node — the gap between the two edges is what reads as "rock". Placeholder styling (flat fill); revisit once real cave/wall art is available. Takes the measured track width rather than the fixed module constant.
+function buildTightSqueezeWallPath(nodes: TightSqueezeNode[], side: "left" | "right", trackWidth: number): string {
+  if (nodes.length === 0) return "";
+  const outerX = side === "left" ? 0 : trackWidth;
+  const innerX = (n: TightSqueezeNode) =>
+    side === "left" ? n.centerX - n.halfWidth : n.centerX + n.halfWidth;
+  const first = nodes[0];
+  const last = nodes[nodes.length - 1];
+  let d = `M ${outerX} ${first.y} L ${outerX} ${last.y}`;
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    d += ` L ${innerX(nodes[i])} ${nodes[i].y}`;
+  }
+  d += " Z";
+  return d;
+}
+
+// Every pixel size/speed in Tight Squeeze is derived from the actual measured play area (trackWidth/trackHeight) rather than the fixed BASE constants, so the game genuinely fills whatever screen it's running full-screen on instead of sitting in a small fixed box. scaleX/scaleY compare the measured size against the original 280x400 design size.
+function computeTightSqueezeLayout(trackWidth: number, trackHeight: number) {
+  const width = Math.max(220, trackWidth);
+  const height = Math.max(280, trackHeight);
+  const scaleX = width / TS_TRACK_WIDTH;
+  const scaleY = height / TS_TRACK_HEIGHT;
+  const dogWidth = TS_DOG_WIDTH_BASE * scaleX;
+  const dogHeight = TS_DOG_HEIGHT_BASE * scaleX;
+  const dogBottom = TS_DOG_BOTTOM_BASE * scaleY;
+  const dogY = height - dogBottom - dogHeight / 2;
+  const dogCollisionInset = TS_DOG_COLLISION_INSET_BASE * scaleX;
+  const nodeSpacing = TS_NODE_SPACING * scaleY;
+  const baseHalfWidth = TS_BASE_HALF_WIDTH * scaleX;
+  const minHalfWidth = TS_MIN_HALF_WIDTH * scaleX;
+  const narrowRampPerPoint = TS_NARROW_RAMP_PER_POINT * scaleX;
+  const maxStep = TS_MAX_STEP * scaleX;
+  const baseSpeed = TS_BASE_SPEED * scaleY;
+  const maxSpeed = TS_MAX_SPEED * scaleY;
+  const speedRampPerPoint = TS_SPEED_RAMP_PER_POINT * scaleY;
+  const scoreDistance = TS_SCORE_DISTANCE * scaleY;
+  return {
+    width,
+    height,
+    scaleX,
+    scaleY,
+    dogWidth,
+    dogHeight,
+    dogBottom,
+    dogY,
+    dogCollisionInset,
+    nodeSpacing,
+    baseHalfWidth,
+    minHalfWidth,
+    narrowRampPerPoint,
+    maxStep,
+    baseSpeed,
+    maxSpeed,
+    speedRampPerPoint,
+    scoreDistance,
+  };
+}
+
+function TightSqueezeGame({ onExit }: { onExit: () => void }) {
+  const { earnCoins } = usePets();
+  const { accentColor, theme } = useTheme();
+  const insets = useSafeAreaInsets();
+
+  const [gameState, setGameState] = useState<"idle" | "playing" | "gameover">(
+    "idle"
+  );
+  const [nodes, setNodes] = useState<TightSqueezeNode[]>([]);
+  const [score, setScore] = useState(0);
+  const [best, setBest] = useState(0);
+  const [lastCoins, setLastCoins] = useState(0);
+  // Measured size of the play area below the title/score row — the passage is sized to fill it (see computeTightSqueezeLayout) instead of the old fixed 280x400 box. Always mounted (even on the idle screen) so a size is already known the moment Start Game is pressed.
+  const [playAreaSize, setPlayAreaSize] = useState({ width: 0, height: 0 });
+
+  // Mutable refs mirror state above so the interval tick and pan handlers always read fresh values, not a stale closure — same pattern as Fetch Frenzy.
+  const gameStateRef = useRef(gameState);
+  const scoreRef = useRef(0);
+  const distanceRef = useRef(0);
+  const nodesRef = useRef<TightSqueezeNode[]>([]);
+  const nextNodeIdRef = useRef(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Mirrors playAreaSize into a ref so the PanResponder (created once and never recreated) and imperative functions like startGame always read the latest measured size rather than a stale closure.
+  const trackSizeRef = useRef({ width: TS_TRACK_WIDTH, height: TS_TRACK_HEIGHT });
+  // Dog's left position within the track — a plain ref (not React state) since it changes on every pan-move event; dogX (the Animated.Value below) drives the actual on-screen position via a native-driven transform, so dragging never triggers a re-render.
+  const dogXRef = useRef(0);
+  const dogDragStartXRef = useRef(0);
+  const dogX = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
+
+  const endGame = () => {
+    if (gameStateRef.current !== "playing") return;
+    gameStateRef.current = "gameover";
+    setGameState("gameover");
+
+    const finalScore = scoreRef.current;
+    setBest((prev) => Math.max(prev, finalScore));
+
+    const coinsEarned = Math.floor(finalScore / TS_COINS_PER_POINT);
+    if (coinsEarned > 0) earnCoins(coinsEarned);
+    setLastCoins(coinsEarned);
+  };
+
+  const tick = () => {
+    const layout = computeTightSqueezeLayout(trackSizeRef.current.width, trackSizeRef.current.height);
+    const dt = TS_TICK_MS / 1000;
+    const speed = Math.min(
+      layout.maxSpeed,
+      layout.baseSpeed + scoreRef.current * layout.speedRampPerPoint
+    );
+
+    distanceRef.current += speed * dt;
+    const newScore = Math.floor(distanceRef.current / layout.scoreDistance);
+    if (newScore !== scoreRef.current) {
+      scoreRef.current = newScore;
+      setScore(newScore);
+    }
+
+    setNodes((prev) => {
+      const moved = prev.map((n) => ({ ...n, y: n.y + speed * dt }));
+      // Drop nodes once they've fully scrolled past the bottom.
+      const trimmed = moved.filter((n) => n.y <= layout.height + layout.nodeSpacing * 2);
+      // Keep a roughly constant buffer of unseen passage above the visible track by spawning a fresh node whenever the current topmost has drifted down too far.
+      const topmost = trimmed[0];
+      if (topmost && topmost.y > -layout.height + layout.nodeSpacing) {
+        const halfWidth = Math.max(
+          layout.minHalfWidth,
+          layout.baseHalfWidth - scoreRef.current * layout.narrowRampPerPoint
+        );
+        const rawCenter = topmost.centerX + (Math.random() * 2 - 1) * layout.maxStep;
+        const centerX = Math.max(halfWidth, Math.min(layout.width - halfWidth, rawCenter));
+        trimmed.unshift({
+          id: nextNodeIdRef.current++,
+          y: topmost.y - layout.nodeSpacing,
+          centerX,
+          halfWidth,
+        });
+      }
+      nodesRef.current = trimmed;
+      return trimmed;
+    });
+
+    // One touch and it's over — check the dog's fixed Y against the (scrolling) passage every tick.
+    const bounds = tightSqueezeBoundsAtY(nodesRef.current, layout.dogY);
+    if (bounds) {
+      const dogLeft = dogXRef.current + layout.dogCollisionInset;
+      const dogRight = dogXRef.current + layout.dogWidth - layout.dogCollisionInset;
+      const passageLeft = bounds.centerX - bounds.halfWidth;
+      const passageRight = bounds.centerX + bounds.halfWidth;
+      if (dogLeft < passageLeft || dogRight > passageRight) {
+        endGame();
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (gameState !== "playing") {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      return;
+    }
+    intervalRef.current = setInterval(tick, TS_TICK_MS);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState]);
+
+  const startGame = () => {
+    const layout = computeTightSqueezeLayout(trackSizeRef.current.width, trackSizeRef.current.height);
+    const seed = buildTightSqueezeSeedNodes(layout.width, layout.height, layout.nodeSpacing, layout.baseHalfWidth);
+    nextNodeIdRef.current = seed.length;
+    nodesRef.current = seed;
+    setNodes(seed);
+    setScore(0);
+    scoreRef.current = 0;
+    distanceRef.current = 0;
+    dogXRef.current = (layout.width - layout.dogWidth) / 2;
+    dogX.setValue(dogXRef.current);
+    setGameState("playing");
+    gameStateRef.current = "playing";
+  };
+
+  // Continuous 1:1 drag, same control scheme as Fetch Frenzy — the dog tracks the finger directly rather than snapping between lanes. Reads trackSizeRef (not React state) so the clamp bound always reflects the latest measured screen size even though the PanResponder itself is only ever created once.
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => gameStateRef.current === "playing",
+      onMoveShouldSetPanResponder: (_evt, gesture) =>
+        gameStateRef.current === "playing" && Math.abs(gesture.dx) > 2,
+      onPanResponderGrant: () => {
+        dogDragStartXRef.current = dogXRef.current;
+      },
+      onPanResponderMove: (_evt, gesture) => {
+        if (gameStateRef.current !== "playing") return;
+        const layout = computeTightSqueezeLayout(trackSizeRef.current.width, trackSizeRef.current.height);
+        const next = Math.max(
+          0,
+          Math.min(layout.width - layout.dogWidth, dogDragStartXRef.current + gesture.dx)
+        );
+        dogXRef.current = next;
+        dogX.setValue(next);
+      },
+    })
+  ).current;
+
+  const layout = computeTightSqueezeLayout(
+    playAreaSize.width || trackSizeRef.current.width,
+    playAreaSize.height || trackSizeRef.current.height
+  );
+
+  return (
+    <View style={[styles.gameFullScreen, { backgroundColor: theme.card.background }]}>
+      <PressableScale
+        style={[
+          styles.gameFullScreenExitButton,
+          {
+            top: insets.top + 12,
+            left: insets.left + 16,
+            backgroundColor: theme.card.background,
+            borderColor: theme.card.border,
+          },
+        ]}
+        onPress={onExit}
+      >
+        <Text style={[styles.exitButtonText, { color: accentColor }]}>← Back to Games</Text>
+      </PressableScale>
+
+      <View
+        style={[
+          styles.gameFullScreenContent,
+          { paddingTop: insets.top + 64, paddingBottom: insets.bottom + 16 },
+        ]}
+      >
+        <Text style={[styles.gameTitle, { color: theme.text.primary }]}>🕳️ Tight Squeeze</Text>
+
+        {gameState !== "idle" && (
+          <View style={[styles.scoreRow, { width: layout.width }]}>
+            <Text style={[styles.scoreText, { color: theme.text.primary }]}>🕳️ {score}</Text>
+            <Text style={[styles.bestScoreText, { color: theme.text.secondary }]}>Best {Math.max(best, score)}</Text>
+          </View>
+        )}
+
+        <View
+          style={styles.gameFullScreenPlayWrap}
+          onLayout={(e) => {
+            const width = Math.round(e.nativeEvent.layout.width);
+            const height = Math.round(e.nativeEvent.layout.height);
+            trackSizeRef.current = { width, height };
+            setPlayAreaSize((prev) =>
+              prev.width === width && prev.height === height ? prev : { width, height }
+            );
+          }}
+        >
+          {gameState === "idle" ? (
+            <View style={styles.gameFullScreenIdleContent}>
+              <Text style={[styles.gameSubtitle, { color: theme.text.secondary }]}>
+                Slide your dog through the narrow passage — the walls creep in
+                tighter the further you go. One touch and it's game over, so
+                steer carefully!
+              </Text>
+              <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
+                <Text style={styles.primaryButtonText}>Start Game</Text>
+              </PressableScale>
+            </View>
+          ) : (
+            playAreaSize.width > 0 && (
+              <View
+                style={[styles.tsTrack, { width: layout.width, height: layout.height }]}
+                {...panResponder.panHandlers}
+              >
+                {/* Placeholder cave walls, drawn fresh from the node list every frame — swap the flat fill for real rock art once it's available; the passage math doesn't change. */}
+                <Svg width={layout.width} height={layout.height} style={StyleSheet.absoluteFill}>
+                  <Path d={buildTightSqueezeWallPath(nodes, "left", layout.width)} fill="#6B4A31" />
+                  <Path d={buildTightSqueezeWallPath(nodes, "right", layout.width)} fill="#6B4A31" />
+                </Svg>
+
+                <Animated.View
+                  style={[
+                    styles.tsDogWrapper,
+                    {
+                      width: layout.dogWidth,
+                      height: layout.dogHeight,
+                      bottom: layout.dogBottom,
+                      transform: [{ translateX: dogX }],
+                    },
+                  ]}
+                >
+                  <Text style={[styles.tsDogEmoji, { fontSize: Math.round(22 * layout.scaleX) }]}>🐕</Text>
+                </Animated.View>
+              </View>
+            )
+          )}
+        </View>
+
+        {gameState === "playing" && (
+          <Text style={[styles.instructionsText, { color: theme.text.secondary }]}>
+            Slide to steer · One touch on a wall ends the run
+          </Text>
+        )}
+
+        {gameState === "gameover" && (
+          <>
+            <Text style={[styles.gameOverText, { color: theme.text.primary }]}>
+              Hit a wall! You made it to {score}! 🎉{" "}
+              {lastCoins > 0 ? `+${lastCoins} coins` : "Squeeze a little further next time!"}
+            </Text>
+            <PressableScale style={[styles.primaryButton, { backgroundColor: accentColor }]} onPress={startGame}>
+              <Text style={styles.primaryButtonText}>Play Again</Text>
+            </PressableScale>
+          </>
+        )}
+      </View>
+    </View>
+  );
+}
+
+// --- Mark Your Territory (full-screen static porch scene; old hold-to-mark mechanic pulled out — renders house art with the neighbor on the porch; gameplay to be rebuilt later) ---
+
+// Hand-illustrated house scene; natural pixel size of the source file, needed to replicate resizeMode="cover"'s scale/crop math in JS.
 const TERR_HOUSE_IMAGE = require("../../assets/images/territory-house.png");
-// Swapped (2026-09-04) for a new hand-drawn blue two-story house. Natural
-// pixel size of THIS file — every anchor below was re-measured against
-// this image's own 1086x1316 pixel space by color-sampling the art
-// (porch-deck tan vs. grass green, mailbox blue vs. its surroundings,
-// sidewalk vs. road asphalt), the same method used for the original
-// house image. They are not portable to any other house art.
-//
-// Canvas extended upward (2026-09-07) from 1086x1316 to 1086x2262 — 946px
-// of plain background added above the original art, matching its own
-// near-white/cream color and faint paper-grain texture (sampled from a
-// clean corner patch, not tiled from real rows, since the top rows
-// turned out to contain part of the roofline's decorative pendant and a
-// first attempt at tiling them produced an obviously repeated diamond
-// pattern climbing the extension — caught by looking at the result
-// before shipping it, not assumed clean). This is the actual fix for the
-// phone-screen tradeoff described in the TERR_HOUSE_ZOOM/scale comments
-// below: rather than mathematically shrinking the whole scene to force
-// more width into frame (which was always going to cost either a top
-// gap or a side crop, see the history there), the image's OWN aspect
-// ratio is now close to a typical phone's (1086/2262 ≈ 0.48, vs. common
-// phones' ~0.45-0.56), so a plain height-locked fit shows nearly the
-// full width — including the fence — AND fills the full height with
-// zero gap, on most real phone sizes, without needing to trade one for
-// the other anymore. Checked against several common device sizes'
-// logical points (iPhone SE 375x667 through iPhone 14 Pro Max 430x932)
-// before shipping: 94-100% of the width shows uncropped on every one of
-// them, zero top/bottom letterboxing on all of them.
+// House art's natural pixel size (1086x2262, extended upward from 1086x1316) — anchors below are measured against this image's own pixel space and aren't portable to other art; the taller canvas keeps a near-phone aspect ratio so a height-locked fit shows nearly full width with no letterboxing on common phones.
 const TERR_HOUSE_IMG_WIDTH = 1086;
 const TERR_HOUSE_IMG_HEIGHT = 2262;
-// This is a genuine two-way tradeoff between 1 and anything less than 1,
-// not a bug to keep chasing — bounced between both values once already
-// (2026-09-07): at 1, the house exactly fills the container height with
-// zero top gap, at the cost of cropping proportionally more off both
-// sides on narrower phones (reported as "zoomed it in too far"); at
-// 0.98, the sides crop a little less, at the cost of a small gap
-// showing only at the top (house is bottom-anchored, so any shrink here
-// shows up above it and nowhere else — reported as "the top of the
-// screen is showing again"). Currently 1 (zero top gap) per the most
-// recent request — if the side crop becomes the bigger complaint again,
-// the real fix is extending TERR_HOUSE_IMG_HEIGHT further (bringing the
-// image's own aspect ratio even closer to a phone's) rather than
-// continuing to toggle this value back and forth.
+// TERR_HOUSE_ZOOM tradeoff: 1 fills the container height with zero top gap but crops more off the sides on narrow phones; <1 leaves a small top gap but crops less. Currently 1 per the latest request.
 const TERR_HOUSE_ZOOM = 1;
 
-// Neighbor in a rocking chair reading the paper — each stage below is
-// cropped tight to his silhouette (transparent PNG, no padding). Each
-// stage carries its own `aspect` (that file's own width/height) so we
-// can compute an exact on-screen width from a chosen height with no
-// letterboxing/stretching, even though separately-generated stage
-// images won't come out pixel-identical in canvas size or crop margins
-// to one another. The three SRC_* constants below (shared by every
-// stage) are anchor points measured against TERR_HOUSE_IMAGE's own real
-// pixel space instead — the porch's own fixed floor line and the
-// chair's horizontal position on it — so every stage renders at the
-// same spot and the same on-screen size on the porch regardless of
-// device, independent of any one stage image's own resolution.
+// Neighbor-in-rocking-chair stages, each cropped tight to its own silhouette with its own `aspect`; three SRC_* anchors (shared by every stage) keep every stage at the same porch position/size, from newspaper fully up (oblivious) to fully down (attentive). To add a stage: crop tight, add to assets, add one {source, aspect, chairCenterFrac} entry — see chairCenterFrac's own comment below for how to measure that last one.
 //
-// "Attentiveness" stages: same neighbor, same chair — only the
-// newspaper's position changes, from fully up (not paying attention)
-// down to not held up at all (looking straight at the player).
+// chairCenterFrac fix (2026-09-11): the 2026-09-07 horizontal-jitter fix re-cropped every stage to a uniform 3px margin on the *character's* full bounding box (newspaper + hands + chair), which assumes that box's own center lines up with the chair's true center — true whenever the margin genuinely lands even on both sides, but stage 3's content happened to already reach x=0 pre-crop, so it only got a 3px margin on the right, none on the left. That shifted stage 3's chair a few px left of where CENTER_X-based centering (which centers the *box*, not the chair) put the others, reported live as "the chair position slightly changes" starting right at the stage-2-to-3 transition. Measured directly: isolated each stage's chair via a wood-color classifier (b<45, r<220, r>40, (r-g)>=15, g>=b on opaque pixels — tuned by sampling this art's own palette, not reused from an older threshold that turned out to also catch skin) and took its bounding box's horizontal center as a fraction of that stage's own canvas width. Stages 1/2/4/5 land within half a percent of each other (~0.505-0.506); stage 3 was a real outlier at 0.490. `chairCenterFrac` records that measured value per stage so the render math (below) can center each stage on its *chair*, not its box — a permanent, generalizable fix rather than a one-off nudge to stage 3 alone, so any future stage art that isn't perfectly margin-symmetric won't reintroduce this.
 //
-// To add a stage once its PNG is ready: crop it tight to the character
-// silhouette (matching how the existing ones are cropped), drop the
-// file in assets/images/, add one { source, aspect } entry to this
-// array (most-oblivious first, most-attentive last — aspect = that
-// file's own pixel width / height), and neighborStage below picks
-// which one renders — nothing else needs to change.
+// Vertical size-match fix (2026-09-11, same round): same wood-classifier measurement also showed the chair's own rendered HEIGHT wasn't quite constant either — stage 1 has the most headroom above the chair in its own crop (wood occupies 82.5% of that file's height), stages 2/3/4 progressively less (83.9%/84.4%/84.8%), so at the shared fixed guyHeight the chair reads as growing larger stage-to-stage (confirmed live: "the chair gets slightly bigger every stage until stage 5"). Fixed the same way the very first size-jump fix in this file's history handled it (see the "Stage-1/2 size-jump fixed" section in the project doc): padded stages 2-5's own canvases with transparent rows at the TOP ONLY (content itself untouched, nothing cropped or moved) until each stage's own wood-occupied fraction matches stage 1's (the smallest, so every other stage only ever needs padding added, never real content cropped away) — 9px/12px/14px/6px respectively. `aspect` values below were updated to match each stage's new (padded) pixel dimensions; `chairCenterFrac` is unaffected by top-only padding (verified numerically unchanged) so those values didn't need updating.
 const TERR_PORCH_GUY_STAGES = [
   {
-    // Full replacement (2026-09-07) — all 6 poses (stages 1-5 + caught)
-    // now come from a single 3x2 reference sheet the user supplied, one
-    // generation pass, same character/chair/art-style drawn consistently
-    // across every cell (top-left through bottom-right = most-oblivious
-    // to busted). Background was already transparent in the source; each
-    // cell was split at its nominal 512x512 grid boundary, a ~1px stray
-    // seam artifact at the stage-2/stage-3 boundary (a duplicated sliver
-    // of outline-colored pixels sitting exactly on the cut line, present
-    // in both neighboring cells) was zeroed out, then each cell was
-    // trimmed tight to its own opaque content with a 3px soft-alpha
-    // margin. Verified clean: alpha-channel connected-component check
-    // found exactly one main silhouette per cell (no stray dots/holes),
-    // and the mid-alpha (anti-aliased edge) pixels average near-black,
-    // not near-white — i.e. real edge softening, not a white-background
-    // halo. Supersedes the 2026-09-04/2026-09-07 standalone-illustration
-    // art and its padding-based size-jump fix below — this new sheet's
-    // poses render at consistent chair/character scale at a shared fixed
-    // height without needing any top-padding (confirmed by resizing all
-    // 6 trimmed images to one common height and compositing them
-    // side-by-side: chair size and seat height line up across every
-    // stage). Top-left cell = newspaper fully covering his face, seated
-    // in the rocking chair. Re-trimmed (2026-09-07, see the
-    // horizontal-jitter note on TERR_PORCH_GUY_CAUGHT below) to 425x497 —
-    // this stage's own left/right margins were already close to even, so
-    // barely changed size.
+    // All 6 poses (5 attentiveness stages + caught) come from one 3x2 reference sheet, split per-cell, seam artifact cleaned up, each trimmed tight with a 3px soft-alpha margin; verified clean via alpha connected-component check. Top-left cell = newspaper fully covering his face. Reference stage for the vertical size-match fix above — smallest wood-height fraction of the 5, so left untouched (no padding needed).
     source: require("../../assets/images/territory-porch-guy.png"),
     aspect: 425 / 497,
+    chairCenterFrac: 0.50588,
   },
   {
-    // From the same 3x2 sheet (top-middle cell) — newspaper lowered
-    // slightly, eyes/eyebrows visible over the top in an annoyed glare.
-    // Re-trimmed (2026-09-07) from 493x494 to 423x490 — had 68px of dead
-    // transparent margin on the right vs 8px on the left (see the note
-    // below), now trimmed tight and even on both sides.
+    // Top-middle cell — newspaper lowered slightly, eyes/eyebrows visible in an annoyed glare; re-trimmed tight and even on both sides. 9px transparent padding added at the top (499 tall now, was 490) to match stage 1's chair scale.
     source: require("../../assets/images/territory-porch-guy-stage-2.png"),
-    aspect: 423 / 490,
+    aspect: 423 / 499,
+    chairCenterFrac: 0.50591,
   },
   {
-    // From the same 3x2 sheet (top-right cell) — newspaper lowered
-    // further, full face visible (eyes, brow, mustache) in an annoyed
-    // glare. Re-trimmed (2026-09-07) from 489x491 to 414x487 — had 78px
-    // of dead margin on the right vs 0px on the left, the worst offender
-    // of the six (see the note below).
+    // Top-right cell — newspaper lowered further, full face visible in an annoyed glare; re-trimmed to fix an uneven right-side margin, but that recrop only had room for a 0px left margin (vs. 3px on the right) since content already reached x=0 — this is the stage whose chair sits measurably off-center; chairCenterFrac corrects it. 12px transparent padding added at the top (499 tall now, was 487) to match stage 1's chair scale.
     source: require("../../assets/images/territory-porch-guy-stage-3.png"),
-    aspect: 414 / 487,
+    aspect: 414 / 499,
+    chairCenterFrac: 0.49034,
   },
   {
-    // From the same 3x2 sheet (bottom-left cell) — newspaper lowered
-    // further still, more shirt/suspenders visible below the face.
-    // Re-trimmed (2026-09-07) to 425x487 — like stage 1, this one's
-    // margins were already close to even.
+    // Bottom-left cell — newspaper lowered further still, more shirt/suspenders visible below the face. 14px transparent padding added at the top (501 tall now, was 487) to match stage 1's chair scale — this stage had the largest chair-scale drift of the four, per the live "bigger every stage" report.
     source: require("../../assets/images/territory-porch-guy-stage-4.png"),
-    aspect: 425 / 487,
+    aspect: 425 / 501,
+    chairCenterFrac: 0.50471,
   },
   {
-    // From the same 3x2 sheet (bottom-middle cell) — most-attentive
-    // non-caught pose, full glare, newspaper held lowest of the five.
-    // Re-trimmed (2026-09-07) from 449x501 to 426x495 — had 23px of dead
-    // margin on the right vs 6px on the left.
+    // Bottom-middle cell — most-attentive non-caught pose, full glare, newspaper held lowest. 6px transparent padding added at the top (501 tall now, was 495) to match stage 1's chair scale.
     source: require("../../assets/images/territory-porch-guy-stage-5.png"),
-    aspect: 426 / 495,
+    aspect: 426 / 501,
+    chairCenterFrac: 0.50469,
   },
 ];
 
-// Separate from the attentiveness sequence above — this is the "caught you
-// peeing" reaction (red-faced, furious, staring straight out), shown
-// (2026-09-03) when MarkYourTerritoryGame's stage loop reaches the last
-// entry in TERR_PORCH_GUY_STAGES while the player is still holding the
-// mailbox. Swapped in directly via `isCaught` rather than through
-// neighborStage/the stages array — it's a distinct busted state, not
-// another notch in the oblivious-to-attentive progression. Replaced
-// (2026-09-07) along with the 5 stages above, from the same 3x2 reference
-// sheet's bottom-right cell — red/flushed face, furious glare, same
-// processing (seam-artifact cleanup, tight trim). Re-trimmed again later
-// the same day (see note below) from 461x504 to 382x501 — had 54px of
-// dead margin on the right vs 31px on the left.
-//
-// Horizontal-jitter fix (2026-09-07, applies to all 6 files above and
-// this one): user reported the character visibly shifts left/right at
-// every stage transition, even though CENTER_X/guyLeft math centers each
-// stage's BOUNDING BOX at the exact same screen x regardless of its own
-// width (guyLeft = CENTER_X*scale + houseOffsetX - guyWidth/2, so the box
-// center is provably fixed). Root cause was upstream of that math: when
-// the 3x2 sheet was originally split and each cell trimmed to its own
-// tight bounding box, the vertical (top/bottom) trim came out tight and
-// consistent (3-7px margin) on every stage, but the horizontal trim did
-// not — measured directly, several stages had wildly uneven left/right
-// margins (e.g. stage 3: 0px left vs 78px right; caught: 31px left vs
-// 54px right; stage 1/4 were fine, ~5-6px both sides). Since the box
-// CENTER is what's pinned to CENTER_X, not the visible content, a big gap
-// of dead transparent space on one side of a stage's own file pushes that
-// stage's actual drawn character off from the box's true center — and
-// that offset differs stage to stage, reading as a left/right jitter on
-// every transition even though the anchor math itself was already
-// correct. Fixed by re-measuring each file's real content bounding box
-// (alpha>15 threshold, same as every other cleanup pass in this doc) and
-// re-cropping tight with a uniform 3px margin on all four sides —
-// verified after the fact by resizing all 6 to a common height and
-// drawing each one's own box-center line over it: the chair/character
-// silhouette now lines up under that line consistently across every
-// stage, where before the fix stage 2/3 in particular sat visibly left
-// of it. No code changes needed beyond the `aspect` value each file's own
-// section records above (and this one, just below) — CENTER_X/LIFT and
-// the render math are untouched.
+// "Caught you peeing" busted pose (bottom-right cell of the sheet) — red-faced, furious, shown when the stage loop reaches the last entry while still holding. Horizontal-jitter fix: re-cropped every stage's bounding box with a uniform 3px margin on all sides, since uneven left/right dead space (not the CENTER_X anchor math) was what caused the visible shift between stages.
+// Size-jump fix (2026-09-11): the caught pose's own cropped aspect is 382/501 (0.7625) — genuinely narrower than the 5 attentiveness stages' (~0.830-0.855, after the vertical size-match padding above), since this pose's arms are pulled in tighter around the newspaper rather than spread on the armrests. Rendered at guyWidth = guyHeight * aspect (a fixed guyHeight, per-stage aspect), that made him visibly narrower right at the "caught" moment — confirmed by measuring the actual rendered footprint at a common simulated guyHeight, not just eyeballed. Using the attentiveness stages' own average aspect here instead (so the box width matches them) and letting the existing resizeMode="stretch" mildly widen this one image to fill it — the same accepted-stretch tradeoff already used for the ambient birds' wing-flap frames.
 const TERR_PORCH_GUY_CAUGHT = {
   source: require("../../assets/images/territory-porch-guy-caught.png"),
-  aspect: 382 / 501,
+  aspect: TERR_PORCH_GUY_STAGES.reduce((sum, s) => sum + s.aspect, 0) / TERR_PORCH_GUY_STAGES.length,
+  // Measured the same way as the attentiveness stages' chairCenterFrac above — this pose came out very close to true-center (0.499) on its own, but wired through the same field for consistency.
+  chairCenterFrac: 0.49869,
 };
-// Re-measured (2026-09-04) against the new house art: the porch deck's
-// tan/gray surface reads cleanly from source y~787 down to y~804 before
-// giving way to grass, and the open stretch of blue wall clear of the
-// door, front window, and both support posts sits roughly x~765-845 —
-// so the chair is centered a bit left of that post to keep clearance.
-// Nudged further left in small steps (2026-09-07, per user feedback) from
-// 780 down to 726 — 765, 758, 748, 736, 726. Then the user asked for him
-// centered on the porch instead ("i want him to be in the middle so to
-// the left alot more"), a much bigger jump than the small steps before
-// it: set to 555, roughly the midpoint of the porch's full open floor
-// (door-side post ~235 to corner post ~858). This deliberately puts him
-// square in front of the window rather than beside it — the window-
-// overlap concern flagged at 758+ (see the earlier history this replaces)
-// is no longer a nudge-by-nudge accident at this point, it's the explicit
-// ask, so not re-flagging it the same way going forward unless it reads
-// wrong live. One more small nudge left after that, to 540 — then a
-// nudge back the other way, to 560, after the user clarified they'd
-// actually meant right — then set directly to 600, then 650, then 670,
-// per successive requests.
+// Neighbor's horizontal position on the porch, nudged repeatedly per user feedback — currently centered on the porch per the explicit "more to the left/center" request, deliberately square in front of the window.
 const TERR_PORCH_GUY_SRC_CENTER_X = 670;
-// Shifted from 800 to 1746 (2026-09-07) — the +946 the canvas-extension
-// section above added to the top of the image moved every existing
-// y-anchor down by that same amount, since none of the real content
-// moved, only the blank space above it grew. Horizontal anchors (CENTER_X
-// above) are untouched — the extension only added rows, not columns.
+// Shifted +946 to match the canvas-extension's added top margin — horizontal anchors are untouched since only rows were added, not columns.
 const TERR_PORCH_GUY_SRC_FLOOR_Y = 1746;
-// Scaled from the previous house's 125 by the same ratio as the two
-// images' heights (1316/1198) so the character keeps the same visual
-// size relative to the porch rather than shrinking/growing with the
-// new art's own resolution.
+// Scaled from the previous house art's value by the same height ratio, so the character keeps the same relative size on the new art.
 const TERR_PORCH_GUY_SRC_HEIGHT = 137;
-// Manual nudge on top of the measured floor-line anchor above — per user
-// feedback he still read as sitting a touch low/forward on the porch.
-// Source-pixel units (like the anchors above), so it scales consistently
-// with everything else instead of drifting at different screen sizes.
-// Scaled from 34 by the same 1316/1198 ratio as the height above, to
-// preserve the same lift-to-height proportion on the new art. Reduced
-// (2026-09-07) from 37 to 20, then to 8, then to 3, then to -2, across
-// four rounds of user feedback to nudge him further down — less lift
-// means guyBottom (= (FLOOR_Y - LIFT) * scale) grows, which moves him
-// further down toward the floor line. Negative is fine here — it's just
-// added back to FLOOR_Y rather than subtracted, nudging him slightly
-// past the originally-measured floor line rather than up off of it.
+// Manual nudge on top of the measured floor-line anchor, reduced across several rounds of feedback to sit him lower on the porch; source-pixel units so it scales consistently at every screen size.
 const TERR_PORCH_GUY_LIFT = -2;
 
-// Mailbox hold-target, measured the same way as the porch-guy anchors
-// above (fixed pixel coordinates in TERR_HOUSE_IMAGE's own 1086x1316
-// space, found by color-thresholding the mailbox's box against the
-// grass/sky around it) — so the touch target and the pee stream's
-// endpoint stay locked to the mailbox regardless of screen size.
-// Re-measured (2026-09-04) for the new house art: the mailbox box's post
-// sits at source x~552, and its blue box reads from y~807 (roof edge)
-// down to y~913 (where it gives way to the white post beneath). Both Y
-// values shifted by +946 (2026-09-07, same canvas-extension shift as
-// TERR_PORCH_GUY_SRC_FLOOR_Y above — see that comment).
+// Mailbox hold-target, measured the same fixed-pixel way as the porch-guy anchors, re-measured and shifted +946 for the new/extended house art.
 const TERR_MAILBOX_SRC_CENTER_X = 552;
 const TERR_MAILBOX_SRC_TOP_Y = 1753;
 const TERR_MAILBOX_SRC_BOTTOM_Y = 1859;
 
-// Where the dog character stands — the paved road at the very bottom of
-// TERR_HOUSE_IMAGE (measured by color-sampling the curb/asphalt line).
-// Same fixed-source-pixel anchor pattern as the porch guy/mailbox
-// anchors above. Horizontally the dog rests directly under the mailbox
-// (TERR_MAILBOX_SRC_CENTER_X), so the pee stream — already anchored to
-// that same x — reads as coming from him.
-// Re-measured (2026-09-04) for the new house art: the sidewalk gives way
-// to the road at source y~1195-1200, so 1255 sits comfortably inside the
-// road band below that, matching the old image's ~60px curb clearance.
-// Shifted by +946 (2026-09-07, same canvas-extension shift as the other
-// Y anchors above).
+// Where the dog stands (paved road at the bottom of the art, directly under the mailbox), measured the same fixed-pixel way and shifted +946 for the canvas extension.
 const TERR_DOG_SRC_Y = 2201;
-// Where the dog stands while actively marking (isHolding is true) —
-// beside the mailbox post itself rather than his far-away resting spot
-// on the road, so the peeing pose reads as him actually marking the
-// mailbox instead of aiming a long stream at it from the street.
-// TERR_MAILBOX_SRC_BOTTOM_Y is only where the visible blue box gives way
-// to the post beneath it, not where the post meets the ground — no exact
-// "post meets lawn" pixel has been measured for this art, so the Y offset
-// below is an approximation. The X offset stands him to the mailbox's
-// right rather than directly in front of the post, so both stay visible.
-// Nudge either by eye if he doesn't land right at the post's base.
+// Where the dog stands while marking — beside the mailbox post rather than his resting spot on the road; Y offset is an approximation since no exact post-meets-ground pixel was measured. Nudge by eye if he doesn't land right.
 const TERR_DOG_AT_MAILBOX_Y = TERR_MAILBOX_SRC_BOTTOM_Y + 130;
 const TERR_DOG_AT_MAILBOX_X_OFFSET = 70;
 // How long the slide to/from the mailbox takes when isHolding toggles.
 const TERR_DOG_APPROACH_MS = 220;
-// Emoji glyphs don't have their own aspect/anchor data like the PNG
-// stages, so this is just a chosen on-screen size in the same
-// source-pixel scale as everything else, tuned to look proportionate
-// next to the mailbox rather than measured from art. Original value (110)
-// was tuned against the old mailbox's 92px-tall box; scaled up to 127 to
-// match the new mailbox's ~106px-tall box at the same proportion.
+// Emoji fallback's on-screen size, tuned proportionate to the mailbox rather than measured from art.
 const TERR_DOG_SRC_HEIGHT = 127;
-// Purpose-drawn art for this scene's dog (2026-09-07), replacing the
-// earlier approach of borrowing the player's own pet's avatar/walk-cycle
-// art as a stand-in — this pair was hand-drawn specifically as this dog's
-// two states: standing/walking, and the leg-lifted "marking" pose used at
-// the mailbox. Background was keyed out to transparent and each image
-// trimmed to its own content, same treatment as the porch-guy stage art
-// above. Source art faces left (nose toward the left edge of the frame),
-// so TerritoryDog flips it horizontally to face right toward the mailbox,
-// same as the emoji fallback below always needed.
+// Purpose-drawn dog art (standing/walking + leg-lifted marking pose), replacing the earlier player-avatar stand-in; background keyed transparent and trimmed. Source faces left, so TerritoryDog flips it to face right.
 const TERR_DOG_IDLE_IMAGE = require("../../assets/images/territory-dog-idle.png");
 const TERR_DOG_PEEING_IMAGE = require("../../assets/images/territory-dog-peeing.png");
-// Known intrinsic aspect ratios (width / height) for the two pose images,
-// measured from the source PNGs. Used as the web fallback below since
-// react-native-web's Image has no resolveAssetSource to read this from the
-// asset itself — native keeps reading the exact value from the asset.
+// Known intrinsic aspect ratios for the two dog poses — web fallback since react-native-web's Image can't read this from the asset itself.
 const TERR_DOG_IDLE_ASPECT = 1029 / 821;
 const TERR_DOG_PEEING_ASPECT = 1056 / 781;
-// Hand-drawn pee-stream + splash animation (user-provided sprite sheet,
-// 2026-09-08): 6 frames, each de-keyed to a transparent background and
-// cropped to a shared union bounding box so every frame lines up exactly
-// the same way (same treatment as the porch-guy/dog art above — no
-// per-frame jitter from mismatched crops). Drawn top-to-bottom (stream
-// falling from the top of the frame into a splash at the bottom), which
-// is why TerritoryPeeStream below anchors the top of this art to the dog
-// and the bottom to the mailbox, then rotates the whole strip to point
-// between wherever those two things actually are on screen.
+// Hand-drawn pee-stream/splash sprite sheet (6 frames, cropped to a shared bounding box so they line up); drawn top-to-bottom, so TerritoryPeeStream anchors top to the dog and bottom to the mailbox, then rotates to point between them.
 const TERR_PEE_STREAM_FRAMES = [
   require("../../assets/images/territory-pee-stream-1.png"),
   require("../../assets/images/territory-pee-stream-2.png"),
@@ -1565,35 +1785,15 @@ const TERR_PEE_STREAM_FRAMES = [
   require("../../assets/images/territory-pee-stream-5.png"),
   require("../../assets/images/territory-pee-stream-6.png"),
 ];
-// Measured intrinsic size of the cropped frames above (width / height) —
-// same web-fallback reasoning as TERR_DOG_IDLE_ASPECT: react-native-web
-// has no resolveAssetSource, so the aspect is hardcoded here instead of
-// read from the asset at runtime.
+// Measured intrinsic size of the cropped pee-stream frames — same web-fallback reasoning as the dog's aspect constants.
 const TERR_PEE_STREAM_FRAME_ASPECT = 249 / 295;
 const TERR_PEE_STREAM_FPS = 10;
-// Fallback only, for the (currently unreachable) case TerritoryDog is ever
-// used without the art above — kept as a cheap safety net rather than
-// deleted outright.
+// Fallback only, for the (currently unreachable) case TerritoryDog is used without the art above.
 const TERR_DOG_EMOJI = "🐕";
 const TERR_DOG_ENTRANCE_MS = 1200;
 const TERR_DOG_HOP_MS = 150;
 
-// Ambient background birds (2026-09-10), purely decorative — no gameplay
-// tie-in, just life in the sky above the roofline. Hand-drawn 6-frame
-// wing-flap cycle (user-provided sheet, same 3x2-grid-of-poses shape as
-// the neighbor reference sheet was), each frame background-removed via
-// flood-fill from the border inward (threshold 30 against white) rather
-// than a global brightness cutoff — same reasoning as the dog-art cleanup
-// above, though this source had no enclosed light-colored content to
-// protect either way. Verified clean (one connected component per frame,
-// no cross-cell seam artifacts, no white halo on a sky-blue or dark
-// composite) before wiring in. Unlike the pee-stream frames (cropped to a
-// shared union bbox so that strip never changes size), each bird frame
-// keeps its OWN tight trim — the wings genuinely take up a different
-// silhouette width open vs. tucked, so letting width follow each frame's
-// own aspect at a fixed render height (same pattern TERR_PORCH_GUY_STAGES
-// and the dog's idle/peeing poses already use) reads as the wing motion
-// itself rather than a resize glitch.
+// Ambient decorative background birds — hand-drawn 6-frame wing-flap cycle, background-removed via flood-fill and verified clean. Each frame keeps its own trim so the wing motion (not a resize glitch) reads through the changing silhouette width.
 const TERR_BIRD_FRAMES = [
   require("../../assets/images/territory-bird-1.png"),
   require("../../assets/images/territory-bird-2.png"),
@@ -1602,47 +1802,18 @@ const TERR_BIRD_FRAMES = [
   require("../../assets/images/territory-bird-5.png"),
   require("../../assets/images/territory-bird-6.png"),
 ];
-// Web fallback aspects (width/height), measured from the trimmed source
-// files — same reasoning as TERR_DOG_IDLE_ASPECT above: react-native-web
-// has no resolveAssetSource, so native reads the exact value from the
-// asset at runtime and web falls back to this hardcoded table instead.
-const TERR_BIRD_FRAME_ASPECTS = [320 / 261, 320 / 196, 320 / 187, 320 / 230, 320 / 205, 320 / 249];
-// A single fixed aspect used for the bird's on-screen BOX size (2026-09-10,
-// added after the user reported the bird visibly growing/shrinking through
-// its own wing-flap — sizing the box off each frame's own trim, as the
-// render originally did, means a wings-spread frame (aspect ~1.71) and a
-// wings-tucked one (~1.23) produce boxes ~40% apart in width at the same
-// fixed height, which reads as pulsing rather than flapping. Averaging all
-// 6 frames' aspects gives one representative box size that stays constant
-// for the whole animation; each frame's own true proportions still render
-// correctly and without distortion inside that fixed box via the Image's
-// existing resizeMode="contain" (letterboxed within the box rather than
-// stretched to fill it) — so the wing motion itself is unaffected, only
-// the surrounding box stops resizing frame to frame.
+// Web fallback aspects for the bird frames — same reasoning as the dog's TERR_DOG_IDLE_ASPECT. All 6 re-cropped (2026-09-11 head-bob fix) onto one shared beak-anchored 322x301 canvas, so these are now identical rather than 6 different trims.
+const TERR_BIRD_FRAME_ASPECTS = [322 / 301, 322 / 301, 322 / 301, 322 / 301, 322 / 301, 322 / 301];
+// Fixed on-screen box size for the bird (averaged across all 6 frames' aspects) so the box itself doesn't visibly grow/shrink through the wing-flap; each frame still renders undistorted via resizeMode="contain" inside that fixed box.
 const TERR_BIRD_FIXED_ASPECT =
   TERR_BIRD_FRAME_ASPECTS.reduce((sum, a) => sum + a, 0) / TERR_BIRD_FRAME_ASPECTS.length;
 
-// Module-level cache for Image.resolveAssetSource(...).width/height lookups
-// (2026-09-10, added while chasing a "things go invisible/flashy after the
-// minigame screen's been open a while" report). TerritoryBird and
-// TerritoryDog both called resolveAssetSource fresh on every render to read
-// each pose/frame's exact aspect ratio — cheap-looking, but a real native
-// bridge round trip each time, and TerritoryBird's wing-flap cycling alone
-// was doing that up to 16x/second (2 birds x up to 8fps) for as long as
-// this screen stayed mounted, which — since switching to another bottom tab
-// doesn't actually unmount it (the tab navigator keeps inactive tab screens
-// alive) — could be far longer than the visible play time suggests. A
-// local require() resolves to a stable numeric module id on native, so it's
-// a safe cache key; on web (no resolveAssetSource at all) this is never
-// consulted, same as before. Caching removes the repeated bridge calls
-// without changing any visible sizing — same numbers, just computed once
-// per asset instead of every render/frame.
+// Module-level cache for Image.resolveAssetSource lookups — avoids a native-bridge round trip on every wing-flap/render tick (up to 16x/sec) for as long as this screen stays mounted (switching tabs doesn't unmount it).
 const territoryAssetAspectCache = new Map<number, number>();
 function resolveTerritoryAssetAspect(source: ImageSourcePropType, fallbackAspect: number): number {
   if (Platform.OS === "web" || typeof Image.resolveAssetSource !== "function") return fallbackAspect;
   if (typeof source !== "number") {
-    // Not a local require() (shouldn't happen for this file's own art, but
-    // fall back rather than risk caching something that could change).
+    // Not a local require() (shouldn't happen here) — fall back rather than risk caching something that could change.
     const resolved = Image.resolveAssetSource(source);
     return resolved.width / resolved.height;
   }
@@ -1655,120 +1826,37 @@ function resolveTerritoryAssetAspect(source: ImageSourcePropType, fallbackAspect
 }
 
 const TERR_BIRD_FPS = 8;
-// On-screen size (the fixed HEIGHT budget — width follows each frame's own
-// aspect, see above), in the same everything-scales-with-screen-height
-// spirit as the dog/porch-guy, but not tied to any TERR_HOUSE_IMAGE source
-// pixel anchor the way those are — birds are free-floating sky decoration,
-// not registered against a specific spot in the art, so this is chosen
-// directly as a fraction of the container height in the render below
-// rather than scaled from a source-pixel constant.
+// Bird's fixed on-screen height budget (width follows each frame's own aspect) — chosen as a fraction of container height, not tied to a house-art source-pixel anchor like the porch guy/mailbox/dog.
 const TERR_BIRD_SIZE_FRACTION = 0.05;
-// Each bird flies a single crossing (TERR_BIRD_FLIGHT_MS-ish, tuned per
-// instance below) and then sits idle off-screen before flying again. The
-// idle wait is re-rolled fresh after every flight to a random value in
-// [_MIN_CYCLE_MS, _MAX_CYCLE_MS] — "fly by at random" (per the user's ask)
-// rather than a fixed ~10s metronome — same random-interval-per-tick
-// pattern TERR_STAGE_MIN/MAX_INTERVAL_MS already uses for the neighbor's
-// attentiveness clock. The range is centered around the original ~10s ask
-// (average wait ≈ 11s) so it still feels like "about every 10 seconds,"
-// just not mechanically so.
+// Each bird flies one crossing then idles off-screen for a re-rolled random wait before flying again — "fly by at random" rather than a fixed metronome, centered around ~10s average.
 const TERR_BIRD_CYCLE_MIN_MS = 6000;
 const TERR_BIRD_CYCLE_MAX_MS = 16000;
 const TERR_BIRD_FLIGHT_MS = 4200;
 
-// How often the neighbor's attentiveness advances a stage, in ms — a
-// random value in this range is rolled after every tick so the rhythm
-// isn't perfectly predictable, but never so fast/slow it feels unfair.
-// Slowed down overall per feedback: the floor is kept the same (still
-// occasionally snappy/near-instant, especially right after a long wait —
-// that contrast is the "slowly or instantly, randomly" feel that was
-// asked for) but the ceiling was raised a lot, roughly tripling the
-// average wait between stage changes (was ~2000ms, now ~4200ms) and
-// widening the spread so the rhythm reads as genuinely unpredictable
-// rather than a narrow, easy-to-learn band.
-// Floor raised again (2026-09-08) alongside TERR_MARK_FILL_MS below going
-// up, to preserve the same fairness invariant that constant's comment
-// describes: the guaranteed-worst-case time-to-bust (4 stage advances all
-// rolling the minimum) is 4 x TERR_STAGE_MIN_INTERVAL_MS = 8000ms, kept
-// comfortably above the new, longer fill time so holding continuously
-// from a fresh round can still always finish even on the unluckiest roll.
-const TERR_STAGE_MIN_INTERVAL_MS = 2000;
-const TERR_STAGE_MAX_INTERVAL_MS = 7000;
+// Neighbor's attentiveness stage clock: a guaranteed fixed-interval switch every TERR_STAGE_INTERVAL_MS, but every TERR_STAGE_TICK_MS a separate roll has a TERR_STAGE_EARLY_SWITCH_CHANCE probability of switching early — replaces the old min/max random-delay timer with "every 4s, but 25% chance each second to jump early" per feedback. This governs every stage EXCEPT the last one, which uses its own randomized dwell below.
+const TERR_STAGE_INTERVAL_MS = 4000;
+const TERR_STAGE_TICK_MS = 1000;
+const TERR_STAGE_EARLY_SWITCH_CHANCE = 0.25;
+// How long the neighbor lingers on his last (most-attentive) stage before looking away again — a uniformly random duration per dwell, rolled fresh each time he reaches it, rather than the fixed-interval-plus-dice-roll timing every earlier stage uses.
+const TERR_STAGE_LAST_STAGE_MIN_MS = 4000;
+const TERR_STAGE_LAST_STAGE_MAX_MS = 8000;
 
-// Coins for releasing safely before he reaches the last (most-attentive)
-// stage — same ballpark as Paw Pattern's per-round reward, since this is
-// also a quick, repeatable round rather than a one-time win.
-const TERR_MARK_REWARD = 5;
-
-// Total accumulated holding time (ms) needed to fill the "Marking"
-// progress meter all the way and complete the round. Progress only
-// accrues while the mailbox is actively held, but is never reset by
-// releasing — same no-arbitrary-resets philosophy as the neighbor's
-// attentiveness clock (see the fix-round note above) — so several short
-// holds add up exactly like one long one. Raised from 5000 (2026-09-08,
-// per feedback) to make marking take noticeably longer — still kept below
-// the *minimum* possible time-to-bust (4 stage advances x
-// TERR_STAGE_MIN_INTERVAL_MS = 8000ms, see that constant's comment, which
-// was raised alongside this one) so a player who holds continuously from
-// a fresh round can always finish in time on an unlucky-fast roll; slower
-// rolls just add margin. Ticks every TERR_MARK_TICK_MS while held.
-const TERR_MARK_FILL_MS = 7500;
+// Total holding time needed to fill the marking meter; progress persists across releases (never reset by releasing). Slowed down twice per feedback (was 7500ms, then 12000ms).
+const TERR_MARK_FILL_MS = 15000;
 const TERR_MARK_TICK_MS = 100;
 
-// One-time bonus for fully filling the meter (completing the round)
-// instead of just banking per-release marks — bigger than TERR_MARK_REWARD
-// since it's the round's actual win condition, same idea as Minesweeper's
-// WIN_REWARD vs. its smaller incidental rewards.
+// One-time bonus for fully completing the round — the only coin reward this game gives now (releasing safely before that used to award TERR_MARK_REWARD each time, removed per feedback so coins only come from actually completing the round), same idea as Minesweeper's WIN_REWARD.
 const TERR_COMPLETE_REWARD = 20;
 
-// Marking-meter redesign (2026-09-10): once markProgress crosses this
-// fraction, the meter card gets a pulsing amber glow — a visual "almost
-// there" urgency cue, the win-side counterpart to the neighbor's own
-// approaching-bust tension (there's still no equivalent cue for THAT risk,
-// see the open-follow-ups note elsewhere in the project doc — this only
-// covers the meter).
-const TERR_METER_URGENT_THRESHOLD = 0.85;
-
-// Dedicated on-screen "hold to mark" button (2026-09-10) — sits on the
-// right side of the screen, independent of the mailbox's own on-screen
-// position, so a player's thumb no longer has to rest directly over the
-// mailbox art (and its pee-stream/dog animation) to mark it. Originally a
-// code-drawn circle; swapped for the user-supplied pixel-art wood-sign
-// asset (2026-09-10 follow-up) and sized small per that request — a real
-// tap target this size would be too cramped on its own, so hitSlop at the
-// call site pads the actual touchable area back out past Apple's 44pt
-// minimum without changing how big the art reads on screen.
-// TERR_MARK_BUTTON_ASPECT is the source PNG's own width/height (450x138)
-// so the on-screen size always keeps its proportions no matter what width
-// is picked here.
+// Dedicated "hold to mark" button, independent of the mailbox's own position so a thumb doesn't block the view while holding; swapped from a code-drawn circle to a small pixel-art wood-sign asset, with hitSlop padding the tap target past Apple's 44pt minimum.
 const TERR_MARK_BUTTON_IMAGE = require("../../assets/images/territory-mark-button.png");
 const TERR_MARK_BUTTON_WIDTH = 78;
 const TERR_MARK_BUTTON_ASPECT = 450 / 138;
 const TERR_MARK_BUTTON_HEIGHT = TERR_MARK_BUTTON_WIDTH / TERR_MARK_BUTTON_ASPECT;
 
-// Both TerritoryPulseHalo (the shared pulsing-glow component) and
-// TerritoryMailboxHint (its thin wrapper around the mailbox itself) were
-// removed here (2026-09-11, per the user's "take the flashing away from
-// behind the mark button and take the flashing away on the mailbox" ask)
-// — neither HUD element flashes anymore. The wood-sign button art and the
-// mailbox's own on-screen position already read clearly enough without an
-// animated hint.
+// The old pulsing-glow halo components (TerritoryPulseHalo/TerritoryMailboxHint) were removed per the user's "take the flashing away" ask — the art reads clearly enough without an animated hint.
 
-// The pee-stream effect: cycles through the hand-drawn 6-frame sprite
-// (TERR_PEE_STREAM_FRAMES) stretched and rotated into a strip that runs
-// from the dog's actual current position to the mailbox, so it reads as
-// coming out of him rather than a line drawn from a fixed screen spot.
-// The art is drawn top-to-bottom (stream at top, splash at bottom), so
-// `origin` (the dog) anchors the top of the strip and `target` (the
-// mailbox) anchors the bottom; the strip is then rotated around its own
-// center so that top-to-bottom axis points exactly from origin to target,
-// covering every relative position the two could be in (left/right of
-// each other, closer/farther) without needing a separate mirrored asset.
-// Frame-cycling reuses the same rAF-driven, drift-free approach as
-// WalkingSprite, reimplemented inline rather than wrapping that component
-// directly since its built-in bob/sway gait motion doesn't belong on a
-// liquid effect. Mounted only while actively holding, so playback starts
-// fresh each time rather than needing an internal enabled/disabled gate.
+// Pee-stream effect: cycles the 6-frame sprite stretched/rotated into a strip running from the dog's position to the mailbox, so it reads as coming out of him regardless of their relative positions; frame-cycling reuses WalkingSprite's rAF approach, reimplemented inline since its bob/sway doesn't belong on a liquid effect.
 function TerritoryPeeStream({
   originX,
   originY,
@@ -1809,11 +1897,7 @@ function TerritoryPeeStream({
   const dx = targetX - originX;
   const dy = targetY - originY;
   const distance = Math.max(Math.hypot(dx, dy), 1);
-  // Rotation (degrees, clockwise per RN/CSS convention) that points the
-  // strip's built-in top-to-bottom ("down") axis at (dx, dy) instead of
-  // straight down — see the derivation in the component doc comment above:
-  // rotating (0, 1) clockwise by theta gives (-sin theta, cos theta), so
-  // matching that to (dx, dy) needs theta = atan2(-dx, dy).
+  // Rotation that points the strip's built-in "down" axis at (dx, dy) instead of straight down: theta = atan2(-dx, dy).
   const angleDeg = (Math.atan2(-dx, dy) * 180) / Math.PI;
   const height = distance;
   const width = distance * TERR_PEE_STREAM_FRAME_ASPECT;
@@ -1834,9 +1918,7 @@ function TerritoryPeeStream({
     >
       <Image
         source={TERR_PEE_STREAM_FRAMES[frameIndex]}
-        // Mirrored left-right in its own local space — independent of the
-        // outer View's rotate above, which only orients the strip toward
-        // the target, so this flip doesn't change where the stream points.
+        // Mirrored left-right in its own local space, independent of the outer rotate, so the flip doesn't change where the stream points.
         style={{ width: "100%", height: "100%", transform: [{ scaleX: -1 }] }}
         resizeMode="stretch"
       />
@@ -1844,17 +1926,7 @@ function TerritoryPeeStream({
   );
 }
 
-// One ambient background bird: cycles the 6-frame wing-flap sprite on an
-// rAF loop (same drift-free approach as TerritoryPeeStream's frame-cycling
-// above) while making a single crossing of the sky at constant speed
-// (Easing.linear), then sits idle off-screen for a randomized wait before
-// flying again — "fly by at random" (per the user's ask), rather than
-// either an endless back-to-back stream or a metronomic fixed interval.
-// `direction` controls both which edge he starts/ends at and whether the
-// art (drawn facing right in its source form, same orientation as every
-// other character in this file) gets flipped to face left. Purely
-// decorative — no gameplay tie-in, mounted unconditionally alongside the
-// rest of the scene once it's laid out.
+// One ambient background bird: cycles its wing-flap sprite on an rAF loop while crossing the sky at constant speed, then idles off-screen for a random wait before flying again; purely decorative, mounted unconditionally.
 function TerritoryBird({
   containerWidth,
   y,
@@ -1875,25 +1947,15 @@ function TerritoryBird({
   startDelayMs?: number;
 }) {
   const [frameIndex, setFrameIndex] = useState(0);
-  // 0 -> 1: one single crossing (see the scheduling useEffect below, which
-  // resets this to 0 and re-animates it up to 1 once per cycle rather than
-  // using Animated.loop — a loop can't insert an idle pause between
-  // iterations the way a manual setTimeout-driven repeat can).
+  // 0->1: one single crossing, reset and re-animated per cycle via the scheduling effect below rather than Animated.loop (which can't insert an idle pause between iterations).
   const progress = useRef(new Animated.Value(0)).current;
 
-  // Wing-flap frame cycling — started/stopped by the flight-scheduling
-  // effect below, exactly bracketing each flight, rather than running for
-  // this component's entire mounted lifetime (2026-09-10, changed while
-  // chasing a "screen glitches/things go invisible after a while" report).
-  // The bird sits fully off-screen (see startX/endX below — progress is 0
-  // or 1 the whole time it isn't mid-flight) for the idle pause between
-  // flights, which with the random 6-17.6s cycle against a ~4.2-5.5s
-  // flight is 60-75% of the time — ticking invisible wing frames through
-  // that whole stretch, forever, for as long as this screen stays mounted
-  // (switching to another bottom tab doesn't unmount it — see the
-  // project doc), was pure wasted work: a React state update plus an
-  // aspect-ratio lookup up to 8x/second per bird, with nothing on screen
-  // to show for most of it.
+  // size/containerWidth are frozen for the duration of one flight (re-captured only when the next flight starts, in flyOnce below) rather than read live off props every render. The parent recomputes these from `layout` on every one of its own re-renders, and even a same-flight parent re-render (e.g. the marking meter's 100ms tick) would otherwise change this bird's box size mid-air the instant it happened, on top of the layout-jitter case fixed in the parent's onLayout guard. latestPropsRef always tracks the current props (so a real resize is still picked up) — flightGeomRef only copies from it at the start of each flight.
+  const latestPropsRef = useRef({ size, containerWidth });
+  latestPropsRef.current = { size, containerWidth };
+  const flightGeomRef = useRef({ size, containerWidth });
+
+  // Wing-flap frame cycling is started/stopped bracketing each flight rather than running for the component's whole mounted lifetime, since the idle pause (60-75% of the cycle) was ticking invisible frames the whole time this screen stayed mounted.
   const wingRafRef = useRef<number | null>(null);
   const startWingFlap = () => {
     if (wingRafRef.current !== null) return;
@@ -1917,19 +1979,10 @@ function TerritoryBird({
       wingRafRef.current = null;
     }
   };
-  // Safety net only — the flight effect below is what normally starts/stops
-  // this; this just guarantees no rAF survives past unmount.
+  // Safety net only — the flight effect below normally starts/stops this; this just guarantees no rAF survives past unmount.
   useEffect(() => stopWingFlap, []);
 
-  // Flies once (0 -> 1 over flightMs), then — once actually landed off the
-  // far edge, not just "duration elapsed" (the `finished` check skips
-  // rescheduling if this effect got torn down/re-run mid-flight) — rolls a
-  // fresh random wait in [minCycleMs, maxCycleMs] (re-rolled every time,
-  // same pattern as the neighbor's own randomStageDelay()) and schedules
-  // the next flight after it. A recursive setTimeout chain (same pattern
-  // the neighbor's stageLoopRef uses elsewhere in this file) rather than
-  // Animated.loop, since a loop has no built-in way to pause between
-  // iterations, let alone a randomized one.
+  // Flies once, then once actually landed off-screen rolls a fresh random wait and schedules the next flight via a recursive setTimeout chain (same pattern the neighbor's stage loop uses), since Animated.loop can't pause between iterations.
   useEffect(() => {
     let cancelled = false;
     let timeoutId: ReturnType<typeof setTimeout>;
@@ -1938,6 +1991,7 @@ function TerritoryBird({
 
     const flyOnce = () => {
       if (cancelled) return;
+      flightGeomRef.current = latestPropsRef.current;
       progress.setValue(0);
       startWingFlap();
       Animated.timing(progress, {
@@ -1963,39 +2017,15 @@ function TerritoryBird({
   }, [flightMs, minCycleMs, maxCycleMs, startDelayMs]);
 
   const frameSource = TERR_BIRD_FRAMES[frameIndex];
-  // Box size is fixed across every frame (TERR_BIRD_FIXED_ASPECT, see its
-  // own comment above) rather than each frame's own trimmed aspect. This
-  // alone turned out NOT to be enough (2026-09-10, second pass at this same
-  // bug): with resizeMode="contain", a frame whose own aspect doesn't
-  // exactly match the fixed box's aspect still gets letterboxed DOWN within
-  // it — contain preserves the image's true proportions by shrinking
-  // whichever axis doesn't fit, so the visible bird still grew/shrank
-  // frame to frame even though the invisible bounding box no longer did
-  // (worse in one respect than before this fix: previously at least the
-  // height was rock-solid and only width varied; a fixed-aspect box with
-  // contain let BOTH axes drift depending on which side of the average a
-  // given frame's aspect fell on). Switched to resizeMode="stretch" so the
-  // artwork fills the fixed box completely on every frame, full stop — no
-  // letterboxing, no shrink-to-fit, so the box size IS the visible size,
-  // every frame. This does mean each frame is stretched slightly off its
-  // own true aspect (±~16% at the extremes vs. the 1.468 average) rather
-  // than rendered pixel-perfect, but at this art's actual on-screen size
-  // (a few dozen px tall) that's the same tradeoff already accepted
-  // elsewhere in this file (the neighbor's own Image also uses
-  // resizeMode="stretch") and reads as far less wrong than a visibly
-  // pulsing bird. No per-frame Image.resolveAssetSource call is needed
-  // here at all anymore either way — one less native-bridge round trip per
-  // frame step on top of the wing-flap-only-while-flying fix from the
-  // round before.
+  // Uses resizeMode="stretch" (not "contain") so the fixed-aspect box fills completely every frame with no letterboxing/pulsing — a prior attempt with "contain" still let both axes drift since a mismatched aspect still gets letterboxed down; frames stretch slightly off their own true aspect, an accepted tradeoff at this render size. No per-frame resolveAssetSource call needed anymore either.
   const aspect = TERR_BIRD_FIXED_ASPECT;
-  const width = size * aspect;
+  // frozenSize/frozenContainerWidth (not the live size/containerWidth props) drive every dimension below, so a bird's box genuinely cannot change mid-flight for any reason — see flightGeomRef's comment above.
+  const { size: frozenSize, containerWidth: frozenContainerWidth } = flightGeomRef.current;
+  const width = frozenSize * aspect;
 
-  // Off-screen at both ends regardless of container width — same
-  // -(x + size)-style derivation TerritoryDog's entranceStartX uses for
-  // its own off-screen guarantee, just for both edges here since this
-  // loops continuously instead of arriving once.
-  const startX = direction === "left-to-right" ? -width : containerWidth + width;
-  const endX = direction === "left-to-right" ? containerWidth + width : -width;
+  // Off-screen at both ends regardless of container width — same -(x + size) derivation TerritoryDog's entranceStartX uses.
+  const startX = direction === "left-to-right" ? -width : frozenContainerWidth + width;
+  const endX = direction === "left-to-right" ? frozenContainerWidth + width : -width;
 
   return (
     <Animated.View
@@ -2005,27 +2035,20 @@ function TerritoryBird({
         top: y,
         left: 0,
         width,
-        height: size,
+        height: frozenSize,
         transform: [
           { translateX: progress.interpolate({ inputRange: [0, 1], outputRange: [startX, endX] }) },
-          // Drawn facing right in its source form — flip only when flying
-          // right-to-left so he always faces the direction he's headed.
+          // Drawn facing right in its source form — flip only when flying right-to-left so he always faces the direction he's headed.
           { scaleX: direction === "right-to-left" ? -1 : 1 },
         ],
       }}
     >
-      <Image source={frameSource} style={{ width, height: size }} resizeMode="stretch" />
+      <Image source={frameSource} style={{ width, height: frozenSize }} resizeMode="stretch" />
     </Animated.View>
   );
 }
 
-// The dog itself — hops in from off-screen left along the road once on
-// mount, settles at its resting spot under the mailbox, then steps up
-// right next to the mailbox post (and swaps to the leg-lifted "marking"
-// pose image, TERR_DOG_PEEING_IMAGE) whenever the player is holding the
-// mailbox, so marking reads as him actually at the mailbox rather than
-// aiming a stream at it from the street — and steps back to his resting
-// spot on release.
+// The dog: hops in from off-screen on mount, settles at his resting spot under the mailbox, steps up beside it (swapping to the leg-lifted marking pose) while held, and steps back on release.
 function TerritoryDog({
   restX,
   restY,
@@ -2049,19 +2072,11 @@ function TerritoryDog({
   idleAspect?: number;
   peeingAspect?: number;
 }) {
-  // 0 -> 1 once, on mount: carries the entrance slide from off-screen left
-  // to the resting spot. Never replayed after that — he's already there
-  // for the rest of the round, whatever happens with holding/busts.
+  // 0->1 once on mount: the entrance slide from off-screen to the resting spot, never replayed after that.
   const entrance = useRef(new Animated.Value(0)).current;
-  // Small up/down bob, looped only while the entrance slide is playing —
-  // makes the approach read as a hop/trot rather than a flat slide across
-  // the screen. Stopped and zeroed once he arrives.
+  // Small up/down bob, looped only during the entrance slide, so the approach reads as a hop/trot rather than a flat slide.
   const hop = useRef(new Animated.Value(0)).current;
-  // 0 -> 1 while isHolding is true (and back on release): slides him from
-  // his resting spot up to right beside the mailbox post, additively on
-  // top of the entrance/hop above. Independent of those — can fire many
-  // times per round as the player presses in/out, unlike the one-shot
-  // entrance.
+  // 0->1 while isHolding (and back on release): slides him from resting spot to beside the mailbox, additively on top of the entrance/hop; can fire many times per round.
   const atMailbox = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -2096,32 +2111,10 @@ function TerritoryDog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isHolding]);
 
-  // How far left (in screen px) the entrance has to start from to
-  // guarantee he's actually off-screen, not just off *his resting spot* —
-  // a fixed offset (the original -180) wasn't enough on a wide/letterboxed
-  // layout, where the mailbox (and so his resting x) can sit hundreds of
-  // px in from the real left edge. Derived from his own rest position
-  // (restX) and size rather than the container width: starting at
-  // -(restX + size) always places his right edge at restX - size/2 - size,
-  // i.e. a full extra half-size past the screen's x=0 with margin to
-  // spare, regardless of how wide the container actually is.
+  // Entrance start-x derived from his own rest position and size (not container width) so he's guaranteed fully off-screen regardless of how wide the container is.
   const entranceStartX = -(restX + size);
 
-  // Which pose is showing right now. Recomputed every render (not cached)
-  // so it tracks isHolding live, same as the porch guy swapping stage
-  // images. Each pose is its own trimmed art with its own aspect ratio
-  // (the peeing pose's raised leg makes it wider/shorter than idle), read
-  // via Image.resolveAssetSource (synchronous for a local require(), no
-  // network/async involved) on native, through the same module-level cache
-  // TerritoryBird uses (resolveTerritoryAssetAspect, see its comment above)
-  // rather than a fresh native-bridge call every render — this component
-  // re-renders on every markProgress tick (every 100ms) while the mailbox
-  // is held, so uncached this was a real, avoidable, frequent cost, same
-  // class of issue as the bird's wing-flap loop. react-native-web doesn't
-  // implement resolveAssetSource at all (it throws "is not a function"),
-  // so on web we fall back to the pose's known intrinsic aspect ratio
-  // instead — `size` continues to mean the on-screen HEIGHT budget; width
-  // follows from that + aspect.
+  // Current pose, recomputed every render to track isHolding live; aspect read via the cached resolveTerritoryAssetAspect on native (avoiding a bridge call on every 100ms markProgress tick), or a known fallback aspect on web where resolveAssetSource doesn't exist.
   const poseImage = isHolding && peeingImage ? peeingImage : idleImage;
   const fallbackAspect = isHolding && peeingImage ? peeingAspect : idleAspect;
   const aspect = poseImage ? resolveTerritoryAssetAspect(poseImage, fallbackAspect) : 1;
@@ -2130,8 +2123,7 @@ function TerritoryDog({
   const content = poseImage ? (
     <Image source={poseImage} style={{ width, height: size }} resizeMode="contain" />
   ) : (
-    // Fallback — only reachable if TerritoryDog is ever used without the
-    // dedicated pose art above.
+    // Fallback — only reachable if TerritoryDog is ever used without the dedicated pose art above.
     <Text style={{ fontSize: size, lineHeight: size }}>{TERR_DOG_EMOJI}</Text>
   );
 
@@ -2147,18 +2139,12 @@ function TerritoryDog({
         alignItems: "center",
         justifyContent: "center",
         transform: [
-          // World-space moves across the screen — both listed before the
-          // local flip below so neither is affected by it (transform
-          // functions compose local-to-world in reverse list order, same
-          // as CSS): he always enters from the left regardless of which
-          // way he's facing, and slides the same screen-space amount to
-          // reach the mailbox regardless of facing too.
+          // World-space moves listed before the local flip below so neither is affected by it — he always enters from the left and slides the same screen-space amount regardless of which way he's facing.
           { translateX: entrance.interpolate({ inputRange: [0, 1], outputRange: [entranceStartX, 0] }) },
           { translateX: atMailbox.interpolate({ inputRange: [0, 1], outputRange: [0, atMailboxX - restX] }) },
           { translateY: hop.interpolate({ inputRange: [0, 1], outputRange: [0, -8] }) },
           { translateY: atMailbox.interpolate({ inputRange: [0, 1], outputRange: [0, atMailboxY - restY] }) },
-          // Both the pose art and the emoji fallback face left in their
-          // source form, so always flip to face right toward the mailbox.
+          // Both the pose art and the emoji fallback face left in source form, so always flip to face right toward the mailbox.
           { scaleX: -1 },
         ],
       }}
@@ -2168,47 +2154,68 @@ function TerritoryDog({
   );
 }
 
+// Fixed size of the marking meter's track — kept as constants (not props) since the hand-drawn wobble path and scribble strokes below are hand-tuned to this exact viewBox rather than computed generically for an arbitrary size.
+const TERR_METER_TRACK_WIDTH = 110;
+const TERR_METER_TRACK_HEIGHT = 11;
+// Hand-jittered rounded-rect outline (replaces the old clean borderRadius+borderWidth track) so the meter's frame itself reads as drawn-by-hand, matching the rest of this scene's cartoon linework rather than a crisp UI element. Thinner than the original pass (1.0 vs 1.4) to match the cleaner pencil-sketch reference this bar's style is based on.
+const TERR_METER_WOBBLE_OUTLINE_D =
+  "M5.2,1.4 L29,0.7 L59,1.4 L85,0.7 L104.8,1.6 Q108.6,1.7 108.6,4.6 L108.2,6.8 Q108.7,9.5 105,9.7 L75,10.3 L45,9.6 L20,10.2 L5.4,9.5 Q1.3,9.7 1.3,6.4 L1.7,4 Q1.4,1.2 5.2,1.4 Z";
+// Second, very slightly offset outline traced faintly underneath the main one — mimics the subtle hand-retrace "sketchy double line" visible along the top edge of the reference loading-bar art, without redrawing the whole shape as a second independent hand-wobble (that read as two competing outlines rather than one retraced one).
+const TERR_METER_WOBBLE_OUTLINE_D_2 =
+  "M5.5,1.1 L30,1.0 L60,1.1 L86,1.0 L105.1,1.3 Q108.3,1.4 108.3,4.3 L108.0,7.0 Q108.4,9.2 104.7,9.4 L74.7,10.0 L44.7,9.3 L19.7,9.9 L5.7,9.2 Q1.6,9.4 1.6,6.7 L2.0,3.8 Q1.7,1.5 5.5,1.1 Z";
+// Dense zigzag "marker scribble" fill — matches the second reference image exactly: one continuous zigzag stroke whose teeth touch the top and bottom of the track, in a single solid vivid yellow (not the alternating two-tone discrete hatch lines this replaces), with thin wood-colored slivers showing through between teeth. Revealed left-to-right by progress via a clip rect, same as every earlier fill version (a fixed pattern uncovered, not a live-drawing animation). Generated with a seeded RNG (see mark-your-territory-minigame.md) for jitter that's reproducible but not visibly repetitive; spans slightly past the 0-110 track range so the pattern still fills edge to edge after clipping.
+const TERR_METER_ZIGZAG_D =
+  "M-8.02,9.44 L-6.3,1.6 L-4.85,9.41 L-2.95,1.36 L-1.83,9.59 L-0.22,1.89 L1.82,9.47 L2.91,1.62 L4.37,9.25 L5.87,1.56 L7.59,9.48 L9.21,1.57 L10.84,9.7 L12.38,1.49 L13.61,9.14 L15.32,1.81 L17.11,9.61 L18.08,1.85 L20.01,9.34 L21.21,1.77 L22.4,9.3 L24.47,1.37 L25.59,9.14 L27.29,1.64 L28.83,9.54 L30.46,1.37 L31.76,9.26 L33.8,1.48 L35.2,9.34 L37.11,1.36 L38.64,9.25 L40.36,1.48 L41.62,9.45 L43.32,1.52 L45.03,9.39 L46.57,1.41 L48.0,9.59 L49.09,1.74 L50.82,9.67 L52.72,1.55 L53.83,9.68 L55.61,1.45 L57.24,9.28 L58.72,1.34 L60.08,9.61 L61.54,1.85 L62.84,9.26 L64.39,1.41 L66.14,9.18 L67.79,1.89 L69.31,9.45 L70.38,1.31 L72.43,9.68 L73.76,1.59 L75.24,9.7 L76.74,1.74 L78.54,9.52 L80.3,1.51 L81.91,9.62 L83.38,1.82 L84.87,9.33 L86.45,1.35 L88.24,9.63 L89.58,1.74 L91.19,9.6 L92.73,1.32 L94.19,9.24 L95.82,1.67 L97.42,9.11 L99.1,1.42 L100.63,9.5 L102.15,1.5 L103.42,9.36 L105.45,1.83 L106.79,9.29 L108.15,1.8 L109.95,9.67 L111.14,1.57 L112.62,9.35 L114.36,1.49 L116.29,9.37 L117.2,1.82";
+// Single vivid yellow sampled directly from the reference art's fill. Used to swap to a hot-orange "urgent" color once the meter was nearly full — that swap was removed per feedback, so this is now the fill's only color at every progress level.
+const TERR_METER_ZIGZAG_COLOR = "#FFD200";
+
+// Replaces the earlier discrete diagonal hatch-line fill with a single continuous zigzag stroke, styled after the reference's hand-scribbled marker fill, revealed left-to-right by progress via an SVG clip rather than an Animated width — same "no smooth animation" behavior every earlier fill version had. No percentage text anywhere here by design; the filled-in zigzag itself is the only progress readout.
+function TerritoryMeterScribbleTrack({ progress }: { progress: number }) {
+  const clipId = useId();
+  const clampedProgress = Math.max(0, Math.min(1, progress));
+  return (
+    <Svg width={TERR_METER_TRACK_WIDTH} height={TERR_METER_TRACK_HEIGHT} viewBox={`0 0 ${TERR_METER_TRACK_WIDTH} ${TERR_METER_TRACK_HEIGHT}`}>
+      <Defs>
+        <ClipPath id={clipId}>
+          <Rect x={0} y={0} width={TERR_METER_TRACK_WIDTH * clampedProgress} height={TERR_METER_TRACK_HEIGHT} />
+        </ClipPath>
+      </Defs>
+      {/* No recessed-groove background fill (dropped, was rgba(43,31,25,...) in earlier versions) — the reference's unfilled track is exactly the card's own wood color with no tint, so the unfilled portion here is just the card showing through. */}
+      <G clipPath={`url(#${clipId})`}>
+        <Path
+          d={TERR_METER_ZIGZAG_D}
+          fill="none"
+          stroke={TERR_METER_ZIGZAG_COLOR}
+          strokeWidth={2.3}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          opacity={0.95}
+        />
+      </G>
+      {/* Faint retraced outline first, then the main wobbly ink outline on top — both drawn after the fill so the hand-drawn border always reads crisply over the zigzag rather than being partly covered by it. */}
+      <Path d={TERR_METER_WOBBLE_OUTLINE_D_2} fill="none" stroke="#2B1F19" strokeWidth={0.7} strokeLinejoin="round" opacity={0.4} />
+      <Path d={TERR_METER_WOBBLE_OUTLINE_D} fill="none" stroke="#2B1F19" strokeWidth={1.1} strokeLinejoin="round" opacity={0.9} />
+    </Svg>
+  );
+}
+
 function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
   const { accentColor, theme } = useTheme();
   const insets = useSafeAreaInsets();
   const { earnCoins } = usePets();
 
-  // Which "attentiveness" stage the neighbor is showing — 0 is the most
-  // oblivious (paper fully up), rising toward the last entry in
-  // TERR_PORCH_GUY_STAGES (looking straight at the player). Advances on
-  // its own random-interval timer below (see the mount effect that owns
-  // `stageLoopRef`/`stageTimeoutRef`), independent of whether the player
-  // is currently holding — holding only matters for what happens *when*
-  // he reaches the last stage.
+  // Neighbor's attentiveness stage (0 = most oblivious, rising toward most attentive); advances on its own random-interval timer independent of holding — holding only matters for what happens when he reaches the last stage.
   const [neighborStage, setNeighborStage] = useState(0);
   const [isHolding, setIsHolding] = useState(false);
   const [isCaught, setIsCaught] = useState(false);
-  const [markFeedback, setMarkFeedback] = useState<string | null>(null);
-  // 0..1 fill level of the "Marking" progress meter — accrues while held,
-  // persists across releases, resets only on Try Again / Play Again. See
-  // TERR_MARK_FILL_MS above.
+  // 0..1 fill level of the marking meter — accrues while held, persists across releases, resets only on Try Again / Play Again.
   const [markProgress, setMarkProgress] = useState(0);
-  // Round-complete (won by fully filling the meter) — distinct from
-  // isCaught (lost). Both stop the neighbor's stage clock.
+  // Round-complete (won by filling the meter) — distinct from isCaught (lost). Both stop the neighbor's stage clock.
   const [isComplete, setIsComplete] = useState(false);
-  // Whether the dog has actually finished sliding up beside the mailbox —
-  // deliberately separate from isHolding. TerritoryDog's own on-screen
-  // position takes TERR_DOG_APPROACH_MS to animate from his resting spot
-  // to atMailboxX/Y (see its `atMailbox` Animated.Value), but isHolding
-  // itself flips true the instant the mailbox is pressed. The pee stream
-  // below is anchored to the dog's *final* at-mailbox coordinates, so
-  // gating it on isHolding directly made the splash appear at that spot
-  // immediately — before he'd actually slid there — reading as the pee
-  // starting before the dog reached the mailbox. Mirrors isHolding but
-  // delayed on the way up (matching the slide-in duration) and instant on
-  // the way down, so the stream disappears the moment the player releases.
+  // Whether the dog has actually finished sliding to the mailbox — separate from isHolding (which flips instantly) so the pee-stream splash doesn't appear before he's actually arrived; delayed on the way up, instant on the way down.
   const [isDogAtMailbox, setIsDogAtMailbox] = useState(false);
 
-  // Refs mirror the state above for the setTimeout-driven loop below to
-  // read at fire time — its callback is scheduled outside of React's
-  // render cycle (it reschedules itself from inside its own timeout
-  // callback), so it can't rely on values captured in a render's closure
-  // without risking stale reads.
+  // Refs mirror the state above for the setTimeout-driven loop, which reschedules itself outside React's render cycle and can't rely on a stale render closure.
   const isHoldingRef = useRef(isHolding);
   isHoldingRef.current = isHolding;
   const isCaughtRef = useRef(isCaught);
@@ -2220,39 +2227,55 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
   const isCompleteRef = useRef(isComplete);
   isCompleteRef.current = isComplete;
 
-  const stageTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Ticks up markProgress while the mailbox is held — started on press-in,
-  // cleared on press-out/bust/completion (see handlers below).
+  // setInterval handle for the 1-second stage-clock tick (replaces the old setTimeout chain, since the fixed-plus-dice-roll design needs a steady per-second beat rather than a single reschedulable delay).
+  const stageIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Ms accumulated since the neighbor's last stage switch — reset to 0 on every switch (early or on-the-dot), compared against TERR_STAGE_INTERVAL_MS (or, while on the last stage, lastStageDurationRef below) each tick to force the guaranteed switch.
+  const stageElapsedRef = useRef(0);
+  // This dwell's randomly rolled duration for the last stage, in ms — re-rolled every time the neighbor transitions into that stage; unused while on any other stage.
+  const lastStageDurationRef = useRef(0);
+  // Ticks up markProgress while the mailbox is held — started on press-in, cleared on press-out/bust/completion.
   const markIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Holds the "advance one stage, then either bust or reschedule itself"
-  // function — set once by the mount effect below, but also called from
-  // outside it (restartStageLoop, on a safe release or Try Again), so it
-  // lives in a ref rather than a local closure.
+  // Holds the "one second of the stage clock has passed" function in a ref since it's called both by the mount effect and externally (restartStageLoop).
   const stageLoopRef = useRef<() => void>(() => {});
 
-  const randomStageDelay = () =>
-    TERR_STAGE_MIN_INTERVAL_MS +
-    Math.random() * (TERR_STAGE_MAX_INTERVAL_MS - TERR_STAGE_MIN_INTERVAL_MS);
-
   const restartStageLoop = useCallback(() => {
-    if (stageTimeoutRef.current) clearTimeout(stageTimeoutRef.current);
+    if (stageIntervalRef.current) clearInterval(stageIntervalRef.current);
     neighborStageRef.current = 0;
     setNeighborStage(0);
-    stageTimeoutRef.current = setTimeout(() => stageLoopRef.current(), randomStageDelay());
+    stageElapsedRef.current = 0;
+    stageIntervalRef.current = setInterval(() => stageLoopRef.current(), TERR_STAGE_TICK_MS);
   }, []);
 
   useEffect(() => {
     stageLoopRef.current = () => {
-      if (isCaughtRef.current || isCompleteRef.current) return;
+      if (isCaughtRef.current || isCompleteRef.current) {
+        if (stageIntervalRef.current) {
+          clearInterval(stageIntervalRef.current);
+          stageIntervalRef.current = null;
+        }
+        return;
+      }
+      stageElapsedRef.current += TERR_STAGE_TICK_MS;
+      const onLastStage = neighborStageRef.current === TERR_PORCH_GUY_STAGES.length - 1;
+      if (onLastStage) {
+        // Last stage: just wait out this dwell's randomly rolled duration — no early-switch dice roll here, so how long he stays maxed-out is the only randomness in play.
+        if (stageElapsedRef.current < lastStageDurationRef.current) return;
+      } else {
+        // Every other stage: every tick (once a second) rolls a chance to switch early; otherwise the elapsed clock keeps building toward the guaranteed TERR_STAGE_INTERVAL_MS switch.
+        const rolledEarly = Math.random() < TERR_STAGE_EARLY_SWITCH_CHANCE;
+        if (!rolledEarly && stageElapsedRef.current < TERR_STAGE_INTERVAL_MS) return;
+      }
+      stageElapsedRef.current = 0;
       const next = (neighborStageRef.current + 1) % TERR_PORCH_GUY_STAGES.length;
       neighborStageRef.current = next;
       setNeighborStage(next);
+      if (next === TERR_PORCH_GUY_STAGES.length - 1) {
+        // Just entered the last stage — roll how long this particular dwell lasts.
+        lastStageDurationRef.current =
+          TERR_STAGE_LAST_STAGE_MIN_MS + Math.random() * (TERR_STAGE_LAST_STAGE_MAX_MS - TERR_STAGE_LAST_STAGE_MIN_MS);
+      }
       if (next === TERR_PORCH_GUY_STAGES.length - 1 && isHoldingRef.current) {
-        // Busted: he hit the most-attentive stage while the player was
-        // still holding. Stop the loop instead of scheduling another tick,
-        // and stop the meter from ticking further too — bust overrides an
-        // in-progress mark, it doesn't race it.
+        // Busted: hit the most-attentive stage while still holding — stop the loop and the meter both, since bust overrides an in-progress mark.
         isCaughtRef.current = true;
         setIsCaught(true);
         isHoldingRef.current = false;
@@ -2261,26 +2284,21 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
           clearInterval(markIntervalRef.current);
           markIntervalRef.current = null;
         }
-        return;
+        if (stageIntervalRef.current) {
+          clearInterval(stageIntervalRef.current);
+          stageIntervalRef.current = null;
+        }
       }
-      stageTimeoutRef.current = setTimeout(() => stageLoopRef.current(), randomStageDelay());
     };
-    stageTimeoutRef.current = setTimeout(() => stageLoopRef.current(), randomStageDelay());
+    stageIntervalRef.current = setInterval(() => stageLoopRef.current(), TERR_STAGE_TICK_MS);
     return () => {
-      if (stageTimeoutRef.current) clearTimeout(stageTimeoutRef.current);
-      if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
+      if (stageIntervalRef.current) clearInterval(stageIntervalRef.current);
       if (markIntervalRef.current) clearInterval(markIntervalRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Drives isDogAtMailbox off isHolding: delayed by TERR_DOG_APPROACH_MS on
-  // the rising edge (so it flips true right as TerritoryDog's own slide
-  // animation finishes), immediate on the falling edge. isHolding is set
-  // false on every path that ends a hold — release, bust, and meter
-  // completion (see handleMailboxPressOut and the two branches below) — so
-  // this single effect covers all of them without needing to duplicate the
-  // reset in each spot.
+  // Drives isDogAtMailbox off isHolding: delayed on the rising edge (to match the slide animation), immediate on the falling edge; covers every path that ends a hold (release, bust, completion) in one effect.
   useEffect(() => {
     if (!isHolding) {
       setIsDogAtMailbox(false);
@@ -2290,57 +2308,13 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
     return () => clearTimeout(t);
   }, [isHolding]);
 
-  // Drives the marking-meter's "almost there" glow pulse (part of the
-  // 2026-09-10 meter redesign — see the meter's own render/style comments
-  // below). A single Animated.Value looped opacity, mounted only while
-  // genuinely urgent (progress past the threshold and the round still
-  // live) rather than always-looping-but-invisible, so there's no pulsing
-  // animation quietly ticking in the background for the entire rest of a
-  // round that already finished or busted.
-  const meterGlow = useRef(new Animated.Value(0)).current;
-  const isMeterUrgent = markProgress >= TERR_METER_URGENT_THRESHOLD && !isCaught && !isComplete;
-  useEffect(() => {
-    if (!isMeterUrgent) {
-      meterGlow.setValue(0);
-      return;
-    }
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(meterGlow, { toValue: 1, duration: 500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(meterGlow, { toValue: 0, duration: 500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])
-    );
-    pulse.start();
-    return () => {
-      pulse.stop();
-      meterGlow.setValue(0);
-    };
-  }, [isMeterUrgent, meterGlow]);
-
-  const showMarkFeedback = (text: string) => {
-    setMarkFeedback(text);
-    if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
-    feedbackTimeoutRef.current = setTimeout(() => setMarkFeedback(null), 900);
-  };
-
   const handleMailboxPressIn = () => {
     if (isCaughtRef.current || isCompleteRef.current) return;
-    // Instant bust if he's already sitting on his most-attentive last
-    // stage the moment the player grabs the mailbox (2026-09-11 fix). The
-    // stageLoopRef timer below only busts on the *transition into* the
-    // last stage while holding (see its own `next === length-1 &&
-    // isHoldingRef.current` check) — it never re-fires just because a new
-    // hold starts while he's already there, and the next scheduled tick
-    // wraps him back to stage 0 rather than re-checking the same stage.
-    // That let a hold started during his last stage slip through with no
-    // catch at all. Checking here closes that gap: any hold that begins
-    // while he's already on the last stage is caught immediately, exactly
-    // like the user asked ("if the user holds the mark at all he should
-    // be caught").
+    // Instant bust if the neighbor is already on his last stage the moment the player grabs the mailbox — the stage-loop timer alone only busts on the transition into that stage, so a hold starting while already there needed this separate check.
     if (neighborStageRef.current === TERR_PORCH_GUY_STAGES.length - 1) {
-      if (stageTimeoutRef.current) {
-        clearTimeout(stageTimeoutRef.current);
-        stageTimeoutRef.current = null;
+      if (stageIntervalRef.current) {
+        clearInterval(stageIntervalRef.current);
+        stageIntervalRef.current = null;
       }
       isCaughtRef.current = true;
       setIsCaught(true);
@@ -2348,23 +2322,22 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
     }
     isHoldingRef.current = true;
     setIsHolding(true);
-    // Start ticking the marking meter. Progress carries over from any
-    // earlier holds this round (see markProgressRef — never reset here),
-    // so this just resumes accruing where it left off.
+    // Start ticking the marking meter — progress carries over from earlier holds this round, so this just resumes.
     if (markIntervalRef.current) clearInterval(markIntervalRef.current);
     markIntervalRef.current = setInterval(() => {
       const next = Math.min(1, markProgressRef.current + TERR_MARK_TICK_MS / TERR_MARK_FILL_MS);
       markProgressRef.current = next;
       setMarkProgress(next);
       if (next >= 1) {
-        // Meter filled while still safely holding — round won. Stop
-        // everything else (neighbor clock, holding) the same way a bust
-        // does, just via the success path instead.
+        // Meter filled while still safely holding — round won; stops everything the same way a bust does, via the success path.
         if (markIntervalRef.current) {
           clearInterval(markIntervalRef.current);
           markIntervalRef.current = null;
         }
-        if (stageTimeoutRef.current) clearTimeout(stageTimeoutRef.current);
+        if (stageIntervalRef.current) {
+          clearInterval(stageIntervalRef.current);
+          stageIntervalRef.current = null;
+        }
         isHoldingRef.current = false;
         setIsHolding(false);
         isCompleteRef.current = true;
@@ -2383,14 +2356,7 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
       markIntervalRef.current = null;
     }
     if (isCaughtRef.current || isCompleteRef.current || !wasHolding) return;
-    // Released safely before he caught on — award the mark. His stage
-    // keeps advancing on its own ambient clock either way (it's never
-    // paused or reset by holding/releasing — only a bust or Try Again
-    // resets it), so nothing here touches neighborStage. The marking
-    // meter's progress is left exactly where it was too — only the
-    // interval that was ticking it stops; the accumulated fill stays.
-    earnCoins(TERR_MARK_REWARD);
-    showMarkFeedback(`+${TERR_MARK_REWARD}`);
+    // Released safely before getting caught — no coins for this anymore (coins are only earned via TERR_COMPLETE_REWARD, on fully filling the meter). The neighbor's stage and the meter's accumulated progress are both left untouched, only their ticking stops.
   };
 
   const handleTryAgain = () => {
@@ -2413,130 +2379,62 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
     ? TERR_PORCH_GUY_CAUGHT
     : TERR_PORCH_GUY_STAGES[Math.min(neighborStage, TERR_PORCH_GUY_STAGES.length - 1)];
 
-  // Measure the container's own rendered box instead of trusting
-  // useWindowDimensions(). On native those two normally match, but on
-  // Expo web the app can be laid out inside a narrower centered column
-  // than the actual browser window — useWindowDimensions() there reports
-  // the full (wider) browser viewport, so the fit math below would size
-  // the scene for a box bigger than what's really on screen and the
-  // porch guy would land off in the extra space beside it, not on the
-  // house. onLayout always reports what this View actually rendered at,
-  // on every platform.
+  // Measures the container's own rendered box via onLayout rather than trusting useWindowDimensions(), which reports the full browser viewport on Expo web even when the app is laid out in a narrower centered column.
   const [layout, setLayout] = useState<{ width: number; height: number } | null>(null);
 
-  // Scale is locked to the container's HEIGHT (never the width) — see the
-  // long history in the TERR_HOUSE_IMG_WIDTH/_HEIGHT comment above for
-  // how this stopped being a real width-vs-height tradeoff once the
-  // canvas itself was extended to a phone-like aspect ratio: two earlier
-  // 2026-09-07 attempts (a straight zoom-out, then a never-crop "contain"
-  // fit) both fought the SAME underlying mismatch — this art's original
-  // 1086x1316 proportions vs. a phone screen's — by shrinking/reflowing
-  // the rendered scene at runtime, which unavoidably traded one visible
-  // gap (top letterbox) against another (side crop, hiding the fence).
-  // Fixing the source image's own aspect ratio instead means a plain
-  // height-locked fit already lands close to full-width on real phone
-  // sizes, so this is back to the simple original formula — just against
-  // a taller TERR_HOUSE_IMG_HEIGHT now. TERR_HOUSE_ZOOM stays as a small
-  // (2%) safety margin, not a load-bearing part of the fix anymore.
+  // Scale is locked to container height (never width) — now that the source art's own aspect ratio is close to a phone's, a plain height-locked fit already lands near full-width on real devices; TERR_HOUSE_ZOOM stays as a small 2% safety margin.
   const scale = layout ? (layout.height / TERR_HOUSE_IMG_HEIGHT) * TERR_HOUSE_ZOOM : 0;
   const scaledHouseWidth = TERR_HOUSE_IMG_WIDTH * scale;
   const scaledHouseHeight = TERR_HOUSE_IMG_HEIGHT * scale;
-  // Positive = letterboxed (image narrower than box, padded left/right).
-  // Negative = cropped (image wider than box, overflow clipped left/right
-  // by territoryFullScreen's own overflow:"hidden") — the normal case on
-  // a narrow phone screen, per the tradeoff explained above.
+  // Positive = letterboxed (image narrower than box); negative = cropped (image wider, clipped by overflow:"hidden") — the normal case on a narrow phone.
   const houseOffsetX = layout ? (layout.width - scaledHouseWidth) / 2 : 0;
-  // Vertically, though, NOT centered — pinned to the BOTTOM instead (all
-  // the leftover height goes above the roofline as top-only letterboxing,
-  // none below the street) per user feedback that centering it left a
-  // visible gap of the screen's own background peeking out beneath the
-  // road. The full gap (layout.height - scaledHouseHeight) sits above the
-  // house; the house's own bottom edge (the street) then lands exactly on
-  // the container's bottom edge, same as the original always-flush-top
-  // height-locked behavior did on wide screens, just flipped to flush-
-  // bottom so the letterboxing (when there is any) reads as "sky/margin
-  // above the roof" instead of "gap below the road."
+  // Pinned to the bottom, not centered — all leftover height goes above the roofline as top-only letterboxing, so there's never a gap below the road.
   const houseOffsetY = layout ? layout.height - scaledHouseHeight : 0;
 
-  // At TERR_HOUSE_ZOOM=1, scaledHouseHeight is algebraically identical to
-  // layout.height (TERR_HOUSE_IMG_HEIGHT * (layout.height /
-  // TERR_HOUSE_IMG_HEIGHT) === layout.height) so houseOffsetY should be
-  // exactly 0 — but the user still reported a faint blue sliver at the
-  // top on real mobile viewports even with that. Not the same tradeoff
-  // as before: this is float/sub-pixel rounding (the container and the
-  // absolutely-positioned image can each round their computed height to
-  // the nearest device pixel independently, e.g. web `vh` units and RN's
-  // own layout rounding don't always agree to the sub-pixel), not a
-  // deliberate percentage-of-height shrink like TERR_HOUSE_ZOOM was. A
-  // fixed few-pixel overscan applied only to the rendered <Image>'s own
-  // top/height (not to houseOffsetY itself, which every other anchor
-  // — porch guy, mailbox, dog — still keys off) guarantees the image
-  // always overshoots the container's top edge by a hair regardless of
-  // rounding, and resizeMode="cover" just crops that sliver of extra
-  // content off invisibly rather than stretching anything.
+  // A fixed few-pixel overscan on the rendered Image's own top/height absorbs sub-pixel layout rounding that otherwise left a faint sliver at the top; resizeMode="cover" crops the extra invisibly. Doesn't touch houseOffsetY itself, which every other anchor still keys off.
   const houseTopOverscan = 3;
 
   const guyHeight = TERR_PORCH_GUY_SRC_HEIGHT * scale;
   const guyWidth = guyHeight * currentNeighborStage.aspect;
-  const guyLeft = TERR_PORCH_GUY_SRC_CENTER_X * scale + houseOffsetX - guyWidth / 2;
+  // Centers each stage on its own chairCenterFrac (the chair's measured horizontal center within that stage's own art) rather than assuming the box's own midpoint always lines up with the chair — see chairCenterFrac's comment on TERR_PORCH_GUY_STAGES for why that assumption broke for stage 3.
+  const guyLeft = TERR_PORCH_GUY_SRC_CENTER_X * scale + houseOffsetX - currentNeighborStage.chairCenterFrac * guyWidth;
   const guyBottom = (TERR_PORCH_GUY_SRC_FLOOR_Y - TERR_PORCH_GUY_LIFT) * scale + houseOffsetY;
   const guyTop = guyBottom - guyHeight;
 
-  // Mailbox on-screen position, from the fixed source-pixel anchors above
-  // — same scale/offset math as the porch guy, so it stays locked to the
-  // mailbox art regardless of screen size.
+  // Mailbox on-screen position, from the fixed source-pixel anchors — same scale/offset math as the porch guy.
   const mailboxCenterX = TERR_MAILBOX_SRC_CENTER_X * scale + houseOffsetX;
   const mailboxTopY = TERR_MAILBOX_SRC_TOP_Y * scale + houseOffsetY;
   const mailboxBottomY = TERR_MAILBOX_SRC_BOTTOM_Y * scale + houseOffsetY;
 
-  // Dog's resting on-screen position — same x column as the mailbox (see
-  // the constant's comment above), standing on the road below it. Size is
-  // clamped so he doesn't shrink to nothing on a very short/letterboxed
-  // layout.
+  // Dog's resting position — same x column as the mailbox, standing on the road below it; size clamped so he doesn't shrink to nothing on a short/letterboxed layout.
   const dogRestY = TERR_DOG_SRC_Y * scale + houseOffsetY;
   const dogSize = Math.max(46, TERR_DOG_SRC_HEIGHT * scale);
-  // Where he slides to while actively marking — right beside the mailbox
-  // post (see TERR_DOG_AT_MAILBOX_Y/X_OFFSET above).
+  // Where he slides to while marking — beside the mailbox post.
   const dogAtMailboxX = mailboxCenterX + TERR_DOG_AT_MAILBOX_X_OFFSET * scale;
   const dogAtMailboxY = TERR_DOG_AT_MAILBOX_Y * scale + houseOffsetY;
-  // Width of the peeing-pose art at its current on-screen size, used below
-  // to offset the pee stream's origin toward the dog's rear rather than
-  // his horizontal center. He's flipped to face right (see TerritoryDog's
-  // scaleX: -1), so his rear/tail sits on the LEFT side of his own
-  // bounding box — conveniently the side closer to the mailbox already.
+  // Width of the peeing-pose art, used to offset the pee stream's origin toward the dog's rear (his left side, since he's flipped to face right) rather than his center.
   const dogPeeingWidth = dogSize * TERR_DOG_PEEING_ASPECT;
 
   return (
     <View
       style={styles.territoryFullScreen}
       onLayout={(e) => {
-        const { width, height } = e.nativeEvent.layout;
-        setLayout({ width, height });
+        // Round + bail on a no-op measurement: onLayout can re-fire with sub-pixel-different values (mobile browser chrome show/hide, sibling reflow from the marking meter's own live width, etc.) with no real resize behind it. Since every anchor (house, mailbox, dog, birds) derives straight from `layout` with no interpolation, an unguarded setLayout here made those pop to a new size instantly on every such re-fire — most visible on the birds since they're already moving. Skipping same-value updates keeps `layout` (and everything sized off it) stable except on an actual resize.
+        const width = Math.round(e.nativeEvent.layout.width);
+        const height = Math.round(e.nativeEvent.layout.height);
+        setLayout((prev) =>
+          prev && prev.width === width && prev.height === height ? prev : { width, height }
+        );
       }}
     >
       {layout && (
         <>
-          {/* Sized to the exact scaled dimensions computed above (height
-              locked to the container, times TERR_HOUSE_ZOOM, width
-              following the source aspect ratio) and offset by
-              houseOffsetX/houseOffsetY (bottom-anchored vertically,
-              centered horizontally), rather than filling the container
-              and letting resizeMode do the fit/crop — React Native Web's
-              Image, given StyleSheet.absoluteFillObject or any style
-              without explicit width/height, falls back to the source
-              asset's own natural pixel size instead of filling its parent
-              (confirmed live via DOM inspection), so explicit numeric
-              dimensions are what's needed on web regardless. Since
-              width/height here already match the source aspect exactly,
-              resizeMode has no extra fitting left to do. */}
+          {/* Sized to the exact scaled dimensions computed above rather than filling the container, since React Native Web's Image falls back to the source asset's natural size without explicit width/height. */}
           <Image
             source={TERR_HOUSE_IMAGE}
             style={{
               position: "absolute",
-              // top/height overshoot the container's real top edge by
-              // houseTopOverscan (see that constant's comment above) to
-              // absorb sub-pixel rounding — houseOffsetY/scaledHouseHeight
-              // themselves (used by every other anchor) are untouched.
+              // top/height overshoot the container's real top edge by houseTopOverscan to absorb sub-pixel rounding; houseOffsetY/scaledHouseHeight themselves are untouched.
               top: houseOffsetY - houseTopOverscan,
               left: houseOffsetX,
               width: scaledHouseWidth,
@@ -2545,23 +2443,7 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
             resizeMode="cover"
           />
 
-          {/* Ambient sky birds — purely decorative, not registered against
-              any TERR_HOUSE_IMAGE source-pixel anchor the way the porch
-              guy/mailbox/dog are (see TERR_BIRD_SIZE_FRACTION's comment),
-              just placed as a fraction of the container itself. Both
-              y-fractions (0.20, 0.28 — lowered 2026-09-11 per the user's
-              "lower the birds" ask, up from 0.08/0.16) still sit safely
-              above where the roofline lands (~42% down the container at
-              every screen size, per the house-canvas-extension section in
-              the project doc, since TERR_HOUSE_ZOOM=1 makes scale purely
-              height-locked) so they never visually cross in front of the
-              house art. One flies
-              left-to-right, one right-to-left, per the user's ask; each
-              also flies by at a random interval (TERR_BIRD_CYCLE_MIN/_MAX)
-              rather than a fixed cadence, re-rolled after every flight —
-              with a slightly different flight length/range/start-delay
-              on each so they don't read as a mirrored, synced pair even
-              when their random waits happen to land close together. */}
+          {/* Ambient decorative sky birds, placed as a fraction of the container (not a house-art anchor) safely above the roofline; one flies each direction, each on its own randomized interval/length so they don't read as a synced pair. */}
           <TerritoryBird
             containerWidth={layout.width}
             y={layout.height * 0.2}
@@ -2603,41 +2485,13 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
           />
 
           {isDogAtMailbox && !isCaught && !isComplete && (
-            // Gated on isDogAtMailbox rather than isHolding directly — see
-            // that state's own comment above — so the stream doesn't mount
-            // until TerritoryDog has actually finished sliding up next to
-            // the mailbox; otherwise it was drawn at his at-mailbox
-            // coordinates for the ~TERR_DOG_APPROACH_MS he was still
-            // visibly mid-slide, reading as the pee starting before he got
-            // there. Origin is shifted toward the dog's rear (left, toward
-            // the mailbox, since he faces right) rather than his horizontal
-            // center, and raised to roughly back/hip height — high enough
-            // above the ground to give the stream real length to fall
-            // through. Target is TERR_DOG_AT_MAILBOX_Y (the same
-            // approximate "post meets ground" anchor the dog himself
-            // stands on) rather than mailboxBottomY (where the visible box
-            // meets the post): that point sits well ABOVE the dog, which
-            // made the stream visibly run uphill from him to the mailbox.
-            // Keeping the target at ground level — below the raised origin
-            // — keeps the flow reading top-to-bottom like actual falling
-            // liquid, landing at the base of the mailbox post.
+            // Gated on isDogAtMailbox (not isHolding directly) so the stream doesn't mount until the dog has actually arrived. Origin is shifted toward his rear and raised to back/hip height for real fall length; target is the dog's own ground anchor (not the mailbox box) so the stream reads top-to-bottom instead of running uphill.
             <TerritoryPeeStream
               originX={dogAtMailboxX - dogPeeingWidth * 0.4}
               originY={dogAtMailboxY - dogSize * 0.4}
               targetX={mailboxCenterX + dogSize * 0.12}
               targetY={dogAtMailboxY + dogSize * 0.15}
             />
-          )}
-          {markFeedback && (
-            <Text
-              pointerEvents="none"
-              style={[
-                styles.territoryMarkFeedback,
-                { left: mailboxCenterX - 30, top: mailboxTopY - 36 },
-              ]}
-            >
-              {markFeedback} <CoinIcon size={13} />
-            </Text>
           )}
         </>
       )}
@@ -2657,123 +2511,26 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
         <Text style={[styles.exitButtonText, { color: accentColor }]}>← Back to Games</Text>
       </PressableScale>
 
-      {/* Marking progress meter — fills while the mailbox is held (see
-          handleMailboxPressIn) and never drains on release, only on Try
-          Again / Play Again. Hidden once the round has already ended
-          either way, since neither overlay below needs it showing through.
-          Moved down onto the road (2026-09-08, was pinned under the top
-          safe-area inset alongside the exit button); redesigned again
-          (2026-09-10, per the user's "redesign the marking progress meter"
-          ask) — same dark HUD-card anchoring as before, but the bar itself
-          is now a two-tone pill with a leading-edge cap (like a slider
-          thumb, so the current fill point reads clearly rather than just
-          "the bar is this long"), a live percentage readout next to the
-          label, and a pulsing amber glow around the whole card once
-          progress crosses TERR_METER_URGENT_THRESHOLD — an "almost
-          marked" tension cue, the win-side counterpart the project doc had
-          flagged as missing (that doc's note was about the neighbor's
-          approaching-bust risk specifically; this covers the meter's own
-          approaching-win side, not that one). */}
+      {/* Marking progress meter — fills while held, never drains on release (only on Try Again), hidden once the round has ended. No numeric readout by design: the hand-scribbled fill (TerritoryMeterScribbleTrack) is the only progress indicator, styled to match this scene's hand-drawn linework rather than reading as a clean UI element. No "almost there" cue anymore either — the pulsing glow ring was removed earlier, and the fill's color-to-orange swap near completion was removed per feedback too; the fill is now one color at every progress level. */}
       {!isCaught && !isComplete && (
         <View
           pointerEvents="none"
           style={[
             styles.territoryMeterWrap,
-            // houseOffsetX (not just insets.left) so this lands on the
-            // actual house/road art rather than the blue letterbox
-            // background beside it — houseOffsetX is 0-or-negative on a
-            // real phone (the art is scaled to overflow width, no
-            // letterbox), where insets.left alone is already correct, but
-            // goes positive on a wide/landscape viewport (like a desktop
-            // browser during `expo start --web` testing), where the art
-            // is narrower than the screen and sits inset from the edges —
-            // exactly the case that was putting this outside the picture.
-            // The max() keeps it from ever landing off the left edge of
-            // the screen itself on the no-letterbox phone case.
+            // Uses houseOffsetX (not just insets.left) so this lands on the house/road art rather than the letterbox background beside it on a wide/landscape viewport; max() keeps it from landing off the left edge on a real phone.
             { left: Math.max(houseOffsetX + 16, insets.left + 16), bottom: insets.bottom + 28 },
           ]}
         >
-          {/* Glow ring: sits behind the card, same rounded footprint but
-              slightly larger via a negative inset, opacity driven straight
-              off meterGlow (0 whenever not urgent, per that effect's own
-              comment, so this is inert — no always-on loop — for nearly
-              the whole round). */}
-          <Animated.View
-            style={[
-              styles.territoryMeterGlow,
-              { opacity: meterGlow.interpolate({ inputRange: [0, 1], outputRange: [0, 0.85] }) },
-            ]}
-          />
           <View style={styles.territoryMeterCard}>
-            <View style={styles.territoryMeterHeaderRow}>
-              <Text style={styles.territoryMeterLabel}>Marking</Text>
-              <Text style={styles.territoryMeterPercent}>{Math.round(markProgress * 100)}%</Text>
-            </View>
-            {/* Outer wrapper has no overflow clipping (unlike the track
-                below it) so the leading-edge cap can sit right on the fill
-                boundary, including hanging slightly past 0%/100%, without
-                being cut off — only the fill bar itself needs the pill
-                clip. */}
+            <Text style={styles.territoryMeterLabel}>Marking</Text>
             <View style={styles.territoryMeterTrackOuter}>
-              <View style={styles.territoryMeterTrack}>
-                <View style={[styles.territoryMeterFillBase, { width: `${markProgress * 100}%` }]}>
-                  {/* Lighter top band for a glossy-pill look, plus the
-                      thin brighter shine strip right at its own top edge —
-                      two stacked layers standing in for a real gradient
-                      (no gradient library in this project — see the
-                      house-art/porch-guy sections of the project doc for
-                      the same reasoning applied to image assets). */}
-                  <View style={styles.territoryMeterFillShineBand} />
-                  <View style={styles.territoryMeterFillShineLine} />
-                </View>
-              </View>
-              {/* Leading-edge cap — a small round marker at the current
-                  fill point. `left` is the percentage string, and the
-                  circle is centered on that point via a fixed negative
-                  margin (half its own size) baked into the style below —
-                  RN doesn't support percentage-based transforms on
-                  native, so this is the portable way to center a
-                  fixed-size dot on a percent-based position, rather than
-                  `transform: [{ translateX: '-50%' }]`. Reads as "you are
-                  here" rather than just the bar's own end. */}
-              <View
-                style={[
-                  styles.territoryMeterCap,
-                  { left: `${markProgress * 100}%` },
-                  isMeterUrgent && styles.territoryMeterCapUrgent,
-                ]}
-              />
+              <TerritoryMeterScribbleTrack progress={markProgress} />
             </View>
           </View>
         </View>
       )}
 
-      {/* Dedicated "hold to mark" button (2026-09-10) — mirrors the
-          meter's left-side anchoring (same houseOffsetX/insets max, same
-          bottom offset) but on the right, so the two HUD elements read as
-          a matching pair. Replaces the old Pressable that used to sit
-          directly on top of the mailbox art: holding that one meant a
-          thumb was resting right over the mailbox (and the pee-stream/dog
-          animation next to it) for the whole hold, blocking the view of
-          the very thing the player was marking. The mailbox itself is
-          still the visual target — this button is just where the
-          touch/hold gesture now happens, wired to the exact same
-          handleMailboxPressIn/Out handlers as before.
-          Swapped from a code-drawn circle to the user-supplied pixel-art
-          wood-sign image (2026-09-10 follow-up), sized small per that
-          request — the "Hold to Mark"/"Marking…" text label under it was
-          dropped since the art itself now reads as the button (it's a
-          wooden sign that already says "Mark"), and hitSlop pads the real
-          touch target back out past the small art's own bounds so it's
-          still comfortable to hold. A slight opacity dip while isHolding
-          stands in for the old active-state recolor, since this is now a
-          single flat image rather than a style-able shape. The pulsing
-          glow halo behind it, and the matching one that used to sit on
-          the mailbox itself (TerritoryMailboxHint/TerritoryPulseHalo),
-          were both removed (2026-09-11, per the user's "take the
-          flashing away" ask) — the wood-sign art and the mailbox's own
-          position already read clearly enough without an animated
-          hint. */}
+      {/* Dedicated "hold to mark" button, mirroring the meter's anchoring on the opposite side so a thumb no longer blocks the mailbox while holding; swapped from a code-drawn circle to a small pixel-art wood-sign image, wired to the same handleMailboxPressIn/Out handlers, with hitSlop padding the touch target and an opacity dip standing in for an active-state recolor. */}
       {!isCaught && !isComplete && (
         <View
           pointerEvents="box-none"
@@ -2834,9 +2591,7 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Styles                                                              */
-/* ------------------------------------------------------------------ */
+// --- Styles ---
 
 const styles = StyleSheet.create({
   background: {
@@ -2851,8 +2606,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  // Doubles the old text title's fontSize (32 -> 64), same convention as
-  // the Home tab and Login screen logo swaps.
+  // Doubles the old text title's fontSize (32 -> 64), matching the Home tab and Login screen logo swaps.
   titleImage: {
     height: 64,
     aspectRatio: 2100 / 443,
@@ -3042,25 +2796,45 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  gameBox: {
-    backgroundColor: "#1C1C1E",
-    borderRadius: 20,
-    padding: 20,
+  // Full-screen shell every game uses now (Mark Your Territory always had its own version of this; the rest used to be a small card inside a scrollable page — see styles.gameFullScreenExitButton/Content/PlayWrap below).
+  gameFullScreen: {
+    flex: 1,
     width: "100%",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    // Same web-only fix territoryFullScreen uses: a swipeable MaterialTopTabs pager doesn't reliably propagate height through flex:1 in a browser.
+    ...(Platform.OS === "web" ? { minHeight: "100vh" as any } : null),
   },
 
-  exitButton: {
-    alignSelf: "flex-start",
-    backgroundColor: "#1C1C1E",
+  // Floats over the game instead of sitting inline above a card (no card in full-screen mode) — top/left overridden per-render with safe-area insets, same pattern as territoryExitButton.
+  gameFullScreenExitButton: {
+    position: "absolute",
+    zIndex: 10,
     borderRadius: 12,
     paddingVertical: 8,
     paddingHorizontal: 14,
-    marginBottom: 16,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+  },
+
+  // Column that fills the screen below the floating exit button; paddingTop/paddingBottom are overridden per-render with safe-area insets.
+  gameFullScreenContent: {
+    flex: 1,
+    width: "100%",
+    maxWidth: 480,
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+
+  // Measured via onLayout by every game to size its board/track — this is what makes the play area actually fill the screen instead of sitting in a small fixed box. Always mounted (even on the idle screen) so a size is already known the moment Start Game is pressed.
+  gameFullScreenPlayWrap: {
+    flex: 1,
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  gameFullScreenIdleContent: {
+    alignItems: "center",
+    paddingHorizontal: 12,
   },
 
   exitButtonText: {
@@ -3179,7 +2953,7 @@ const styles = StyleSheet.create({
   scoreRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    width: TRACK_WIDTH,
+    width: FF_TRACK_WIDTH,
     marginBottom: 10,
   },
 
@@ -3196,9 +2970,27 @@ const styles = StyleSheet.create({
     alignSelf: "flex-end",
   },
 
-  parkourTrack: {
-    width: TRACK_WIDTH,
-    height: TRACK_HEIGHT,
+  // Plain placeholder health bar for Fetch Frenzy — a simple filled track, easy to reskin once the sprite sheets arrive.
+  ffHealthTrack: {
+    width: FF_TRACK_WIDTH,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "rgba(0,0,0,0.25)",
+    overflow: "hidden",
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
+  },
+
+  ffHealthFill: {
+    height: "100%",
+    backgroundColor: "#FF5A5F",
+    borderRadius: 7,
+  },
+
+  ffTrack: {
+    width: FF_TRACK_WIDTH,
+    height: FF_TRACK_HEIGHT,
     borderRadius: 18,
     backgroundColor: "#CDEFB8",
     overflow: "hidden",
@@ -3206,84 +2998,55 @@ const styles = StyleSheet.create({
     borderColor: "#9BD97A",
   },
 
-  parkourLaneDivider1: {
+  // Falling item placeholder — a plain emoji positioned absolutely by its own x/y; swap this <Text> for an <Image> once real sprites arrive (see the comment atop the Fetch Frenzy section). fontSize/width/height/lineHeight are all overridden per-render with the screen-scaled item size (see computeFetchFrenzyLayout) — these BASE constants are just the pre-measurement fallback.
+  ffItemEmoji: {
     position: "absolute",
-    left: LANE_WIDTH,
-    top: 0,
-    bottom: 0,
-    width: 2,
-    backgroundColor: "rgba(255,255,255,0.5)",
+    fontSize: FF_ITEM_SIZE_BASE,
+    width: FF_ITEM_SIZE_BASE,
+    height: FF_ITEM_SIZE_BASE,
+    textAlign: "center",
+    lineHeight: FF_ITEM_SIZE_BASE,
   },
 
-  parkourLaneDivider2: {
-    position: "absolute",
-    left: LANE_WIDTH * 2,
-    top: 0,
-    bottom: 0,
-    width: 2,
-    backgroundColor: "rgba(255,255,255,0.5)",
-  },
-
-  hurdleBlock: {
-    position: "absolute",
-    width: LANE_WIDTH - 12,
-    height: HURDLE_HEIGHT,
-    backgroundColor: "#B5794A",
-    borderRadius: 6,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  hurdleEmoji: {
-    fontSize: 16,
-  },
-
-  barrierRow: {
+  // bottom/width/height are all overridden per-render with the screen-scaled dog size (see computeFetchFrenzyLayout) — these BASE constants are just the pre-measurement fallback.
+  ffDogWrapper: {
     position: "absolute",
     left: 0,
-    width: TRACK_WIDTH,
-    height: BARRIER_HEIGHT,
-    flexDirection: "row",
-  },
-
-  wallCell: {
-    width: LANE_WIDTH,
-    height: BARRIER_HEIGHT,
+    bottom: FF_DOG_BOTTOM_BASE,
+    width: FF_DOG_WIDTH_BASE,
+    height: FF_DOG_HEIGHT_BASE,
     alignItems: "center",
     justifyContent: "center",
   },
 
-  wallEmoji: {
-    fontSize: 20,
-  },
-
-  barrierGap: {
-    width: LANE_WIDTH,
-    height: BARRIER_HEIGHT,
-  },
-
-  dogShadow: {
-    position: "absolute",
-    left: laneToLeft(1) + DOG_SIZE / 2 - 16,
-    bottom: DOG_BOTTOM - 10,
-    width: 32,
-    height: 10,
-    borderRadius: 16,
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-
-  dogWrapper: {
-    position: "absolute",
-    left: laneToLeft(1),
-    bottom: DOG_BOTTOM,
-    width: DOG_SIZE,
-    height: DOG_SIZE,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  dogEmoji: {
+  ffDogEmoji: {
     fontSize: 36,
+  },
+
+  // Placeholder cave-tunnel track for Tight Squeeze — walls are drawn on top via SVG (buildTightSqueezeWallPath), this is just the open-passage background color.
+  tsTrack: {
+    width: TS_TRACK_WIDTH,
+    height: TS_TRACK_HEIGHT,
+    borderRadius: 18,
+    backgroundColor: "#EAD9B7",
+    overflow: "hidden",
+    borderWidth: 3,
+    borderColor: "#4A3220",
+  },
+
+  // bottom/width/height are all overridden per-render with the screen-scaled dog size (see computeTightSqueezeLayout) — these BASE constants are just the pre-measurement fallback.
+  tsDogWrapper: {
+    position: "absolute",
+    left: 0,
+    bottom: TS_DOG_BOTTOM_BASE,
+    width: TS_DOG_WIDTH_BASE,
+    height: TS_DOG_HEIGHT_BASE,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  tsDogEmoji: {
+    fontSize: 22,
   },
 
   instructionsText: {
@@ -3294,37 +3057,17 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  // Edge-to-edge container for the full-screen porch scene — no card
-  // background needed since TERR_HOUSE_IMAGE covers the whole screen.
-  // `flex:1` alone is enough on native (RN always gives every screen a
-  // real pixel height), but on web this View sits inside a swipeable
-  // MaterialTopTabs pager, and that pager's own height doesn't reliably
-  // propagate down through the flex chain in a browser the way RN's own
-  // layout engine guarantees on native — when it doesn't, `flex:1` here
-  // resolves to 0/auto height, and an absolutely-positioned child with no
-  // definite containing-block height falls back to sizing itself off its
-  // own intrinsic size instead of covering the box (this is what was
-  // showing the house at its native portrait aspect ratio in a corner
-  // instead of filling the screen, with the porch guy — positioned by JS
-  // math keyed to whatever tiny/wrong box `onLayout` measured — stranded
-  // out in the leftover space). `100vh` sidesteps all of that by tying
-  // this box directly to the actual browser viewport height, independent
-  // of whatever height the pager did or didn't hand it.
+  // Uses 100vh on web rather than relying on flex:1, since a swipeable MaterialTopTabs pager doesn't reliably propagate height through the flex chain in a browser — flex:1 alone was resolving to 0/auto height there, shrinking the house art to its natural size in a corner.
   territoryFullScreen: {
     flex: 1,
     width: "100%",
     backgroundColor: "#BFE6FF",
-    // Clips the house image's sides when the scaled image ends up wider
-    // than the box (tall/portrait viewports) — height is always locked to
-    // fill the box exactly (see MarkYourTerritoryGame), so only the sides
-    // ever need clipping, never the top or bottom.
+    // Clips the house image's sides when the scaled image is wider than the box (tall/portrait viewports) — height is always locked to fill the box, so only the sides ever need clipping.
     overflow: "hidden",
     ...(Platform.OS === "web" ? { minHeight: "100vh" as any } : null),
   },
 
-  // Floats over the scene instead of sitting inline above a card (there's
-  // no card in full-screen mode) — top/left are overridden per-render with
-  // safe-area insets so it clears the notch/status bar on every device.
+  // Floats over the scene instead of sitting above a card (no card in full-screen mode) — top/left overridden per-render with safe-area insets.
   territoryExitButton: {
     position: "absolute",
     backgroundColor: "#1C1C1E",
@@ -3335,61 +3078,12 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
   },
 
-  // "+5" popup that floats above the mailbox on a safe release, fading
-  // out on its own via the markFeedback timeout rather than an animation.
-  territoryMarkFeedback: {
-    position: "absolute",
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 16,
-    textShadowColor: "rgba(0,0,0,0.45)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-
-  // Anchored to `left`/`bottom` offsets (see the inline style at the call
-  // site) so it sits down on the road instead of the top-of-screen spot it
-  // used to occupy. Pulled over to the left edge (2026-09-08) rather than
-  // centered — centered put it right on top of the dog at his on-screen
-  // position. No `right`/alignItems centering needed: with only `left` set
-  // the box is exactly as wide as its card content.
+  // Anchored to left/bottom so it sits on the road; pulled to the left edge rather than centered, which used to sit right on top of the dog.
   territoryMeterWrap: {
     position: "absolute",
   },
 
-  // Soft amber halo behind the card, negative-inset so it peeks out past
-  // the card's own rounded corners. Opacity is driven entirely off
-  // meterGlow at the call site (0 whenever not urgent), so this box is
-  // visually inert — fully transparent, no perceptible cost — for nearly
-  // the whole round; it only becomes visible in the last stretch before
-  // completion.
-  territoryMeterGlow: {
-    position: "absolute",
-    top: -7,
-    left: -7,
-    right: -7,
-    bottom: -7,
-    borderRadius: 18,
-    backgroundColor: "#FFA500",
-  },
-
-  // Dark rounded panel behind the label + bar — added when the meter moved
-  // down onto the road art, so it reads clearly against whatever happens
-  // to be behind it there instead of relying on plain sky. Sized down
-  // (2026-09-08) for mobile screens — this card sits off to the left at a
-  // fixed size regardless of screen width, so on a phone-width viewport
-  // the original size read as oversized/hard to keep track of at a glance.
-  // No `alignItems: "center"` anymore (2026-09-10 redesign) — the header
-  // row and track now stretch to the card's own content width instead of
-  // centering, so the live percentage can sit flush to the right edge.
-  // Recolored again (2026-09-10 follow-up) to match the exact palette of
-  // the new pixel-art mark-button image, sampled directly from that PNG
-  // rather than eyeballed: #F1D5A9 top highlight, #E4BB83 main face,
-  // #C29C6E side bevel, #987656 shadow bevel, #2B1F19 outline/ink. Faked
-  // 3D bevel via RN's independent border-side colors (no gradient library
-  // in this project) — light top/left, dark bottom/right, like the sign's
-  // own beveled edge, so the two HUD elements now read as literally the
-  // same material instead of just a matching color family.
+  // Dark rounded panel behind the meter's label/bar so it reads clearly against the road art; sized down for mobile, recolored to match the pixel-art mark-button's sampled palette with a faked 3D bevel via RN's per-side border colors.
   territoryMeterCard: {
     paddingVertical: 6,
     paddingHorizontal: 10,
@@ -3408,159 +3102,30 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
 
-  // Label + live percentage side by side above the bar (2026-09-10
-  // redesign — previously just the label, centered, with no readout).
-  territoryMeterHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 4,
-  },
-
-  // Dark ink brown on the light tan card now (was white-on-dark before
-  // the card itself flipped to a light wood face) with a faint light
-  // shadow instead of a dark one, for a carved-into-wood look rather than
-  // text floating over a photo.
+  // Dark ink brown on the light tan card (was white-on-dark before the card flipped to a light wood face), for a carved-into-wood look. No live percentage readout alongside it anymore — the scribble fill below is the only progress indicator (see TerritoryMeterScribbleTrack).
   territoryMeterLabel: {
     fontSize: 9,
     fontWeight: "700",
     color: "#2B1F19",
+    marginBottom: 4,
     textShadowColor: "rgba(255,255,255,0.35)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 0,
   },
 
-  territoryMeterPercent: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: "#5A3F2B",
-    marginLeft: 8,
-    textShadowColor: "rgba(255,255,255,0.35)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 0,
-  },
-
-  // Un-clipped wrapper around the track, sized to match it exactly, so the
-  // leading-edge cap (a sibling of the track, not a child) can sit right on
-  // the fill boundary — including hanging slightly past either end — without
-  // being cut off by the track's own `overflow: "hidden"` pill clip.
+  // Sized to match the SVG track exactly (TERR_METER_TRACK_WIDTH/HEIGHT) — the old cap-overhang reasoning for this wrapper no longer applies (the leading-edge knob was dropped along with the flat-fill design; the scribble's own ragged edge reads as the "you are here" cue now), kept as a plain sizing wrapper.
   territoryMeterTrackOuter: {
-    width: 110,
-    justifyContent: "center",
+    width: TERR_METER_TRACK_WIDTH,
+    height: TERR_METER_TRACK_HEIGHT,
   },
 
-  territoryMeterTrack: {
-    width: 110,
-    height: 11,
-    borderRadius: 6,
-    // Recessed groove look (2026-09-10 follow-up, see territoryMeterCard's
-    // comment for the sampled palette) — dark ink fill with the bevel
-    // flipped relative to the card around it (dark top/left, light
-    // bottom/right) so the track reads as pressed IN rather than raised,
-    // the way an actual carved groove in a wood sign would.
-    backgroundColor: "rgba(43,31,25,0.4)",
-    borderWidth: 2,
-    borderColor: "#F1D5A9",
-    borderTopColor: "#987656",
-    borderLeftColor: "#987656",
-    overflow: "hidden",
-  },
-
-  // Width is set per-render as a `${markProgress * 100}%` string rather
-  // than an Animated value — ticks in fixed 100ms steps alongside the
-  // markIntervalRef loop, not a smooth continuous animation, so a plain
-  // state-driven width keeps the two in lockstep with no extra machinery.
-  // Renamed from territoryMeterFill (2026-09-10) now that it hosts two
-  // shine layers instead of one, for the two-tone glossy-pill look.
-  territoryMeterFillBase: {
-    height: "100%",
-    borderRadius: 6,
-    backgroundColor: "#F5E050",
-    overflow: "hidden",
-  },
-
-  // Wider, softer top band — the bulk of the glossy-pill look, standing in
-  // for a real gradient (no gradient library in this project — see the
-  // house-art/porch-guy sections of the project doc for the same reasoning
-  // applied to image assets).
-  territoryMeterFillShineBand: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: "55%",
-    borderTopLeftRadius: 6,
-    borderTopRightRadius: 6,
-    backgroundColor: "rgba(255,255,255,0.25)",
-  },
-
-  // Thin brighter strip right at the fill's own top edge, layered over the
-  // band above for a sharper highlight — this is the old territoryMeterFillShine,
-  // renamed and kept as-is (2026-09-10) alongside the new band.
-  territoryMeterFillShineLine: {
-    position: "absolute",
-    top: 1,
-    left: 1,
-    right: 1,
-    height: 2,
-    borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.6)",
-  },
-
-  // Leading-edge "you are here" marker (2026-09-10 redesign). Fixed 14px
-  // circle; `left` is set per-render as the same percentage string as the
-  // fill, and the -7 top/left margins (half the circle's own size) recenter
-  // it on that point — see the JSX comment at the call site for why this is
-  // a margin rather than a percentage transform.
-  territoryMeterCap: {
-    position: "absolute",
-    top: "50%",
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    marginTop: -7,
-    marginLeft: -7,
-    // Light bevel-highlight fill + dark ink border (2026-09-10 follow-up,
-    // see territoryMeterCard's comment for the sampled palette) so the
-    // cap reads as a small brass/wood knob pulled from the same sign
-    // material as the rest of the redesigned card.
-    backgroundColor: "#F1D5A9",
-    borderWidth: 2,
-    borderColor: "#2B1F19",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.4,
-    shadowRadius: 2,
-    elevation: 3,
-  },
-
-  // Swapped colors once markProgress crosses TERR_METER_URGENT_THRESHOLD —
-  // paired with the pulsing territoryMeterGlow behind the whole card for the
-  // "almost marked" tension cue.
-  territoryMeterCapUrgent: {
-    backgroundColor: "#FFD400",
-    borderColor: "#FF7A00",
-    shadowColor: "#FF7A00",
-    shadowOpacity: 0.85,
-    shadowRadius: 4,
-  },
-
-  // Dedicated mark button (2026-09-10) — see the render-site comment for
-  // why this exists. Wrap is just a positioning box (width pinned to
-  // TERR_MARK_BUTTON_WIDTH per-render, see the call site) with its content
-  // centered, so the glow halo/button stack on the same horizontal center
-  // regardless of the button's own fixed size.
+  // Dedicated mark button wrap — just a positioning box with content centered, so the glow/button stack on the same horizontal center regardless of the button's fixed size.
   territoryMarkButtonWrap: {
     position: "absolute",
     alignItems: "center",
   },
 
-  // Now just a thin frame around the pixel-art image itself (2026-09-10
-  // follow-up — was a code-drawn wood-brown circle before the user
-  // supplied real art for this button). No background/border of its own
-  // anymore since the image already has its own beveled wood-sign edge;
-  // this only exists so PressableScale has something to apply its
-  // press-squish transform to.
+  // Just a thin frame around the pixel-art image now (was a code-drawn circle before real art existed); only exists so PressableScale has something to apply its press-squish transform to.
   territoryMarkButton: {
     alignItems: "center",
     justifyContent: "center",
@@ -3571,9 +3136,7 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
 
-  // Swapped in while isHolding — the image itself can't be recolored, so
-  // a slight opacity dip stands in for the old active-state recolor, on
-  // top of PressableScale's own per-tap squish feedback.
+  // Slight opacity dip while isHolding stands in for an active-state recolor, since the image itself can't be recolored.
   territoryMarkButtonActive: {
     opacity: 0.8,
   },

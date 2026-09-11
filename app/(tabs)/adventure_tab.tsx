@@ -36,8 +36,7 @@ const AREA_BACKGROUNDS: Partial<Record<AreaName, ImageSourcePropType>> = {
   "Magical Forest": require("../../assets/backgrounds/EnchantedForestCartoon.png"),
 };
 
-// Used when stepping into a whole new area — long enough for the
-// "Entering {areaName}..." label to build in and hold.
+// Used when stepping into a whole new area — long enough for the label to build in and hold.
 const AREA_TRANSITION = {
   fadeIn: 900,
   textScale: 650,
@@ -45,9 +44,7 @@ const AREA_TRANSITION = {
   fadeOut: 850,
 };
 
-// Used between story beats within the same area — a quick, wordless
-// black cut/fade so picking a choice always feels like moving to the next
-// scene (Slay the Princess-style), not just an instant text swap.
+// Used between story beats within the same area — a quick, wordless black cut/fade between choices.
 const SCENE_TRANSITION = {
   fadeIn: 320,
   textScale: 0,
@@ -69,8 +66,7 @@ type FireflyConfig = {
   driftY: number;
 };
 
-// Scatters fireflies across the screen with randomized size/timing/drift so
-// they don't all twinkle and float in unison.
+// Scatters fireflies with randomized size/timing/drift so they don't twinkle in unison.
 function buildFireflies(): FireflyConfig[] {
   return Array.from({ length: FIREFLY_COUNT }).map((_, i) => ({
     id: i,
@@ -84,8 +80,7 @@ function buildFireflies(): FireflyConfig[] {
   }));
 }
 
-// A single glowing dot that twinkles (fades in/out) and gently drifts,
-// looping forever. Purely decorative, so it ignores touches.
+// A single glowing dot that twinkles and drifts, looping forever; purely decorative.
 function Firefly({ config }: { config: FireflyConfig }) {
   const progress = useRef(new Animated.Value(0)).current;
 
@@ -145,8 +140,7 @@ function Firefly({ config }: { config: FireflyConfig }) {
   );
 }
 
-// Renders a full-screen, non-interactive layer of fireflies over the
-// current area's background art.
+// Renders a full-screen, non-interactive layer of fireflies over the area's background art.
 function FireflyField({ fireflies }: { fireflies: FireflyConfig[] }) {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -168,22 +162,13 @@ export default function Adventure() {
   const [selectedArea, setSelectedArea] = useState<AreaName | null>(null);
   const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
 
-  // Reset target for the tab bar — matches the height/paddingBottom
-  // calculation in _layout.tsx's screenOptions exactly, so re-applying
-  // this looks identical to the bar's normal resting state instead of
-  // resetting to `undefined` (which drops this styling entirely and
-  // falls back to the default flat MaterialTopTabs bar anchored to the
-  // screen edge).
+  // Reset target for the tab bar, matching _layout.tsx's style exactly (never reset to `undefined`, which drops it entirely).
   const restoredTabBarStyle = useMemo(
     () => getTabBarStyle(theme, insets.bottom),
     [theme, insets.bottom]
   );
 
-  // Drives a gradual fade instead of an instant show/hide. We can't just
-  // hand an Animated.Value straight to navigation.setOptions (tabBarStyle
-  // is read as a plain style object by the navigator, not passed through
-  // to an Animated component), so a JS-driven listener recomputes a plain
-  // numeric opacity every frame and re-applies it via setOptions.
+  // Drives a gradual fade via a JS listener recomputing plain opacity, since setOptions can't take an Animated.Value directly.
   const tabBarOpacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -192,8 +177,7 @@ export default function Adventure() {
         tabBarStyle: {
           ...restoredTabBarStyle,
           opacity: value,
-          // Only pull it out of layout/touch once it's essentially invisible,
-          // so the fade gets to finish instead of being cut off.
+          // Only pull it out of layout/touch once essentially invisible, so the fade finishes.
           ...(value <= 0.01 ? { display: "none" } : null),
         },
       });
@@ -202,10 +186,7 @@ export default function Adventure() {
     return () => tabBarOpacity.removeListener(listenerId);
   }, [navigation, restoredTabBarStyle, tabBarOpacity]);
 
-  // Hides the floating bottom tab bar only once the player has actually
-  // entered an area's story (selectedArea set), not just when the Adventure
-  // tab itself is focused — so swiping to the pet/area picker still shows
-  // the tab bar, and it fades out gradually once the adventure story begins.
+  // Hides the tab bar only once a story is entered (selectedArea set), not just when this tab is focused.
   useEffect(() => {
     Animated.timing(tabBarOpacity, {
       toValue: selectedArea ? 0 : 1,
@@ -214,12 +195,7 @@ export default function Adventure() {
     }).start();
   }, [selectedArea, tabBarOpacity]);
 
-  // Safety net: always restore the tab bar instantly when leaving this tab
-  // entirely (e.g. swiping away mid-adventure), regardless of selectedArea
-  // state or any in-flight fade, since the screen stays mounted and its
-  // state persists across tab swaps. adventure_tab is a direct child screen
-  // of the Tabs navigator, so `navigation` here is already scoped to that
-  // Tabs navigator — no getParent() needed.
+  // Safety net: instantly restores the tab bar when leaving this tab entirely, since state persists across tab swaps.
   useFocusEffect(
     useCallback(() => {
       return () => {
@@ -233,9 +209,7 @@ export default function Adventure() {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [transitionLabel, setTransitionLabel] = useState("");
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  // Starts the "Entering {areaName}..." text slightly small and scales it
-  // up to full size once the screen is fully black, so the label builds
-  // into place during the hold instead of just popping in at full size.
+  // Starts the transition label slightly small and scales it up once the screen is fully black.
   const transitionTextScale = useRef(new Animated.Value(0.82)).current;
   const fireflies = useMemo(() => buildFireflies(), []);
 
@@ -248,11 +222,7 @@ export default function Adventure() {
     ? AREA_BACKGROUNDS[selectedArea]
     : undefined;
 
-  // Fades a black overlay in (optionally with a label that builds in once
-  // the screen is fully black), swaps the underlying screen state while
-  // covered (via onMidpoint), then fades the overlay back out to reveal
-  // whatever comes next. Shared by the big "Entering {areaName}..." area
-  // transition and the quick, wordless cut used between story choices.
+  // Fades a black overlay in, swaps screen state while covered (onMidpoint), then fades back out; shared by area and choice transitions.
   const runSceneTransition = (
     label: string,
     durations: { fadeIn: number; textScale: number; hold: number; fadeOut: number },
@@ -310,10 +280,7 @@ export default function Adventure() {
     }
   };
 
-  // Every choice cuts to black and back before the next scene appears —
-  // same beat as stepping into an area, just quicker and wordless, so the
-  // story always feels like it's moving somewhere new rather than just
-  // swapping text in place.
+  // Every choice cuts to black and back before the next scene appears, same beat as entering an area but quicker and wordless.
   const handleChoice = (nextId: string) => {
     if (!selectedArea) return;
 
@@ -333,8 +300,7 @@ export default function Adventure() {
     setCurrentNodeId(null);
   };
 
-  // Leaves the current story and returns to the area-select screen for the
-  // same pet (unlike changePet, this keeps selectedPet set).
+  // Leaves the story for the area-select screen, keeping selectedPet set (unlike changePet).
   const endAdventure = () => {
     resetAdventureState();
   };
@@ -344,15 +310,10 @@ export default function Adventure() {
     resetAdventureState();
   };
 
-  // Only relevant once the user is actually inside a story — not just on
-  // the area-select screen — since ending an adventure now returns there
-  // instead of leaving the tab.
+  // Only relevant inside a story, since ending an adventure returns to area-select rather than leaving the tab.
   const showEndAdventureButton = selectedArea !== null;
 
-  // Full-screen background art for the currently selected area (once one
-  // exists for it). Sits behind the ScrollView; the ScrollView's own
-  // background is made transparent whenever this is present so the art
-  // shows through everywhere, not just around the story card.
+  // Full-screen background art for the selected area, sitting behind a transparent ScrollView so it shows through everywhere.
   const showFullScreenBackground = Boolean(selectedArea && currentBackground);
 
   return (
@@ -458,9 +419,7 @@ export default function Adventure() {
                   style={[
                     styles.card,
                     { backgroundColor: theme.card.background, borderColor: theme.card.border },
-                    // Only fade a locked area once you can't afford it —
-                    // one you can afford right now should read at full
-                    // brightness, same as an area you already own.
+                    // Only fade a locked area once you can't afford it; affordable areas read at full brightness.
                     !isUnlocked && !canAfford && styles.cardLocked,
                   ]}
                   onPress={() => handleAreaPress(area.name, area.price)}
@@ -652,7 +611,7 @@ export default function Adventure() {
 
 const styles = StyleSheet.create({
   background: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
   },
 
   container: {
@@ -778,11 +737,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
-  // Full-bleed area artwork, positioned behind the ScrollView. "contain"
-  // shows the whole image with no cropping/zoom; the wrap's backgroundColor
-  // fills any letterbox space so it doesn't show as transparent/orange.
+  // Full-bleed area artwork behind the ScrollView; wrap's backgroundColor fills "contain"'s letterbox space.
   fullScreenBackgroundWrap: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: "#1B3B2F",
   },
 
@@ -791,9 +748,7 @@ const styles = StyleSheet.create({
     height: "100%",
   },
 
-  // Small glowing dot used by the Firefly component. Warm yellow-green with
-  // a soft shadow to fake a glow (Android needs elevation + shadow* both set
-  // for the glow to render at all).
+  // Small glowing dot for the Firefly component (Android needs elevation + shadow* both set to render the glow).
   firefly: {
     position: "absolute",
     backgroundColor: "#EFFFC2",
@@ -821,9 +776,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
   },
 
-  // Applied over storyBox/bookBox whenever the area has its own background
-  // art, so the card reads as a mist-glass panel sitting in the scene
-  // instead of a plain white card.
+  // Applied over storyBox/bookBox when the area has its own art, so the card reads as a mist-glass panel in the scene.
   storyBoxThemed: {
     backgroundColor: "rgba(8, 24, 18, 0.68)",
     borderWidth: 1.5,
@@ -924,7 +877,7 @@ const styles = StyleSheet.create({
   },
 
   transitionOverlay: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: "#000",
     alignItems: "center",
     justifyContent: "center",

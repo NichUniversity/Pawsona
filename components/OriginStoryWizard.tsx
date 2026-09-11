@@ -18,19 +18,13 @@ import { API_BASE_URL, GOLD, PARCHMENT, WOOD_DARK, WOOD_MID } from "../constants
 import { usePets } from "../context/PetInformation";
 import { PET_CATEGORIES, PetCategory } from "../data/petcategories";
 
-// Total questions in the interview, including the fixed opener below.
-// Each answer feeds into generating the next question, and all four feed
-// into the final backstory.
+// Total questions in the interview, including the fixed opener; all answers feed the final backstory.
 const TOTAL_QUESTIONS = 4;
 
-// The first "Write it differently" is free per completed interview. Every
-// regenerate after that costs coins — sized similarly to the cheapest
-// Adventure area unlock, so it's earnable but not trivial.
+// First "Write it differently" is free per interview; further regenerates cost coins (priced like the cheapest Adventure area).
 const REDO_COST = 20;
 
-// Used if the "next question" request fails, so a hiccup on one question
-// doesn't stall the whole interview. Cycled through in order, skipping any
-// that would repeat a question already asked.
+// Fallback questions if the "next question" request fails; cycled in order, skipping ones already asked.
 const FALLBACK_QUESTIONS_TRUE = [
   "What's one word you'd use to describe their personality?",
   "Is there a funny habit or quirk that's just so 'them'?",
@@ -98,8 +92,7 @@ export default function OriginStoryWizard({
   const [answerText, setAnswerText] = useState("");
   const [backstory, setBackstory] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  // Scoped to this one wizard session: completing a fresh interview grants
-  // one free "Write it differently" redo, then further redos cost coins.
+  // Scoped to this wizard session: one free redo per fresh interview, then further redos cost coins.
   const [hasUsedFreeRedo, setHasUsedFreeRedo] = useState(false);
   const [redoError, setRedoError] = useState<string | null>(null);
 
@@ -164,8 +157,7 @@ export default function OriginStoryWizard({
       setStep("question");
     } catch (err) {
       console.error("origin-story-question failed:", err);
-      // Don't dead-end the interview over one flaky request — fall back to
-      // a generic question so the flow keeps moving.
+      // Don't dead-end the interview over one flaky request — fall back to a generic question.
       setCurrentQuestion(pickFallbackQuestion(history));
       setStep("question");
     }
@@ -244,8 +236,7 @@ export default function OriginStoryWizard({
   };
 
   const handleRetryFinalize = () => {
-    // A failed request isn't the user asking for a new draft — it's just
-    // retrying the same one, so this never touches the free redo or coins.
+    // A failed request is a retry, not a new draft — this never touches the free redo or coins.
     finalizeBackstory(qaHistory);
   };
 
@@ -258,9 +249,7 @@ export default function OriginStoryWizard({
       return;
     }
 
-    // Check and spend coins BEFORE calling the API — otherwise we'd have
-    // already paid for the request regardless of whether they could afford
-    // it, which defeats the point of the gate.
+    // Check and spend coins BEFORE calling the API, so the gate actually blocks unaffordable requests.
     if (coins < REDO_COST) {
       setRedoError(
         `You need ${REDO_COST} 🪙 to rewrite again — you have ${coins}. Log a daily activity or play a minigame to earn more!`

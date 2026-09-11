@@ -12,18 +12,7 @@ type Props = {
   style?: StyleProp<ViewStyle>;
 };
 
-/**
- * Plays a video clip in a loop while `playing` is true.
- *
- * Seeking a native video player mid-playback briefly blanks its render
- * surface to black while it decodes the target frame — invisible back when
- * the avatar box itself was black, but a visible flash now that it's
- * AVATAR_BACKDROP_COLOR. To avoid it: seek to frame 0 exactly once, right
- * when the player is created (while this view is still hidden behind the
- * static avatar — see the opacity swap in daily_log_tab.tsx), so a real
- * frame is already decoded before the user ever presses. Every later
- * press/release just resumes or pauses in place instead of re-seeking.
- */
+/** Plays a video clip in a loop while `playing` is true; pre-seeks to frame 0 on creation to avoid a black flash on first press. */
 export function WalkingVideo({ source, playing, style }: Props) {
   const player = useVideoPlayer(source, (p) => {
     p.loop = true;
@@ -43,13 +32,7 @@ export function WalkingVideo({ source, playing, style }: Props) {
     <View style={[{ backgroundColor: AVATAR_BACKDROP_COLOR }, style]} pointerEvents="none">
       <VideoView
         player={player}
-        // The wrapping View's backgroundColor only shows through where the
-        // VideoView itself is transparent — but the native video surface
-        // paints its own opaque background (defaults to white) under any
-        // letterboxed/gap area left by contentFit="contain". That white
-        // sliver was showing along the bottom edge for landscape clips
-        // that don't exactly fill this box's aspect ratio. Setting the
-        // same color directly on the VideoView closes that gap.
+        // VideoView paints its own opaque (white) background under letterboxed gaps, so set the backdrop color directly to avoid a white sliver.
         style={{ width: "100%", height: "100%", backgroundColor: AVATAR_BACKDROP_COLOR }}
         contentFit="contain"
         nativeControls={false}

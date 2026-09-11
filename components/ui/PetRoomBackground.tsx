@@ -16,20 +16,13 @@ import { AvatarDisplay, AVATAR_BACKDROP_COLOR } from "./AvatarDisplay";
 import { WalkingSprite } from "./WalkingSprite";
 import { WalkingVideo } from "./WalkingVideo";
 
-// How far below the safe-area top the floor starts — clears the settings
-// cog button (which floats at insets.top + 8, ~34px tall) plus a little
-// breathing room. Exported so index.tsx can reserve exactly this much
-// space above its scrollable content instead of the pet room and the
-// header art overlapping — keep these two in sync the same way
-// getTabBarStyle/TAB_BAR_HEIGHT are kept in sync for the tab bar.
+// How far below the safe-area top the floor starts, clearing the settings cog; exported so index.tsx can reserve the same space.
 export const ROOM_TOP_CLEARANCE = 54;
 export const ROOM_HEIGHT = 148;
 const PET_SIZE = 82;
 const EDGE_PADDING = 22;
 
-// Steady stroll speed in px/second, and how long the pet lingers between
-// strolls. Kept gentle/slow on purpose — this is ambient life happening
-// behind the app's real content, not something meant to grab attention.
+// Steady stroll speed and idle time between strolls — kept slow since this is ambient background life, not an attention-grabber.
 const WALK_SPEED = 46;
 const MIN_IDLE_MS = 2200;
 const MAX_IDLE_MS = 5200;
@@ -38,27 +31,11 @@ type Props = {
   category: PetCategory | null | undefined;
   emoji: string | null | undefined;
   color?: string | null;
-  /** Safe-area top inset (from useSafeAreaInsets), so the floor clears the
-   *  status bar and the settings cog consistently on every device. */
+  /** Safe-area top inset, so the floor clears the status bar and settings cog on every device. */
   topInset: number;
 };
 
-/**
- * Replaces TabBackground on the Home tab: the same theme-reactive gradient
- * wash, plus a little "room" strip pinned near the top where the
- * currently-viewed pet (see index.tsx's currentEntry) ambles back and
- * forth on its own — a PokiPet-style touch of life behind the real UI.
- *
- * The floor is painted in AVATAR_BACKDROP_COLOR, the same tan "picture
- * frame mat" used everywhere else a pet avatar appears (AvatarDisplay,
- * the Daily Paw Log photo frame). That's deliberate, not just a style
- * match: WALK_VIDEOS clips are pre-baked onto that exact color as an
- * opaque rectangle (see data/walkVideos.ts), so painting the floor the
- * same color is what makes those clips blend in seamlessly instead of
- * showing as a floating colored box. It's what lets every breed roam
- * here today, including the ones that only have a video clip and no
- * transparent sprite frames yet.
- */
+/** Replaces TabBackground on the Home tab: same gradient wash plus a "room" strip where the current pet ambles; floor color matches AVATAR_BACKDROP_COLOR so pre-baked WALK_VIDEOS clips blend in seamlessly. */
 export function PetRoomBackground({ category, emoji, color, topInset }: Props) {
   const { theme } = useTheme();
   const { top, mid, bottom, sheenColor, sheenOpacity } = theme.background;
@@ -78,11 +55,7 @@ export function PetRoomBackground({ category, emoji, color, topInset }: Props) {
     walkableWidthRef.current = Math.max(floorWidth - PET_SIZE - EDGE_PADDING * 2, 0);
   }, [floorWidth]);
 
-  // Idle <-> stroll loop: wait a while, pick a random spot on the floor,
-  // walk there at a steady pace, then wait again. Resets (new random
-  // cadence, starts from wherever the floor currently measures) whenever
-  // the pet being shown changes — e.g. the user swipes to a different pet
-  // card — or the component (re)mounts.
+  // Idle <-> stroll loop: wait, pick a random floor spot, walk there, repeat; resets when the shown pet changes or the component remounts.
   useEffect(() => {
     if (!hasPet) return;
 
@@ -124,8 +97,7 @@ export function PetRoomBackground({ category, emoji, color, topInset }: Props) {
       });
     };
 
-    // Small initial pause so the pet doesn't bolt the instant the tab
-    // appears.
+    // Small initial pause so the pet doesn't bolt the instant the tab appears.
     timeoutId = setTimeout(step, 1000);
 
     return () => {

@@ -1,8 +1,8 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useIsFocused } from 'expo-router/react-navigation';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
+import { useIsFocused } from '@react-navigation/native';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
@@ -36,6 +36,8 @@ import {
   PetEntry,
   usePets
 } from '../../context/PetInformation';
+import { useSettings } from '../../context/SettingsContext';
+import { ACCENT_COLORS, useTheme, withAlpha } from '../../context/ThemeContext';
 import {
   AVATAR_OPTIONS,
   AvatarOption,
@@ -44,8 +46,6 @@ import {
   PET_CATEGORIES,
   PetCategory,
 } from '../../data/petcategories';
-import { ACCENT_COLORS, useTheme, withAlpha } from '../../context/ThemeContext';
-import { useSettings } from '../../context/SettingsContext';
 import { useTabBarClearance } from '../../hooks/useTabBarClearance';
 
 // TODO: swap in a real inbox before shipping — this is a placeholder.
@@ -322,9 +322,7 @@ export default function HomeScreen() {
     setDeleteConfirmId(null);
   };
 
-  // Opens the device's mail client with a pre-filled subject/body — no
-  // in-app form to build or backend to receive it, just the standard
-  // "Send Feedback" pattern most apps use.
+  // Opens the device's mail client with a pre-filled subject/body — no in-app form or backend needed.
   const handleSendFeedback = () => {
     const subject = encodeURIComponent('Pawsona Feedback');
     const body = encodeURIComponent(
@@ -335,10 +333,7 @@ export default function HomeScreen() {
     );
   };
 
-  // Hands over every pet's saved data as JSON through the native share
-  // sheet — Files, Mail, Messages, AirDrop, whatever the person picks.
-  // A simple "export my data" is standard in apps that hold personal
-  // data, and this one needs no backend or file-system permissions.
+  // Hands over every pet's saved data as JSON through the native share sheet — no backend or file-system permissions needed.
   const handleExportData = () => {
     const payload = {
       exportedAt: new Date().toISOString(),
@@ -352,10 +347,7 @@ export default function HomeScreen() {
     });
   };
 
-  // Destructive and permanent: wipes the locally stored account plus
-  // every pet/coin/streak field, then signs out. Confirmed with a native
-  // alert since this can't be undone — same pattern iOS apps use for
-  // account deletion.
+  // Destructive and permanent: wipes the local account and all pet/coin/streak data, then signs out. Confirmed via native alert.
   const handleDeleteAccount = () => {
     Alert.alert(
       'Delete Account',
@@ -394,9 +386,7 @@ export default function HomeScreen() {
       : getMainPickerOptions(category);
   })();
 
-  // Avatar unlocks (e.g. the Wolf) are account-wide — bought once in the
-  // Paw Shop, pickable on any pet — so this checks the global list, not
-  // whichever pet the picker modal happens to be open for.
+  // Avatar unlocks are account-wide, so this checks the global list, not the pet the picker modal is open for.
   const isAvatarLocked = (option: AvatarOption) =>
     !!option.unlockId && !unlockedAvatars.includes(option.unlockId);
 
@@ -1105,11 +1095,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // Double the original "Pawsona" text title's fontSize (42 -> 84).
   logoImage: {
     height: 84,
     aspectRatio: 1970 / 493,
-    // Same soft drop shadow the old text title had.
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.18,

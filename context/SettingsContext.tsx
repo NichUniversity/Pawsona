@@ -13,14 +13,10 @@ const DEFAULT_SETTINGS: PersistedSettings = {
 };
 
 type SettingsContextType = {
-  /** Whether PressableScale (and anything else that asks) should fire a
-   *  haptic tick. Defaults on — most similar apps ship haptics on by
-   *  default and let you turn them off, not the other way around. */
+  /** Whether PressableScale (and anything else that asks) should fire a haptic tick. Defaults on. */
   hapticsEnabled: boolean;
   setHapticsEnabled: (value: boolean) => void;
-  /** Fires a light haptic impact if — and only if — hapticsEnabled is on.
-   *  Swallow-safe: Haptics can throw on simulators/unsupported hardware,
-   *  and a settings toggle should never be able to crash a button press. */
+  /** Fires a light haptic impact only if hapticsEnabled is on; swallows errors on unsupported hardware. */
   triggerHaptic: (style?: Haptics.ImpactFeedbackStyle) => void;
 };
 
@@ -28,9 +24,7 @@ const SettingsContext = createContext<SettingsContextType | undefined>(
   undefined
 );
 
-// App-wide "quality of life" preferences (Settings sheet), separate from
-// ThemeContext (which owns colors) and AuthContext (which owns the
-// session) — this is the home for toggles that don't belong in either.
+// App-wide "quality of life" preferences, separate from ThemeContext (colors) and AuthContext (session).
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [hapticsEnabled, setHapticsEnabledState] = useState<boolean>(
     DEFAULT_SETTINGS.hapticsEnabled
@@ -57,8 +51,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
   const setHapticsEnabled = (value: boolean) => {
     setHapticsEnabledState(value);
-    // Read-modify-write so a future second setting can't clobber this one
-    // (or vice versa) if both happen to save around the same time.
+    // Read-modify-write so concurrent settings saves can't clobber each other.
     AsyncStorage.getItem(SETTINGS_STORAGE_KEY)
       .then((raw) => {
         const current = raw ? JSON.parse(raw) : {};

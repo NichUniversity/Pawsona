@@ -39,10 +39,7 @@ type Props = {
   onFinish: () => void;
 };
 
-// First-launch walkthrough shown once (tracked via AsyncStorage in the
-// tabs layout) — a simple sequence of overlay cards, not tied to real
-// component positions, so it stays lightweight and doesn't need to
-// measure the actual upload box or tab bar.
+// First-launch walkthrough (tracked via AsyncStorage) — a simple sequence of overlay cards, not tied to real component positions.
 export function OnboardingTutorial({ visible, onFinish }: Props) {
   const { accentColor, theme } = useTheme();
   const [stepIndex, setStepIndex] = useState(0);

@@ -203,10 +203,7 @@ type ThemeContextType = {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-// App-wide theme, swappable from Settings and remembered on the device.
-// Picking a theme now changes the background (and cards, text, tab bar)
-// along with the accent color — Orange is the default; Dark/White/Blue/Purple/
-// Green are the other options, all built around their own accent color.
+// App-wide theme, swappable from Settings and remembered on device; Orange is the default of six options.
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [themeKey, setThemeKeyState] = useState<ThemeKey>(DEFAULT_THEME);
 
@@ -248,9 +245,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Small helper for translucent accent-tinted backgrounds (e.g. an
-// "equipped"/"unlocked" pill) that need to follow whatever accent color is
-// currently selected instead of being hardcoded to orange.
+// Small helper for translucent accent-tinted backgrounds that follow the currently selected accent color.
 export function withAlpha(hex: string, alpha: number): string {
   const clean = hex.replace("#", "");
   const bigint = parseInt(clean, 16);

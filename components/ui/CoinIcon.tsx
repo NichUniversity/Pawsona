@@ -1,9 +1,7 @@
 import React from "react";
 import { Image, StyleSheet } from "react-native";
 
-// The Pawsona coin — a gold paw-print coin, used anywhere the app shows
-// the in-game currency (coin badges, prices, reward callouts) instead of
-// the 🪙 emoji.
+// The Pawsona coin — used anywhere the app shows in-game currency instead of the 🪙 emoji.
 const COIN_SOURCE = require("../../assets/images/paw-coin.png");
 
 type Props = {
@@ -25,8 +23,7 @@ export function CoinIcon({ size = 16 }: Props) {
 
 const styles = StyleSheet.create({
   icon: {
-    // Inline images in RN Text sit high against the baseline by default —
-    // this nudges the coin down so it lines up with the digits next to it.
+    // Nudges the coin down to line up with the digits next to it.
     marginBottom: -2,
   },
 });

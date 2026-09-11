@@ -44,9 +44,7 @@ export default function StoreTab() {
   ) => {
     if (!selectedPet) return;
 
-    // Avatar looks (e.g. the Wolf) are account-wide once bought — any pet
-    // can pick them on the Home tab — so they're tracked separately from
-    // the per-pet hat/collar/etc. ownership below.
+    // Avatar looks (e.g. the Wolf) are account-wide once bought, so they're tracked separately from per-pet cosmetics.
     if (category === "avatar") {
       if (unlockedAvatars.includes(itemId)) return;
       const success = spendCoins(price);
@@ -468,9 +466,7 @@ const styles = StyleSheet.create({
     borderColor: "#FF8C42",
   },
 
-  // Applied to a not-yet-owned item's whole card once coins fall short of
-  // its price, so it visibly fades out instead of looking identical to
-  // something you can actually afford right now.
+  // Fades out an unaffordable item's card so it doesn't look identical to something you can buy.
   itemCardUnaffordable: {
     opacity: 0.4,
   },

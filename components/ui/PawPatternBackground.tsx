@@ -1,9 +1,7 @@
 import React from "react";
 import { Image, ImageSourcePropType, StyleSheet, View } from "react-native";
 
-// Full-screen pawprint pattern used behind a tab's content. `backgroundColor`
-// shows through anywhere the image doesn't fully cover (edges, transparent
-// pixels) and while the image asset is loading.
+// Full-screen pawprint pattern behind a tab's content; `backgroundColor` shows through gaps and while loading.
 type Props = {
   backgroundColor?: string;
   source?: ImageSourcePropType;

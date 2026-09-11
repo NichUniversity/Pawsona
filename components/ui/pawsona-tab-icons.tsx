@@ -11,17 +11,11 @@ export type PawsonaIconName =
 type Props = {
   name: PawsonaIconName;
   size?: number;
-  /** True for the focused tab. These are full-color flat illustrations
-   *  (not line icons), so unlike the old SVG set their art can't be
-   *  tinted by the theme's active/inactive color — a lift in opacity and
-   *  a small scale bump is what stands in for that "lit up" state here. */
+  /** True for the focused tab — since these flat illustrations can't be tinted, "lit up" is an opacity/scale bump instead. */
   active?: boolean;
 };
 
-// One hand-drawn sticker per tab, cropped from a single reference sheet
-// down to just each icon's own art (no shared pill background or label
-// text baked in — the tab bar still draws its own theme-adaptive
-// background, and React Navigation renders the text label).
+// One hand-drawn sticker per tab; no background or label baked in (the tab bar and React Navigation handle those).
 const ICON_SOURCES: Record<PawsonaIconName, ImageSourcePropType> = {
   home: require('../../assets/images/tab-home.png'),
   'daily-log': require('../../assets/images/tab-paw-log.png'),
@@ -31,9 +25,7 @@ const ICON_SOURCES: Record<PawsonaIconName, ImageSourcePropType> = {
 };
 
 export function PawsonaTabIcon({ name, size = 34, active = false }: Props) {
-  // Animates the dim/lift instead of snapping between the two states —
-  // same little "pop" language PressableScale and the daily reward glow
-  // use elsewhere in the app, just driven by tab focus instead of touch.
+  // Animates the dim/lift instead of snapping, same "pop" language used elsewhere in the app.
   const lift = useRef(new Animated.Value(active ? 1 : 0)).current;
 
   useEffect(() => {

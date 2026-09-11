@@ -11,8 +11,7 @@ type OnboardingContextType = {
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined);
 
-// Lifted out of the tabs layout so the Home tab's Settings menu can also
-// trigger a replay, without both places duplicating the AsyncStorage check.
+// Lifted out of the tabs layout so the Home tab's Settings menu can also trigger a replay.
 export function OnboardingProvider({ children }: { children: React.ReactNode }) {
   const [showOnboarding, setShowOnboarding] = useState(false);
 

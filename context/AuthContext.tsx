@@ -10,11 +10,7 @@ export type AuthUser = {
   email: string | null;
 };
 
-// Device-only "accounts" — there's no backend yet, so email/password
-// sign-up just stores a hashed password locally and checks against it on
-// sign-in. This does NOT sync across devices or reinstalls. Swap this out
-// for a real backend later without touching the LoginScreen UI, since it
-// only talks to the functions this context exposes.
+// Device-only "accounts" — no backend yet; email/password is hashed and checked locally, and does not sync across devices/reinstalls.
 type StoredAccount = {
   email: string;
   passwordHash: string;
@@ -45,12 +41,7 @@ type AuthContextType = {
   ) => Promise<EmailAuthResult>;
   continueAsGuest: () => Promise<void>;
   signOut: () => Promise<void>;
-  /** Signs out and, for an email account, permanently forgets its stored
-   *  credentials on this device (there's no backend to delete from yet —
-   *  see the note on StoredAccount above). Apple/guest sessions have no
-   *  stored credentials to remove, so this just signs them out. Callers
-   *  are responsible for also clearing any app data they own (see
-   *  usePets().resetAllData) before or after calling this. */
+  /** Signs out and, for an email account, forgets its stored local credentials. Callers must separately clear app data (usePets().resetAllData). */
   deleteAccount: () => Promise<void>;
 };
 

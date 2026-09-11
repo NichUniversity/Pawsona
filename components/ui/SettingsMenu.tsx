@@ -13,8 +13,7 @@ export type SettingsOption = {
   onPress: () => void;
 };
 
-// An on/off row (e.g. "Haptic Feedback") — same look as SettingsOption
-// but renders a Switch instead of firing an action on tap.
+// An on/off row (e.g. "Haptic Feedback") — same look as SettingsOption but renders a Switch.
 export type SettingsToggle = {
   key: string;
   label: string;
@@ -42,8 +41,7 @@ type Props = {
   footerText?: string;
 };
 
-// A pale swatch (e.g. the White theme's dot) needs a dark checkmark instead
-// of the usual white one, or it's invisible against its own fill.
+// A pale swatch needs a dark checkmark instead of white, or it's invisible against its own fill.
 function checkColorFor(swatchHex: string): string {
   const clean = swatchHex.replace("#", "");
   if (clean.length !== 6) return "#fff";
@@ -54,12 +52,7 @@ function checkColorFor(swatchHex: string): string {
   return luminance > 0.75 ? "#1C1C1E" : "#fff";
 }
 
-// A bottom-sheet style settings menu, opened from the gear icon on the
-// Home tab. Takes a list of options (Log Out, Replay Tutorial, ...) plus
-// an optional row of theme swatches, so more of either can be added later
-// without touching the sheet itself. The sheet's own colors follow the
-// active theme (see context/ThemeContext.tsx) — picking "White" here makes
-// the sheet itself go light too, not just the screen behind it.
+// Bottom-sheet settings menu opened from the Home tab's gear icon; its own colors follow the active theme too.
 export function SettingsMenu({
   visible,
   onClose,

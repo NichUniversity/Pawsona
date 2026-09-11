@@ -10,20 +10,7 @@ import Svg, {
 
 import { useTheme } from "../../context/ThemeContext";
 
-// Shared tab background, theme-reactive: a 3-stop vertical gradient plus a
-// faint top-left sheen so it never reads as a completely flat wash. Colors
-// come from the active ThemeContext theme (see context/ThemeContext.tsx) —
-// deep near-black for Dark (the original Instagram-style look), soft tinted
-// washes for White/Orange/Blue/Purple. Built with react-native-svg (already
-// a dependency) instead of a raster image, so it's easy to retune per-theme
-// in one place.
-//
-// Replaces the old pawprintbackground*.png images on Home, Minigames,
-// Store, and Adventure's default state. Daily Paw Log uses this too, but
-// only before a pet is selected — once a pet is chosen it switches to the
-// wood/parchment almanac look instead (see daily_log_tab.tsx), which is a
-// deliberately distinct "storybook" identity left independent of the app
-// theme, same as the Origin Story wizard.
+// Shared theme-reactive tab background: a 3-stop gradient plus a faint sheen, built with react-native-svg. Used on Home, Minigames, Store, Adventure, and Daily Paw Log (until a pet is selected, which switches to its own wood/parchment look).
 
 export function TabBackground() {
   const { theme } = useTheme();

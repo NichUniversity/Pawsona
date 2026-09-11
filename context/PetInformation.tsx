@@ -46,11 +46,7 @@ export const EMPTY_RATINGS: AttributeRatings = {
   energy: 0,
 };
 
-// "avatar"-category cosmetics (unlockable species looks, e.g. the Wolf) are
-// account-wide once bought — unlike hats/collars/etc. they aren't something
-// one pet "wears" while another doesn't, they're a look any pet can pick on
-// the Home tab. Used only to migrate ids that got recorded on a single
-// pet's `ownedCosmetics` before this was global.
+// "avatar"-category cosmetics are account-wide once bought; used only to migrate ids recorded per-pet before this was global.
 const AVATAR_COSMETIC_IDS = new Set(
   COSMETICS.filter((item) => item.category === "avatar").map((item) => item.id)
 );
@@ -142,20 +138,13 @@ type PetContextType = {
   spendCoins: (amount: number) => boolean;
   unlockedAreas: string[];
   unlockArea: (areaName: string, price: number) => boolean;
-  /** True once a pet has found the witch in Magical Forest and been handed
-   *  the Book of Origin. Gates the AI-assisted Origin Story wizard on the
-   *  Daily Paw Log tab — the plain backstory text box stays open regardless. */
+  /** True once a pet has found the Book of Origin; gates the AI-assisted Origin Story wizard (the plain backstory box stays open regardless). */
   hasBookOfOrigin: boolean;
   unlockBookOfOrigin: () => void;
-  /** True once the Bond Keeper has been found. Not wired to any adventure
-   *  content yet — this is a placeholder flag/setter. The only thing
-   *  decided so far is that it'll be found somewhere in the hardest
-   *  (most expensive) adventure, not tied to the Book of Origin at all. */
+  /** True once the Bond Keeper is found — placeholder, not yet wired to any adventure content. */
   hasBondKeeper: boolean;
   unlockBondKeeper: () => void;
-  /** Avatar-category cosmetic ids (e.g. "avatar-wolf") owned account-wide —
-   *  buying one on any pet unlocks it as a pickable look for every pet.
-   *  Hat/collar/background/etc. cosmetics stay per-pet on PetEntry.ownedCosmetics. */
+  /** Avatar-category cosmetic ids owned account-wide; other cosmetics stay per-pet on PetEntry.ownedCosmetics. */
   unlockedAvatars: string[];
   unlockAvatar: (itemId: string) => void;
   /** Current consecutive-day login streak (0 before the very first claim). */
@@ -167,15 +156,11 @@ type PetContextType = {
   /** The streak day (and its coin reward) tapping claim right now would land on. */
   previewStreak: number;
   previewReward: number;
-  /** Grants the day's coins, advances (or resets) the streak, and returns
-   *  the amount awarded — 0 if today's reward was already claimed. */
+  /** Grants the day's coins, advances/resets the streak, and returns the amount awarded (0 if already claimed today). */
   claimDailyReward: () => number;
-  /** True once the saved pet/coin/streak state has finished loading from
-   *  disk — check this before acting on canClaimDailyReward so a fresh
-   *  launch doesn't briefly see default (unclaimed) state. */
+  /** True once saved state has finished loading from disk — check before acting on canClaimDailyReward. */
   isHydrated: boolean;
-  /** Resets every pet/coin/streak field to a fresh install's defaults and
-   *  clears the on-disk copy — used by "Delete Account" in Settings. */
+  /** Resets every pet/coin/streak field to fresh-install defaults and clears the on-disk copy — used by "Delete Account". */
   resetAllData: () => Promise<void>;
 };
 
@@ -212,16 +197,13 @@ export function PetProvider({
           if (saved.pets?.length) setPets(saved.pets);
           if (typeof saved.coins === "number") setCoins(saved.coins);
           if (saved.unlockedAreas) setUnlockedAreas(saved.unlockedAreas);
-          // hasBookOfOrigin used to be saved under the old name "hasStorybook" —
-          // fall back to that for anyone who saved before the rename.
+          // hasBookOfOrigin used to be saved as "hasStorybook" — fall back to that for old saves.
           if (saved.hasBookOfOrigin || saved.hasStorybook) {
             setHasBookOfOrigin(true);
           }
           if (saved.hasBondKeeper) setHasBondKeeper(true);
 
-          // Merge any saved global list with avatar ids that ended up
-          // recorded on an individual pet before this was account-wide, so
-          // a purchase made under the old per-pet system isn't lost.
+          // Merge the saved global list with avatar ids recorded per-pet before this was account-wide.
           const migratedAvatars = new Set(saved.unlockedAvatars ?? []);
           (saved.pets ?? []).forEach((pet) => {
             pet.ownedCosmetics?.forEach((id) => {
@@ -301,9 +283,7 @@ export function PetProvider({
     setHasBookOfOrigin(true);
   };
 
-  // Placeholder — nothing calls this yet. Whichever node in the hardest
-  // adventure ends up granting the Bond Keeper should call this once that
-  // story exists.
+  // Placeholder — nothing calls this yet; wire it up once the hardest adventure grants the Bond Keeper.
   const unlockBondKeeper = () => {
     setHasBondKeeper(true);
   };
@@ -333,10 +313,7 @@ export function PetProvider({
     return reward;
   };
 
-  // Wipes every pet/coin/streak field back to a fresh install's defaults
-  // and clears the on-disk copy — used by "Delete Account" in Settings.
-  // Doesn't touch auth (see AuthContext.deleteAccount) or device-level
-  // preferences like the chosen theme, which aren't "account data".
+  // Wipes pet/coin/streak fields to fresh-install defaults for "Delete Account"; doesn't touch auth or device-level preferences.
   const resetAllData = async () => {
     setPets([makeEmptyEntry()]);
     setCoins(STARTING_COINS);

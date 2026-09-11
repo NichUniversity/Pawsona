@@ -10,11 +10,7 @@ import {
 
 import { AVATAR_OPTIONS, AvatarOption, PetCategory } from "../../data/petcategories";
 
-// Shared "picture frame mat" color behind avatar art — matches
-// daily_log_tab.tsx's photoFrame background so the photo box and the
-// avatar/walk box read as one matched pair. Also baked into the
-// WALK_VIDEOS clips (see data/walkVideos.ts) — changing this alone won't
-// recolor those; re-render the clips too.
+// Shared "picture frame mat" color behind avatar art (also baked into WALK_VIDEOS clips — recolor those separately).
 export const AVATAR_BACKDROP_COLOR = "#D8C79A";
 
 export function findAvatarOption(
@@ -25,8 +21,7 @@ export function findAvatarOption(
   if (!category || !emoji) return undefined;
   const options = AVATAR_OPTIONS[category];
 
-  // Custom-image avatars have a unique emoji key, so match by that alone.
-  // Plain-emoji options (e.g. snakes reuse "🐍") still need color too.
+  // Custom-image avatars match by emoji alone; plain-emoji options also need color.
   const byEmojiOnly = options.find((opt) => opt.emoji === emoji && opt.image);
   if (byEmojiOnly) return byEmojiOnly;
 
