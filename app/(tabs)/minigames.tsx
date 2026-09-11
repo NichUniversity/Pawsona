@@ -1729,43 +1729,30 @@ const TERR_COMPLETE_REWARD = 20;
 // covers the meter).
 const TERR_METER_URGENT_THRESHOLD = 0.85;
 
-// A gentle pulsing ring around the mailbox while nothing else is going
-// on, purely so the touch target reads as tappable at a glance. Mounted
-// only while idle (not holding, not caught) — starts/stops with the
-// component's own lifecycle rather than an internal isHolding check.
-function TerritoryMailboxHint({ x, midY }: { x: number; midY: number }) {
-  const pulse = useRef(new Animated.Value(0)).current;
+// Dedicated on-screen "hold to mark" button (2026-09-10) — sits on the
+// right side of the screen, independent of the mailbox's own on-screen
+// position, so a player's thumb no longer has to rest directly over the
+// mailbox art (and its pee-stream/dog animation) to mark it. Originally a
+// code-drawn circle; swapped for the user-supplied pixel-art wood-sign
+// asset (2026-09-10 follow-up) and sized small per that request — a real
+// tap target this size would be too cramped on its own, so hitSlop at the
+// call site pads the actual touchable area back out past Apple's 44pt
+// minimum without changing how big the art reads on screen.
+// TERR_MARK_BUTTON_ASPECT is the source PNG's own width/height (450x138)
+// so the on-screen size always keeps its proportions no matter what width
+// is picked here.
+const TERR_MARK_BUTTON_IMAGE = require("../../assets/images/territory-mark-button.png");
+const TERR_MARK_BUTTON_WIDTH = 78;
+const TERR_MARK_BUTTON_ASPECT = 450 / 138;
+const TERR_MARK_BUTTON_HEIGHT = TERR_MARK_BUTTON_WIDTH / TERR_MARK_BUTTON_ASPECT;
 
-  useEffect(() => {
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: 900, useNativeDriver: true }),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, [pulse]);
-
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={{
-        position: "absolute",
-        left: x - 26,
-        top: midY - 26,
-        width: 52,
-        height: 52,
-        borderRadius: 26,
-        backgroundColor: "#FFFFFF",
-        opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.12, 0.3] }),
-        transform: [
-          { scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) },
-        ],
-      }}
-    />
-  );
-}
+// Both TerritoryPulseHalo (the shared pulsing-glow component) and
+// TerritoryMailboxHint (its thin wrapper around the mailbox itself) were
+// removed here (2026-09-11, per the user's "take the flashing away from
+// behind the mark button and take the flashing away on the mailbox" ask)
+// — neither HUD element flashes anymore. The wood-sign button art and the
+// mailbox's own on-screen position already read clearly enough without an
+// animated hint.
 
 // The pee-stream effect: cycles through the hand-drawn 6-frame sprite
 // (TERR_PEE_STREAM_FRAMES) stretched and rotated into a strip that runs
@@ -2338,6 +2325,27 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
 
   const handleMailboxPressIn = () => {
     if (isCaughtRef.current || isCompleteRef.current) return;
+    // Instant bust if he's already sitting on his most-attentive last
+    // stage the moment the player grabs the mailbox (2026-09-11 fix). The
+    // stageLoopRef timer below only busts on the *transition into* the
+    // last stage while holding (see its own `next === length-1 &&
+    // isHoldingRef.current` check) — it never re-fires just because a new
+    // hold starts while he's already there, and the next scheduled tick
+    // wraps him back to stage 0 rather than re-checking the same stage.
+    // That let a hold started during his last stage slip through with no
+    // catch at all. Checking here closes that gap: any hold that begins
+    // while he's already on the last stage is caught immediately, exactly
+    // like the user asked ("if the user holds the mark at all he should
+    // be caught").
+    if (neighborStageRef.current === TERR_PORCH_GUY_STAGES.length - 1) {
+      if (stageTimeoutRef.current) {
+        clearTimeout(stageTimeoutRef.current);
+        stageTimeoutRef.current = null;
+      }
+      isCaughtRef.current = true;
+      setIsCaught(true);
+      return;
+    }
     isHoldingRef.current = true;
     setIsHolding(true);
     // Start ticking the marking meter. Progress carries over from any
@@ -2480,7 +2488,6 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
   const mailboxCenterX = TERR_MAILBOX_SRC_CENTER_X * scale + houseOffsetX;
   const mailboxTopY = TERR_MAILBOX_SRC_TOP_Y * scale + houseOffsetY;
   const mailboxBottomY = TERR_MAILBOX_SRC_BOTTOM_Y * scale + houseOffsetY;
-  const mailboxMidY = (mailboxTopY + mailboxBottomY) / 2;
 
   // Dog's resting on-screen position — same x column as the mailbox (see
   // the constant's comment above), standing on the road below it. Size is
@@ -2542,11 +2549,13 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
               any TERR_HOUSE_IMAGE source-pixel anchor the way the porch
               guy/mailbox/dog are (see TERR_BIRD_SIZE_FRACTION's comment),
               just placed as a fraction of the container itself. Both
-              y-fractions (0.08, 0.16) sit well above where the roofline
-              lands (~42% down the container at every screen size, per the
-              house-canvas-extension section in the project doc, since
-              TERR_HOUSE_ZOOM=1 makes scale purely height-locked) so they
-              never visually cross in front of the house art. One flies
+              y-fractions (0.20, 0.28 — lowered 2026-09-11 per the user's
+              "lower the birds" ask, up from 0.08/0.16) still sit safely
+              above where the roofline lands (~42% down the container at
+              every screen size, per the house-canvas-extension section in
+              the project doc, since TERR_HOUSE_ZOOM=1 makes scale purely
+              height-locked) so they never visually cross in front of the
+              house art. One flies
               left-to-right, one right-to-left, per the user's ask; each
               also flies by at a random interval (TERR_BIRD_CYCLE_MIN/_MAX)
               rather than a fixed cadence, re-rolled after every flight —
@@ -2555,7 +2564,7 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
               when their random waits happen to land close together. */}
           <TerritoryBird
             containerWidth={layout.width}
-            y={layout.height * 0.08}
+            y={layout.height * 0.2}
             size={layout.height * TERR_BIRD_SIZE_FRACTION}
             direction="left-to-right"
             flightMs={TERR_BIRD_FLIGHT_MS}
@@ -2565,7 +2574,7 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
           />
           <TerritoryBird
             containerWidth={layout.width}
-            y={layout.height * 0.16}
+            y={layout.height * 0.28}
             size={layout.height * TERR_BIRD_SIZE_FRACTION * 0.85}
             direction="right-to-left"
             flightMs={TERR_BIRD_FLIGHT_MS * 1.15}
@@ -2619,26 +2628,6 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
               targetY={dogAtMailboxY + dogSize * 0.15}
             />
           )}
-          {!isHolding && !isCaught && !isComplete && (
-            <TerritoryMailboxHint x={mailboxCenterX} midY={mailboxMidY} />
-          )}
-
-          {/* Fixed on-screen hit size (not scaled from the source pixels)
-              so the mailbox stays comfortably tappable even when the
-              scene itself renders small. */}
-          <Pressable
-            onPressIn={handleMailboxPressIn}
-            onPressOut={handleMailboxPressOut}
-            disabled={isCaught || isComplete}
-            style={{
-              position: "absolute",
-              left: mailboxCenterX - 32,
-              top: mailboxMidY - 55,
-              width: 64,
-              height: 110,
-            }}
-          />
-
           {markFeedback && (
             <Text
               pointerEvents="none"
@@ -2717,7 +2706,7 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
           />
           <View style={styles.territoryMeterCard}>
             <View style={styles.territoryMeterHeaderRow}>
-              <Text style={styles.territoryMeterLabel}>🐾 Marking</Text>
+              <Text style={styles.territoryMeterLabel}>Marking</Text>
               <Text style={styles.territoryMeterPercent}>{Math.round(markProgress * 100)}%</Text>
             </View>
             {/* Outer wrapper has no overflow clipping (unlike the track
@@ -2756,6 +2745,59 @@ function MarkYourTerritoryGame({ onExit }: { onExit: () => void }) {
               />
             </View>
           </View>
+        </View>
+      )}
+
+      {/* Dedicated "hold to mark" button (2026-09-10) — mirrors the
+          meter's left-side anchoring (same houseOffsetX/insets max, same
+          bottom offset) but on the right, so the two HUD elements read as
+          a matching pair. Replaces the old Pressable that used to sit
+          directly on top of the mailbox art: holding that one meant a
+          thumb was resting right over the mailbox (and the pee-stream/dog
+          animation next to it) for the whole hold, blocking the view of
+          the very thing the player was marking. The mailbox itself is
+          still the visual target — this button is just where the
+          touch/hold gesture now happens, wired to the exact same
+          handleMailboxPressIn/Out handlers as before.
+          Swapped from a code-drawn circle to the user-supplied pixel-art
+          wood-sign image (2026-09-10 follow-up), sized small per that
+          request — the "Hold to Mark"/"Marking…" text label under it was
+          dropped since the art itself now reads as the button (it's a
+          wooden sign that already says "Mark"), and hitSlop pads the real
+          touch target back out past the small art's own bounds so it's
+          still comfortable to hold. A slight opacity dip while isHolding
+          stands in for the old active-state recolor, since this is now a
+          single flat image rather than a style-able shape. The pulsing
+          glow halo behind it, and the matching one that used to sit on
+          the mailbox itself (TerritoryMailboxHint/TerritoryPulseHalo),
+          were both removed (2026-09-11, per the user's "take the
+          flashing away" ask) — the wood-sign art and the mailbox's own
+          position already read clearly enough without an animated
+          hint. */}
+      {!isCaught && !isComplete && (
+        <View
+          pointerEvents="box-none"
+          style={[
+            styles.territoryMarkButtonWrap,
+            {
+              width: TERR_MARK_BUTTON_WIDTH,
+              right: Math.max(houseOffsetX + 16, insets.right + 16),
+              bottom: insets.bottom + 28,
+            },
+          ]}
+        >
+          <PressableScale
+            onPressIn={handleMailboxPressIn}
+            onPressOut={handleMailboxPressOut}
+            hitSlop={{ top: 16, bottom: 16, left: 20, right: 20 }}
+            style={[styles.territoryMarkButton, isHolding && styles.territoryMarkButtonActive]}
+          >
+            <Image
+              source={TERR_MARK_BUTTON_IMAGE}
+              style={{ width: TERR_MARK_BUTTON_WIDTH, height: TERR_MARK_BUTTON_HEIGHT }}
+              resizeMode="contain"
+            />
+          </PressableScale>
         </View>
       )}
 
@@ -3340,13 +3382,25 @@ const styles = StyleSheet.create({
   // No `alignItems: "center"` anymore (2026-09-10 redesign) — the header
   // row and track now stretch to the card's own content width instead of
   // centering, so the live percentage can sit flush to the right edge.
+  // Recolored again (2026-09-10 follow-up) to match the exact palette of
+  // the new pixel-art mark-button image, sampled directly from that PNG
+  // rather than eyeballed: #F1D5A9 top highlight, #E4BB83 main face,
+  // #C29C6E side bevel, #987656 shadow bevel, #2B1F19 outline/ink. Faked
+  // 3D bevel via RN's independent border-side colors (no gradient library
+  // in this project) — light top/left, dark bottom/right, like the sign's
+  // own beveled edge, so the two HUD elements now read as literally the
+  // same material instead of just a matching color family.
   territoryMeterCard: {
     paddingVertical: 6,
     paddingHorizontal: 10,
-    borderRadius: 12,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.25)",
+    borderRadius: 8,
+    backgroundColor: "#E4BB83",
+    borderWidth: 3,
+    borderColor: "#2B1F19",
+    borderTopColor: "#F1D5A9",
+    borderLeftColor: "#F1D5A9",
+    borderRightColor: "#2B1F19",
+    borderBottomColor: "#2B1F19",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -3363,23 +3417,27 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
 
+  // Dark ink brown on the light tan card now (was white-on-dark before
+  // the card itself flipped to a light wood face) with a faint light
+  // shadow instead of a dark one, for a carved-into-wood look rather than
+  // text floating over a photo.
   territoryMeterLabel: {
     fontSize: 9,
     fontWeight: "700",
-    color: "#fff",
-    textShadowColor: "rgba(0,0,0,0.45)",
+    color: "#2B1F19",
+    textShadowColor: "rgba(255,255,255,0.35)",
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    textShadowRadius: 0,
   },
 
   territoryMeterPercent: {
     fontSize: 9,
     fontWeight: "700",
-    color: "rgba(255,255,255,0.8)",
+    color: "#5A3F2B",
     marginLeft: 8,
-    textShadowColor: "rgba(0,0,0,0.45)",
+    textShadowColor: "rgba(255,255,255,0.35)",
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    textShadowRadius: 0,
   },
 
   // Un-clipped wrapper around the track, sized to match it exactly, so the
@@ -3395,9 +3453,16 @@ const styles = StyleSheet.create({
     width: 110,
     height: 11,
     borderRadius: 6,
-    backgroundColor: "rgba(255,255,255,0.25)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.5)",
+    // Recessed groove look (2026-09-10 follow-up, see territoryMeterCard's
+    // comment for the sampled palette) — dark ink fill with the bevel
+    // flipped relative to the card around it (dark top/left, light
+    // bottom/right) so the track reads as pressed IN rather than raised,
+    // the way an actual carved groove in a wood sign would.
+    backgroundColor: "rgba(43,31,25,0.4)",
+    borderWidth: 2,
+    borderColor: "#F1D5A9",
+    borderTopColor: "#987656",
+    borderLeftColor: "#987656",
     overflow: "hidden",
   },
 
@@ -3455,9 +3520,13 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     marginTop: -7,
     marginLeft: -7,
-    backgroundColor: "#fff",
+    // Light bevel-highlight fill + dark ink border (2026-09-10 follow-up,
+    // see territoryMeterCard's comment for the sampled palette) so the
+    // cap reads as a small brass/wood knob pulled from the same sign
+    // material as the rest of the redesigned card.
+    backgroundColor: "#F1D5A9",
     borderWidth: 2,
-    borderColor: "#F5E050",
+    borderColor: "#2B1F19",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.4,
@@ -3474,6 +3543,39 @@ const styles = StyleSheet.create({
     shadowColor: "#FF7A00",
     shadowOpacity: 0.85,
     shadowRadius: 4,
+  },
+
+  // Dedicated mark button (2026-09-10) — see the render-site comment for
+  // why this exists. Wrap is just a positioning box (width pinned to
+  // TERR_MARK_BUTTON_WIDTH per-render, see the call site) with its content
+  // centered, so the glow halo/button stack on the same horizontal center
+  // regardless of the button's own fixed size.
+  territoryMarkButtonWrap: {
+    position: "absolute",
+    alignItems: "center",
+  },
+
+  // Now just a thin frame around the pixel-art image itself (2026-09-10
+  // follow-up — was a code-drawn wood-brown circle before the user
+  // supplied real art for this button). No background/border of its own
+  // anymore since the image already has its own beveled wood-sign edge;
+  // this only exists so PressableScale has something to apply its
+  // press-squish transform to.
+  territoryMarkButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 5,
+    elevation: 6,
+  },
+
+  // Swapped in while isHolding — the image itself can't be recolored, so
+  // a slight opacity dip stands in for the old active-state recolor, on
+  // top of PressableScale's own per-tap squish feedback.
+  territoryMarkButtonActive: {
+    opacity: 0.8,
   },
 
   territoryCaughtOverlay: {
