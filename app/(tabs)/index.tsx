@@ -2,7 +2,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused } from 'expo-router/react-navigation';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
@@ -490,6 +490,7 @@ export default function HomeScreen() {
                             emoji={currentEntry.selectedEmoji}
                             color={currentEntry.color}
                             size={50}
+                            variant="face"
                             transparentBackdrop
                           />
                           <View style={styles.avatarBoxEditDot}>
@@ -703,6 +704,7 @@ export default function HomeScreen() {
                           }
                           color={currentEntry.color}
                           size={48}
+                          variant="face"
                           transparentBackdrop
                         />
                       </View>
@@ -1012,7 +1014,6 @@ export default function HomeScreen() {
   );
 }
 
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -1281,10 +1282,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.7)',
   },
 
-  sideAvatarEmoji: {
-    fontSize: 22,
-  },
-
   dotsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1363,10 +1360,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-
-  smallAvatarEmoji: {
-    fontSize: 36,
   },
 
   dropdownWrapper: {
@@ -1518,10 +1511,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-
-  avatarSwatchEmoji: {
-    fontSize: 20,
   },
 
   avatarSwatchLocked: {

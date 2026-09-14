@@ -379,6 +379,7 @@ export default function Adventure() {
                       emoji={pet.selectedEmoji}
                       color={pet.color}
                       size={36}
+                      variant="face"
                     />
                   </View>
 
@@ -610,27 +611,12 @@ export default function Adventure() {
 }
 
 const styles = StyleSheet.create({
-  background: {
-    ...StyleSheet.absoluteFillObject,
-  },
 
   container: {
     flexGrow: 1,
     backgroundColor: "transparent",
     padding: 20,
     paddingTop: 80,
-  },
-
-  title: {
-    fontFamily: "Fredoka_700Bold",
-    fontSize: 32,
-    color: "#fff",
-    letterSpacing: 0.5,
-    textShadowColor: "rgba(0,0,0,0.15)",
-    textShadowOffset: { width: 0, height: 3 },
-    textShadowRadius: 0,
-    textAlign: "center",
-    marginBottom: 16,
   },
 
   coinBadge: {
@@ -646,14 +632,12 @@ const styles = StyleSheet.create({
   },
 
   coinText: {
-    color: "#FF8C42",
     fontWeight: "800",
     fontSize: 16,
   },
 
   endAdventureButton: {
     alignSelf: "flex-start",
-    backgroundColor: "#1C1C1E",
     borderRadius: 12,
     paddingVertical: 8,
     paddingHorizontal: 14,
@@ -676,7 +660,6 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    backgroundColor: "#1C1C1E",
     borderRadius: 20,
     padding: 20,
     flexDirection: "row",
@@ -702,18 +685,12 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#F5F5F5",
   },
 
   priceTag: {
     marginTop: 4,
     fontSize: 13,
     fontWeight: "700",
-    color: "#FF8C42",
-  },
-
-  priceTagDisabled: {
-    color: "#8E8E93",
   },
 
   // Matches the Change Pet pill used on Daily Paw Log's almanac page.
@@ -722,7 +699,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#1C1C1E",
     borderRadius: 12,
     paddingVertical: 6,
     paddingHorizontal: 12,
@@ -803,7 +779,6 @@ const styles = StyleSheet.create({
   },
 
   choiceButton: {
-    backgroundColor: "#FF8C42",
     borderRadius: 15,
     padding: 15,
     marginBottom: 12,
@@ -853,7 +828,6 @@ const styles = StyleSheet.create({
   },
 
   bookBannerText: {
-    color: "#FF8C42",
     fontWeight: "700",
     fontSize: 14,
     textAlign: "center",
@@ -864,7 +838,6 @@ const styles = StyleSheet.create({
   },
 
   finishButton: {
-    backgroundColor: "#FF8C42",
     borderRadius: 15,
     paddingVertical: 12,
     paddingHorizontal: 24,

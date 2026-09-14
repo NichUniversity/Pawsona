@@ -121,7 +121,6 @@ const styles = StyleSheet.create({
   card: {
     width: "100%",
     maxWidth: 360,
-    backgroundColor: "#1C1C1E",
     borderRadius: 24,
     padding: 28,
     alignItems: "center",
@@ -142,14 +141,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: "800",
-    color: "#F5F5F5",
     textAlign: "center",
     marginBottom: 10,
   },
 
   body: {
     fontSize: 15,
-    color: "#8E8E93",
     textAlign: "center",
     lineHeight: 21,
     marginBottom: 22,
@@ -168,13 +165,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.2)",
   },
 
-  dotActive: {
-    backgroundColor: "#FF8C42",
-    width: 18,
-  },
-
   primaryButton: {
-    backgroundColor: "#FF8C42",
     borderRadius: 16,
     paddingVertical: 14,
     width: "100%",
@@ -192,7 +183,6 @@ const styles = StyleSheet.create({
   },
 
   skipButtonText: {
-    color: "#8E8E93",
     fontWeight: "600",
     fontSize: 14,
   },

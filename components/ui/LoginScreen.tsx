@@ -16,6 +16,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useTheme, withAlpha } from "../../context/ThemeContext";
 import { PressableScale } from "./PressableScale";
 import { TabBackground } from "./TabBackground";
+import { crossPlatformShadow } from "../../utils/crossPlatformShadow";
 
 type Mode = "signIn" | "signUp";
 
@@ -268,17 +269,12 @@ const styles = StyleSheet.create({
     aspectRatio: 1970 / 493,
     marginBottom: 16,
     // Little drop shadow so the logo lifts off the background a bit.
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.18,
-    shadowRadius: 4,
-    elevation: 4, // Android equivalent — shadow* alone is iOS-only.
+    ...crossPlatformShadow({ offsetY: 3, opacity: 0.18, radius: 4, elevation: 4 }),
   },
 
   subtitle: {
     fontFamily: "Fredoka_400Regular",
     fontSize: 15,
-    color: "#8E8E93",
     marginTop: 6,
     marginBottom: 32,
     textAlign: "center",
@@ -304,7 +300,6 @@ const styles = StyleSheet.create({
   },
 
   dividerText: {
-    color: "#8E8E93",
     fontSize: 12,
     fontWeight: "600",
     marginHorizontal: 10,
@@ -312,7 +307,6 @@ const styles = StyleSheet.create({
 
   modeRow: {
     flexDirection: "row",
-    backgroundColor: "#1C1C1E",
     borderRadius: 14,
     padding: 4,
     width: "100%",
@@ -328,12 +322,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  modeTabActive: {
-    backgroundColor: "#FF8C42",
-  },
-
   modeTabText: {
-    color: "#8E8E93",
     fontWeight: "700",
     fontSize: 14,
   },
@@ -344,12 +333,10 @@ const styles = StyleSheet.create({
 
   input: {
     width: "100%",
-    backgroundColor: "#1C1C1E",
     borderRadius: 14,
     paddingVertical: 14,
     paddingHorizontal: 16,
     fontSize: 15,
-    color: "#F5F5F5",
     marginBottom: 12,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
@@ -365,7 +352,6 @@ const styles = StyleSheet.create({
 
   primaryButton: {
     width: "100%",
-    backgroundColor: "#FF8C42",
     borderRadius: 16,
     paddingVertical: 15,
     alignItems: "center",
@@ -387,7 +373,6 @@ const styles = StyleSheet.create({
   },
 
   guestButtonText: {
-    color: "#8E8E93",
     fontWeight: "600",
     fontSize: 14,
   },

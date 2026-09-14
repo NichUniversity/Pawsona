@@ -238,6 +238,7 @@ export default function DailyPawLog() {
                     emoji={pet.selectedEmoji}
                     color={pet.color}
                     size={35}
+                    variant="face"
                     transparentBackdrop
                   />
                 </View>
@@ -516,18 +517,6 @@ const styles = StyleSheet.create({
   },
 
   // Doubles the old text title's fontSize (32 -> 64), matching the Home/Login/Mini Games logo swaps.
-  titleImage: {
-    height: 64,
-    aspectRatio: 1835 / 717,
-    alignSelf: "center",
-    marginBottom: 16,
-    // Same soft drop shadow the old text title had.
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.18,
-    shadowRadius: 4,
-    elevation: 4, // Android equivalent — shadow* alone is iOS-only.
-  },
 
   coinBadge: {
     flexDirection: "row",

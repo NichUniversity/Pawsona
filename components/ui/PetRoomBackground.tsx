@@ -15,6 +15,7 @@ import { useTheme } from "../../context/ThemeContext";
 import { AvatarDisplay, AVATAR_BACKDROP_COLOR } from "./AvatarDisplay";
 import { WalkingSprite } from "./WalkingSprite";
 import { WalkingVideo } from "./WalkingVideo";
+import { crossPlatformShadow } from "../../utils/crossPlatformShadow";
 
 // How far below the safe-area top the floor starts, clearing the settings cog; exported so index.tsx can reserve the same space.
 export const ROOM_TOP_CLEARANCE = 54;
@@ -114,7 +115,7 @@ export function PetRoomBackground({ category, emoji, color, topInset }: Props) {
   const roomTop = topInset + ROOM_TOP_CLEARANCE;
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+    <View style={[StyleSheet.absoluteFill, { pointerEvents: "none" }]}>
       <Svg width="100%" height="100%">
         <Defs>
           <LinearGradient id="roomFade" x1="0" y1="0" x2="0" y2="1">
@@ -198,11 +199,7 @@ const styles = StyleSheet.create({
     backgroundColor: AVATAR_BACKDROP_COLOR,
     borderBottomLeftRadius: 26,
     borderBottomRightRadius: 26,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.14,
-    shadowRadius: 6,
-    elevation: 3,
+    ...crossPlatformShadow({ offsetY: 3, opacity: 0.14, radius: 6, elevation: 3 }),
     overflow: "visible",
   },
 

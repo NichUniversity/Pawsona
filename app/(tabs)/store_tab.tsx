@@ -312,27 +312,12 @@ export default function StoreTab() {
 }
 
 const styles = StyleSheet.create({
-  background: {
-    ...StyleSheet.absoluteFill,
-  },
 
   container: {
     flexGrow: 1,
     backgroundColor: "transparent",
     padding: 20,
     paddingTop: 80,
-  },
-
-  title: {
-    fontFamily: "Fredoka_700Bold",
-    fontSize: 32,
-    color: "#fff",
-    letterSpacing: 0.5,
-    textShadowColor: "rgba(0,0,0,0.15)",
-    textShadowOffset: { width: 0, height: 3 },
-    textShadowRadius: 0,
-    textAlign: "center",
-    marginBottom: 16,
   },
 
   coinBadge: {
@@ -348,7 +333,6 @@ const styles = StyleSheet.create({
   },
 
   coinText: {
-    color: "#FF8C42",
     fontWeight: "800",
     fontSize: 16,
   },
@@ -361,7 +345,6 @@ const styles = StyleSheet.create({
   },
 
   emptyCard: {
-    backgroundColor: "#1C1C1E",
     borderRadius: 20,
     padding: 24,
     alignItems: "center",
@@ -370,7 +353,6 @@ const styles = StyleSheet.create({
   },
 
   emptyText: {
-    color: "#F5F5F5",
     fontSize: 16,
     fontWeight: "600",
     textAlign: "center",
@@ -382,7 +364,6 @@ const styles = StyleSheet.create({
   },
 
   petChip: {
-    backgroundColor: "#1C1C1E",
     borderRadius: 18,
     paddingVertical: 10,
     paddingHorizontal: 14,
@@ -392,23 +373,9 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
   },
 
-  petChipActive: {
-    backgroundColor: "#FF8C42",
-    borderColor: "#FF8C42",
-  },
-
-  petChipEmoji: {
-    fontSize: 28,
-    marginBottom: 4,
-  },
-
   petChipName: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#fff",
-  },
-
-  petChipNameActive: {
     color: "#fff",
   },
 
@@ -420,7 +387,6 @@ const styles = StyleSheet.create({
   },
 
   categoryPill: {
-    backgroundColor: "#1C1C1E",
     borderRadius: 16,
     paddingVertical: 8,
     paddingHorizontal: 14,
@@ -428,19 +394,10 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
   },
 
-  categoryPillActive: {
-    backgroundColor: "#FF8C42",
-    borderColor: "#FF8C42",
-  },
-
   categoryPillText: {
     color: "#fff",
     fontWeight: "700",
     fontSize: 13,
-  },
-
-  categoryPillTextActive: {
-    color: "#fff",
   },
 
   grid: {
@@ -451,7 +408,6 @@ const styles = StyleSheet.create({
   },
 
   itemCard: {
-    backgroundColor: "#1C1C1E",
     borderRadius: 20,
     padding: 16,
     width: "47%",
@@ -459,11 +415,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
-  },
-
-  itemCardEquipped: {
-    borderWidth: 2,
-    borderColor: "#FF8C42",
   },
 
   // Fades out an unaffordable item's card so it doesn't look identical to something you can buy.
@@ -483,7 +434,6 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#F5F5F5",
     textAlign: "center",
     marginBottom: 6,
   },
@@ -491,7 +441,6 @@ const styles = StyleSheet.create({
   itemPrice: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#FF8C42",
     marginBottom: 10,
   },
 
@@ -509,29 +458,13 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  buyButton: {
-    backgroundColor: "#FF8C42",
-  },
-
   buyButtonDisabled: {
     backgroundColor: "#3A3A3C",
-  },
-
-  equipButton: {
-    backgroundColor: "#FF8C42",
-  },
-
-  equippedButton: {
-    backgroundColor: "rgba(255,140,66,0.15)",
   },
 
   actionButtonText: {
     color: "#fff",
     fontWeight: "700",
     fontSize: 13,
-  },
-
-  equippedButtonText: {
-    color: "#FF8C42",
   },
 });

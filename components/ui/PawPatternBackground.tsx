@@ -15,8 +15,7 @@ export function PawPatternBackground({
 }: Props) {
   return (
     <View
-      pointerEvents="none"
-      style={[styles.fill, backgroundColor ? { backgroundColor } : null]}
+      style={[styles.fill, { pointerEvents: "none" }, backgroundColor ? { backgroundColor } : null]}
     >
       <Image source={source} style={styles.fill} resizeMode="cover" />
     </View>

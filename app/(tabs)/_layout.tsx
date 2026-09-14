@@ -1,9 +1,9 @@
 import type {
   MaterialTopTabNavigationEventMap,
   MaterialTopTabNavigationOptions,
-} from '@react-navigation/material-top-tabs';
-import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
-import type { ParamListBase, TabNavigationState } from '@react-navigation/native';
+} from 'expo-router/js-top-tabs';
+import { createMaterialTopTabNavigator } from 'expo-router/js-top-tabs';
+import type { ParamListBase, TabNavigationState } from 'expo-router/react-navigation';
 import * as Haptics from 'expo-haptics';
 import { withLayoutContext } from 'expo-router';
 import React, { useRef, useState } from 'react';
@@ -40,8 +40,11 @@ export function getTabBarStyle(theme: ThemeDefinition, bottomInset: number) {
     height: PILL_HEIGHT,
     backgroundColor: 'transparent',
     borderTopWidth: 0,
-    elevation: 0,
-    shadowOpacity: 0,
+    // "No shadow at all" cross-platform: native needs elevation/shadowOpacity
+    // set to 0 to override the navigator's own default pill shadow; web never
+    // had one to override; and setting shadowOpacity there just to zero it
+    // still trips react-native-web's shadow*-prop-is-deprecated warning.
+    ...(Platform.OS === 'web' ? null : { elevation: 0, shadowOpacity: 0 }),
     paddingBottom: 0,
   };
 }

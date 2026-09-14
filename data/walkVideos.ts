@@ -11,7 +11,9 @@ import type { VideoSource } from "expo-video";
  * instead.
  */
 export const WALK_VIDEOS: Record<string, VideoSource> = {
-  "golden-retriever-myavatar": require("../assets/animations/golden_retriever_walk.mp4"),
+  // Golden retriever intentionally has no entry here anymore — it now uses
+  // the new 10-frame sprite loop in data/walkAnimations.ts instead of this
+  // older video clip.
   "bulldog-myavatar": require("../assets/animations/bulldog_walk.mp4"),
   "poodle-myavatar": require("../assets/animations/poodle_walk.mp4"),
   "german-shepherd-sable-myavatar": require("../assets/animations/german_shepherd_sable_walk.mp4"),
