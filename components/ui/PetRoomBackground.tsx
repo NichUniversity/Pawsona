@@ -1,26 +1,42 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Animated, Easing, StyleSheet, View } from "react-native";
-import Svg, {
-  Defs,
-  LinearGradient,
-  RadialGradient,
-  Rect,
-  Stop,
-} from "react-native-svg";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Animated, Easing, Image, StyleSheet, View } from "react-native";
 
 import { PetCategory } from "../../data/petcategories";
 import { findWalkFrames } from "../../data/walkAnimations";
 import { findWalkVideo } from "../../data/walkVideos";
-import { useTheme } from "../../context/ThemeContext";
-import { AvatarDisplay, AVATAR_BACKDROP_COLOR } from "./AvatarDisplay";
+import { AvatarDisplay } from "./AvatarDisplay";
 import { WalkingSprite } from "./WalkingSprite";
 import { WalkingVideo } from "./WalkingVideo";
 
-// How far below the safe-area top the floor starts, clearing the settings cog; exported so index.tsx can reserve the same space.
-export const ROOM_TOP_CLEARANCE = 54;
-export const ROOM_HEIGHT = 148;
-const PET_SIZE = 82;
-const EDGE_PADDING = 22;
+const BACKYARD_IMAGE = require("../../assets/backgrounds/home_backyard_sunset.png");
+
+// home_backyard_sunset.png is 941x1672 px (swapped 2026-09-16 for a new render of the same
+// scene — measure this again if the art changes size). resizeMode="contain" alone doesn't center
+// reliably on every target — on react-native-web in particular, a wide/short desktop browser
+// window (very different aspect ratio than this art) was observed rendering the scaled image
+// flush to the top-left instead of centered, leaving the whole letterbox gap on one side. So the
+// contain-fit math is done by hand below (same approach as the territory-minigame house art) and
+// the image is placed with explicit width/height/left/top, which centers correctly on both web
+// and native regardless of how a given platform's Image implementation handles resizeMode.
+const BACKYARD_IMAGE_ASPECT = 941 / 1672;
+
+// Sampled from the top edge of home_backyard_sunset.png (deep dusk-purple sky). Fills any
+// letterboxing from the contain-fit on a device whose aspect ratio doesn't exactly match the art,
+// per this project's standing "contain, never cover" rule for full-screen backgrounds.
+const LETTERBOX_FILL = "#3A2F55";
+
+// Fractions of the rendered image's height, read straight off the art: sky down to the
+// fence/string-lights line, then lawn down to the foreground patio. The pet is placed by these
+// fractions (not fixed px) so it tracks the artwork itself rather than the screen — "contain"
+// scales the whole image uniformly, so a fraction of its height always lands on the same part
+// of the picture regardless of device size. (Re-measured for the 941x1672 art above — its wider,
+// shorter canvas puts the fence at nearly the same fraction down but pushes the patio much
+// further down than the old 870x1808 art did.)
+const LAWN_TOP_FRACTION = 0.57;
+const LAWN_BOTTOM_FRACTION = 0.94;
+
+const PET_SIZE = 78;
+const EDGE_PADDING = 26;
 
 // Steady stroll speed and idle time between strolls — kept slow since this is ambient background life, not an attention-grabber.
 const WALK_SPEED = 46;
@@ -31,31 +47,68 @@ type Props = {
   category: PetCategory | null | undefined;
   emoji: string | null | undefined;
   color?: string | null;
-  /** Safe-area top inset, so the floor clears the status bar and settings cog on every device. */
-  topInset: number;
 };
 
-/** Replaces TabBackground on the Home tab: same gradient wash plus a "room" strip where the current pet ambles; floor color matches AVATAR_BACKDROP_COLOR so pre-baked WALK_VIDEOS clips blend in seamlessly. */
-export function PetRoomBackground({ category, emoji, color, topInset }: Props) {
-  const { theme } = useTheme();
-  const { top, mid, bottom, sheenColor, sheenOpacity } = theme.background;
-
+/**
+ * Renders on the Home tab when "Living Home Screen" is on: the illustrated backyard-at-sunset
+ * scene (assets/backgrounds/home_backyard_sunset.png) and the current pet ambling on the grass.
+ * Toggling "Living Home Screen" off in Settings swaps this out for the plain TabBackground
+ * gradient instead — see index.tsx.
+ */
+export function PetRoomBackground({ category, emoji, color }: Props) {
   const hasPet = !!category && !!emoji;
   const frames = hasPet ? findWalkFrames(emoji) : undefined;
   const videoSource = hasPet && !frames ? findWalkVideo(emoji) : undefined;
 
-  const [floorWidth, setFloorWidth] = useState(0);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const walkableWidthRef = useRef(0);
   const currentXRef = useRef(0);
   const posX = useRef(new Animated.Value(0)).current;
   const [facing, setFacing] = useState<"left" | "right">("right");
   const [isWalking, setIsWalking] = useState(false);
 
-  useEffect(() => {
-    walkableWidthRef.current = Math.max(floorWidth - PET_SIZE - EDGE_PADDING * 2, 0);
-  }, [floorWidth]);
+  // Manual contain-fit: how big the art renders inside the measured container, and where its
+  // top-left lands, so the image (and everything anchored to it below) is centered on every
+  // aspect ratio — see the BACKYARD_IMAGE_ASPECT comment above for why this isn't left to
+  // resizeMode="contain" alone.
+  const renderedImage = useMemo(() => {
+    const { width: containerWidth, height: containerHeight } = containerSize;
+    if (containerWidth <= 0 || containerHeight <= 0) {
+      return { width: 0, height: 0, offsetX: 0, offsetY: 0 };
+    }
 
-  // Idle <-> stroll loop: wait, pick a random floor spot, walk there, repeat; resets when the shown pet changes or the component remounts.
+    const containerAspect = containerWidth / containerHeight;
+    let width: number;
+    let height: number;
+    if (containerAspect > BACKYARD_IMAGE_ASPECT) {
+      // Container is relatively wider than the art (e.g. a wide desktop browser window) —
+      // height-locked, with the leftover width split evenly left/right.
+      height = containerHeight;
+      width = height * BACKYARD_IMAGE_ASPECT;
+    } else {
+      // Container is relatively taller/narrower than the art (typical phone portrait) —
+      // width-locked, with the leftover height split evenly top/bottom.
+      width = containerWidth;
+      height = width / BACKYARD_IMAGE_ASPECT;
+    }
+
+    return {
+      width,
+      height,
+      offsetX: (containerWidth - width) / 2,
+      offsetY: (containerHeight - height) / 2,
+    };
+  }, [containerSize]);
+
+  useEffect(() => {
+    walkableWidthRef.current = Math.max(
+      renderedImage.width - PET_SIZE - EDGE_PADDING * 2,
+      0
+    );
+  }, [renderedImage.width]);
+
+  // Idle <-> stroll loop: wait, pick a random lawn spot, walk there, repeat; resets when the
+  // shown pet changes or the component remounts.
   useEffect(() => {
     if (!hasPet) return;
 
@@ -111,40 +164,46 @@ export function PetRoomBackground({ category, emoji, color, topInset }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasPet, category, emoji, posX]);
 
-  const roomTop = topInset + ROOM_TOP_CLEARANCE;
+  const { width: renderedWidth, height: renderedHeight, offsetX, offsetY } = renderedImage;
+  // Anchored to the rendered art's own bounds (offset + fraction of its height), not the raw
+  // container — otherwise this would drift off the actual picture whenever there's a letterbox
+  // gap (top/bottom on a phone, left/right on a wide desktop browser).
+  const lawnTop = offsetY + renderedHeight * LAWN_TOP_FRACTION;
+  const lawnHeight = renderedHeight * (LAWN_BOTTOM_FRACTION - LAWN_TOP_FRACTION);
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Svg width="100%" height="100%">
-        <Defs>
-          <LinearGradient id="roomFade" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={top} />
-            <Stop offset="0.55" stopColor={mid} />
-            <Stop offset="1" stopColor={bottom} />
-          </LinearGradient>
-
-          <RadialGradient id="roomSheen" cx="25%" cy="0%" rx="75%" ry="55%">
-            <Stop offset="0" stopColor={sheenColor} stopOpacity={sheenOpacity} />
-            <Stop offset="1" stopColor={sheenColor} stopOpacity={0} />
-          </RadialGradient>
-        </Defs>
-
-        <Rect x="0" y="0" width="100%" height="100%" fill="url(#roomFade)" />
-        <Rect x="0" y="0" width="100%" height="100%" fill="url(#roomSheen)" />
-      </Svg>
-
-      {hasPet && (
-        <View
-          style={[styles.floor, { top: roomTop, height: ROOM_HEIGHT }]}
-          onLayout={(e) => {
-            const w = e.nativeEvent.layout.width;
-            setFloorWidth((prev) => (Math.abs(prev - w) > 1 ? w : prev));
+    <View
+      style={[styles.fill, { backgroundColor: LETTERBOX_FILL }]}
+      pointerEvents="none"
+      onLayout={(e) => {
+        const { width, height } = e.nativeEvent.layout;
+        setContainerSize((prev) =>
+          Math.abs(prev.width - width) > 1 || Math.abs(prev.height - height) > 1
+            ? { width, height }
+            : prev
+        );
+      }}
+    >
+      {renderedWidth > 0 && (
+        <Image
+          source={BACKYARD_IMAGE}
+          resizeMode="contain"
+          style={{
+            position: "absolute",
+            left: offsetX,
+            top: offsetY,
+            width: renderedWidth,
+            height: renderedHeight,
           }}
-        >
+        />
+      )}
+
+      {hasPet && renderedWidth > 0 && (
+        <View style={[styles.lawn, { top: lawnTop, height: lawnHeight }]}>
           <Animated.View
             style={[
               styles.petColumn,
-              { left: EDGE_PADDING, transform: [{ translateX: posX }] },
+              { left: offsetX + EDGE_PADDING, transform: [{ translateX: posX }] },
             ]}
           >
             <View style={styles.petShadow} />
@@ -191,24 +250,19 @@ export function PetRoomBackground({ category, emoji, color, topInset }: Props) {
 }
 
 const styles = StyleSheet.create({
-  floor: {
+  fill: {
+    ...StyleSheet.absoluteFillObject,
+  },
+
+  lawn: {
     position: "absolute",
     left: 0,
     right: 0,
-    backgroundColor: AVATAR_BACKDROP_COLOR,
-    borderBottomLeftRadius: 26,
-    borderBottomRightRadius: 26,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.14,
-    shadowRadius: 6,
-    elevation: 3,
-    overflow: "visible",
   },
 
   petColumn: {
     position: "absolute",
-    bottom: 8,
+    bottom: 0,
     alignItems: "center",
   },
 
@@ -218,7 +272,7 @@ const styles = StyleSheet.create({
     width: PET_SIZE * 0.7,
     height: PET_SIZE * 0.16,
     borderRadius: PET_SIZE * 0.35,
-    backgroundColor: "rgba(0,0,0,0.16)",
+    backgroundColor: "rgba(0,0,0,0.22)",
     alignSelf: "center",
   },
 

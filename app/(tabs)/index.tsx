@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AvatarDisplay, findAvatarOption } from '../../components/ui/AvatarDisplay';
 import { DailyRewardModal } from '../../components/ui/DailyRewardModal';
+import { PetRoomBackground } from '../../components/ui/PetRoomBackground';
 import { PressableScale } from '../../components/ui/PressableScale';
 import { SettingsMenu } from '../../components/ui/SettingsMenu';
 import { TabBackground } from '../../components/ui/TabBackground';
@@ -109,7 +110,8 @@ export default function HomeScreen() {
   const { signOut, deleteAccount } = useAuth();
   const { replayOnboarding } = useOnboarding();
   const { accentKey, accentColor, setAccentKey, theme } = useTheme();
-  const { hapticsEnabled, setHapticsEnabled } = useSettings();
+  const { hapticsEnabled, setHapticsEnabled, livingHomeScreen, setLivingHomeScreen } =
+    useSettings();
   const tabBarClearance = useTabBarClearance();
   const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
@@ -368,6 +370,12 @@ export default function HomeScreen() {
 
   const hasConfirmedPet = entries.some((e) => e.confirmed);
 
+  // The pet currently showing in the swiper — same one `fadeAnim` above tracks — is the
+  // one that ambles in the PetRoomBackground floor. Only confirmed pets get to walk;
+  // an in-progress, unconfirmed entry just gets the empty gradient room.
+  const roomPet = entries[currentIndex];
+  const roomPetVisible = roomPet?.confirmed ?? false;
+
   // Options to list in the avatar picker modal.
   const avatarModalOptions: AvatarOption[] = (() => {
     if (!avatarModalState) return [];
@@ -392,7 +400,15 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.screen}>
-      <TabBackground />
+      {livingHomeScreen ? (
+        <PetRoomBackground
+          category={roomPetVisible ? roomPet.category : undefined}
+          emoji={roomPetVisible ? roomPet.selectedEmoji : undefined}
+          color={roomPetVisible ? roomPet.color : undefined}
+        />
+      ) : (
+        <TabBackground />
+      )}
 
       <PressableScale
         style={[styles.settingsButton, { top: insets.top + 8 }]}
@@ -959,6 +975,13 @@ export default function HomeScreen() {
                 icon: 'vibrate',
                 value: hapticsEnabled,
                 onToggle: setHapticsEnabled,
+              },
+              {
+                key: 'living-home',
+                label: 'Living Home Screen',
+                icon: 'image-filter-hdr',
+                value: livingHomeScreen,
+                onToggle: setLivingHomeScreen,
               },
             ]}
             options={[
