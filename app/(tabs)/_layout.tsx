@@ -7,7 +7,7 @@ import type { ParamListBase, TabNavigationState } from 'expo-router/react-naviga
 import * as Haptics from 'expo-haptics';
 import { withLayoutContext } from 'expo-router';
 import React, { useRef, useState } from 'react';
-import { Dimensions, Platform, View } from 'react-native';
+import { Platform, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 
@@ -58,7 +58,15 @@ export const Tabs = withLayoutContext <
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
-  const screenWidth = Dimensions.get('window').width;
+  // Reactive, not Dimensions.get('window') (a one-time snapshot): on web the
+  // pager only trusts this initialLayout width until its own onLayout fires,
+  // and this app's pager has a documented bug where that onLayout/flex
+  // resolution doesn't reliably run on web. A stale snapshot (e.g. captured
+  // before the browser window finished sizing on load) leaves every tab's
+  // page permanently narrower than the real viewport, which renders as that
+  // tab's content sitting in a left-anchored column with blank space to the
+  // right of it. useWindowDimensions keeps this correct across resizes too.
+  const { width: screenWidth } = useWindowDimensions();
   const { theme } = useTheme();
 
   // isTransitioningRef backs the synchronous tabPress check; swipeEnabled mirrors it into state so the pager prop can react.

@@ -1,6 +1,6 @@
 import { useFocusEffect, useNavigation } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Animated, Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CoinIcon } from "../../components/ui/CoinIcon";
@@ -8,13 +8,96 @@ import { FetchFrenzyGame } from "../../components/minigames/FetchFrenzyGame";
 import { MarkYourTerritoryGame } from "../../components/minigames/MarkYourTerritoryGame";
 import { PetMinesweeperGame } from "../../components/minigames/PetMinesweeperGame";
 import { SimonSaysGame } from "../../components/minigames/SimonSaysGame";
-import { TabBackground } from "../../components/ui/TabBackground";
 import { TightSqueezeGame } from "../../components/minigames/TightSqueezeGame";
 import { PetEntry, usePets } from "../../context/PetInformation";
 import { useTheme } from "../../context/ThemeContext";
 import { COSMETICS } from "../../data/cosmetics";
 import { useTabBarClearance } from "../../hooks/useTabBarClearance";
 import { getTabBarStyle } from "./_layout";
+
+// Retro arcade-cabinet art behind the game-picker screen (replaces the shared
+// theme-reactive TabBackground gradient, same treatment Home and Daily Log's
+// notebook-paper screen got with their own dedicated art).
+//
+// History: an earlier elaborate attempt at clipping the game-picker content
+// into the cabinet's own screen glass kept surfacing new bugs (a pager
+// layout-measurement bug, a ScrollView that didn't fill its box, a cabinet
+// that shrank with browser height), so it was scrapped for a plain full-bleed
+// background with content on top, matching Daily Log's pattern. That in turn
+// hit its own bug — resizeMode="cover" needs an explicit width/height: "100%"
+// on react-native-web, see `styles.background`'s own comment — which is now
+// fixed and confirmed working. With the background rock solid, the
+// screen-glass content-fit effect below is a second attempt, done
+// differently this time: instead of measuring anything at runtime
+// (onLayout, refs), the glass rectangle's position is *computed* from the
+// same fit math the browser/OS already applies to the image, driven only by
+// useWindowDimensions (the one layout source already proven reliable on web
+// in this codebase, per app/(tabs)/_layout.tsx). That keeps this fully
+// deterministic and resize-safe without depending on the pager's flaky
+// onLayout resolution at all.
+//
+// resizeMode is "contain", not "cover" — this screen briefly shipped with
+// "cover" (matching the plain-background version above) and it broke badly:
+// "cover" crops whichever axis overflows, and how much it crops scales with
+// how far the window's own aspect ratio differs from the image's. On a
+// typical wide desktop browser window (not phone-shaped) that crop is severe
+// enough to push the entire screen-glass rect — and therefore the whole
+// games menu — off the top of the visible viewport, making the menu
+// invisible even though the code was "working." "contain" guarantees the
+// full image (and therefore the glass rect, a sub-region of it) is always
+// entirely within the container bounds, for literally any window shape, at
+// the cost of letterbox bars on aspect ratios that don't match the art —
+// this is also the standing project preference for full-screen background
+// images for exactly this reason (Daily Log's plain "cover" is the deviation
+// there, justified only because its art's aspect ratio already lands close
+// to a phone's). backgroundColor on the wrapping view fills those bars with
+// a tone sampled from the image's own corners so they blend in.
+const MINIGAMES_BACKGROUND = require("../../assets/backgrounds/minigames_arcade_cabinet.png");
+const CABINET_LETTERBOX_COLOR = "#030c2f";
+
+// Source image's own pixel dimensions (used to replicate resizeMode="contain"'s
+// fit math in JS below) and the fractional bounds of the cabinet's screen
+// "glass" within it. Measured directly off the asset by sampling pixel
+// colors along the image's horizontal/vertical center lines to find where
+// the screen's dark-blue interior meets its black bezel rim (inset slightly
+// from the true edge so content sits safely inside the bezel, not touching
+// it) — see claude/minigames-arcade-cabinet-background.md for the sampled
+// values. If the art is ever swapped for a new cabinet illustration, these
+// four fractions need re-measuring against the new file.
+const CABINET_IMAGE_WIDTH = 941;
+const CABINET_IMAGE_HEIGHT = 1672;
+const SCREEN_LEFT_FRAC = 0.11;
+const SCREEN_RIGHT_FRAC = 0.89;
+const SCREEN_TOP_FRAC = 0.155;
+const SCREEN_BOTTOM_FRAC = 0.765;
+
+// Mirrors CSS background-size:contain / native resizeMode="contain": scale
+// the image down (or up) just enough that it fits entirely within the
+// container on whichever axis is the tighter constraint, letterboxing the
+// other. Unlike cover's Math.max, this never overflows either dimension, so
+// offsetX/offsetY are always >= 0 and the glass rect they produce is always
+// fully within [0, containerWidth] x [0, containerHeight] — it cannot be
+// pushed off-screen the way cover's crop could. Applying that same scale +
+// offset to the glass's fractional bounds gives its exact on-screen rect, in
+// sync with the background Image by construction (same inputs, same
+// formula) rather than by measuring the rendered Image after the fact.
+function computeScreenGlassRect(containerWidth: number, containerHeight: number) {
+  const scale = Math.min(
+    containerWidth / CABINET_IMAGE_WIDTH,
+    containerHeight / CABINET_IMAGE_HEIGHT
+  );
+  const displayedWidth = CABINET_IMAGE_WIDTH * scale;
+  const displayedHeight = CABINET_IMAGE_HEIGHT * scale;
+  const offsetX = (containerWidth - displayedWidth) / 2;
+  const offsetY = (containerHeight - displayedHeight) / 2;
+
+  return {
+    left: offsetX + displayedWidth * SCREEN_LEFT_FRAC,
+    top: offsetY + displayedHeight * SCREEN_TOP_FRAC,
+    width: displayedWidth * (SCREEN_RIGHT_FRAC - SCREEN_LEFT_FRAC),
+    height: displayedHeight * (SCREEN_BOTTOM_FRAC - SCREEN_TOP_FRAC),
+  };
+}
 
 type GameId = "simon" | "minesweeper" | "fetchfrenzy" | "tightsqueeze" | "territory";
 
@@ -72,6 +155,14 @@ export default function Minigames() {
   const insets = useSafeAreaInsets();
   // Every game now takes over the whole screen (Mark Your Territory always did; the rest used to sit as a small card in a scrollable page) — anything other than the menu itself counts as full screen.
   const isGameFullScreen = activeGame !== "menu";
+
+  // Background Image fills the full window edge-to-edge (see styles.background),
+  // so window dimensions are exactly the "container" the cover-crop math needs.
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const screenGlassRect = useMemo(
+    () => computeScreenGlassRect(windowWidth, windowHeight),
+    [windowWidth, windowHeight]
+  );
 
   // Same fade-tab-bar pattern as adventure_tab.tsx: re-apply getTabBarStyle rather than `undefined` when restoring it.
   const restoredTabBarStyle = useMemo(
@@ -135,49 +226,62 @@ export default function Minigames() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
-      <TabBackground />
+    <View style={{ flex: 1, backgroundColor: CABINET_LETTERBOX_COLOR }}>
+      <Image source={MINIGAMES_BACKGROUND} resizeMode="contain" style={styles.background} />
 
-      <ScrollView
-        contentContainerStyle={[
-          styles.container,
-          { paddingBottom: tabBarClearance },
+      <View
+        style={[
+          styles.screenGlass,
+          {
+            left: screenGlassRect.left,
+            top: screenGlassRect.top,
+            width: screenGlassRect.width,
+            height: screenGlassRect.height,
+          },
         ]}
       >
-      <View style={styles.coinBadge}>
-        <CoinIcon size={16} />
-        <Text style={[styles.coinText, { color: accentColor }]}> {coins}</Text>
-      </View>
+        <ScrollView
+          style={styles.screenGlassScroll}
+          contentContainerStyle={[
+            styles.container,
+            { paddingBottom: tabBarClearance },
+          ]}
+        >
+        <View style={styles.coinBadge}>
+          <CoinIcon size={16} />
+          <Text style={[styles.coinText, { color: accentColor }]}> {coins}</Text>
+        </View>
 
-      <PassiveActivitiesSection />
+        <PassiveActivitiesSection />
 
-      <Text style={[styles.sectionHeading, { color: theme.text.primary }]}>🎮 Games</Text>
-      <View style={styles.grid}>
-        {GAMES.map((game) => (
-          <Pressable
-            key={game.id}
-            style={[
-              styles.gameCard,
-              {
-                backgroundColor: theme.card.background,
-                borderColor: theme.card.border,
-              },
-              !game.available && styles.gameCardLocked,
-            ]}
-            onPress={() => game.available && setActiveGame(game.id)}
-            disabled={!game.available}
-          >
-            <Text style={styles.gameEmoji}>
-              {game.available ? game.emoji : "🔒"}
-            </Text>
-            <Text style={[styles.gameName, { color: theme.text.primary }]}>{game.name}</Text>
-            <Text style={[styles.gameDescription, { color: theme.text.secondary }]}>
-              {game.description}
-            </Text>
-          </Pressable>
-        ))}
+        <Text style={[styles.sectionHeading, { color: theme.text.primary }]}>🎮 Games</Text>
+        <View style={styles.grid}>
+          {GAMES.map((game) => (
+            <Pressable
+              key={game.id}
+              style={[
+                styles.gameCard,
+                {
+                  backgroundColor: theme.card.background,
+                  borderColor: theme.card.border,
+                },
+                !game.available && styles.gameCardLocked,
+              ]}
+              onPress={() => game.available && setActiveGame(game.id)}
+              disabled={!game.available}
+            >
+              <Text style={styles.gameEmoji}>
+                {game.available ? game.emoji : "🔒"}
+              </Text>
+              <Text style={[styles.gameName, { color: theme.text.primary }]}>{game.name}</Text>
+              <Text style={[styles.gameDescription, { color: theme.text.secondary }]}>
+                {game.description}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        </ScrollView>
       </View>
-      </ScrollView>
     </View>
   );
 }
@@ -418,11 +522,57 @@ function PassiveActivitiesSection() {
 // --- Styles ---
 
 const styles = StyleSheet.create({
+  // StyleSheet.absoluteFill alone (top/left/right/bottom: 0, no width/height)
+  // isn't enough for react-native-web's Image: with a local require() asset,
+  // whose Metro-attached source carries its own pixel width/height, RN Web
+  // falls back to rendering the <img> at that raw intrinsic size (941x1672
+  // here) pinned to the top-left corner instead of stretching to fill the
+  // parent — which is exactly what looked like "stuck on the left" /
+  // "not centered" in the browser regardless of viewport width or the
+  // earlier pager initialLayout fix. Adding explicit 100% width/height
+  // forces it to actually fill its container, letting resizeMode="cover"
+  // do its job. (Confirmed via direct DOM measurement in the dev browser:
+  // the rendered <img>'s parent had inline `width: 941px; height: 1672px`
+  // instead of matching the viewport.) Daily Log's background Image has
+  // this same latent bug — not touched here since it wasn't reported broken.
+  // Written out literally (rather than spreading StyleSheet.absoluteFillObject)
+  // since that helper isn't declared in this project's installed react-native
+  // type definitions (TS2551) — the literal object below is exactly what
+  // absoluteFillObject itself is under the hood.
+  background: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: "100%",
+    height: "100%",
+  },
+
+  // Positioned absolutely with explicit left/top/width/height computed by
+  // computeScreenGlassRect (see top of file) — never via flex/onLayout, so
+  // it can't be thrown off by the pager's flaky web layout resolution.
+  // overflow: "hidden" keeps card content from ever visually spilling past
+  // the cabinet's own screen bezel if a game card's content runs long.
+  screenGlass: {
+    position: "absolute",
+    overflow: "hidden",
+  },
+
+  // Explicit style (not just contentContainerStyle) so the ScrollView's own
+  // viewport actually fills screenGlass's box instead of shrinking to its
+  // content size — same fix this file's history notes a bare
+  // contentContainerStyle already got bitten by once before.
+  screenGlassScroll: {
+    flex: 1,
+    width: "100%",
+  },
+
   container: {
     flexGrow: 1,
     backgroundColor: "transparent",
-    padding: 20,
-    paddingTop: 80,
+    padding: 14,
+    paddingTop: 16,
     alignItems: "center",
   },
 

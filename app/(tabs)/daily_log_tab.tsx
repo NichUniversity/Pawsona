@@ -24,10 +24,24 @@ import { findWalkVideo } from "../../data/walkVideos";
 import { useTabBarClearance } from "../../hooks/useTabBarClearance";
 
 // Cream notebook-paper art behind the "Choose your pet" screen, before an almanac page is
-// open. 852x1846 (aspect ~0.46) already lands close to a typical phone's own aspect ratio, so a
-// plain resizeMode="cover" fills the screen with only minimal cropping — no manual fit math
-// needed here the way PetRoomBackground's wider art required.
+// open. 852x1846 (aspect ~0.46) already lands close to a typical phone's own aspect ratio.
+//
+// resizeMode="contain" (not "cover") + explicit width/height:"100%" on styles.background, matching
+// the fix applied to the Minigames tab's arcade-cabinet background (see
+// claude/minigames-arcade-cabinet-background.md for the full writeup):
+// - StyleSheet.absoluteFill alone isn't sufficient for react-native-web's Image with a local
+//   require() asset — without an explicit width/height:"100%", the Image's container collapsed to
+//   the asset's own intrinsic pixel size (852x1846) pinned to the top-left corner on web, instead
+//   of stretching to fill the screen. That's exactly the same latent bug the Minigames background
+//   had, just less obvious here because this art's aspect ratio happens to be close to a phone's.
+// - "contain" instead of "cover" guarantees the full notebook page is always entirely on-screen
+//   for any window shape (never cropped or pushed off-screen), matching the project's general
+//   standing preference for full-screen background art. Since this art's aspect ratio is already
+//   very close to a typical phone's, the letterbox bars this introduces are minimal to invisible
+//   on real devices — NOTEBOOK_LETTERBOX_COLOR (sampled from the paper's own edge tone) fills any
+//   gap so it blends in rather than showing a stark bar.
 const SELECT_PET_BACKGROUND = require("../../assets/backgrounds/daily_log_notebook_paper.png");
+const NOTEBOOK_LETTERBOX_COLOR = "#937558";
 
 type AttributeKey =
   | "speed"
@@ -199,14 +213,14 @@ export default function DailyPawLog() {
   );
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: NOTEBOOK_LETTERBOX_COLOR }}>
       {/* Notebook-paper background while picking a pet; once one's selected,
           the almanac goes full-bleed wood-dark instead (no paper behind it). */}
       {!selectedPet ? (
         <Image
           source={SELECT_PET_BACKGROUND}
-          resizeMode="cover"
-          style={StyleSheet.absoluteFill}
+          resizeMode="contain"
+          style={styles.background}
         />
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.almanacBackdrop]} />
@@ -519,6 +533,22 @@ export default function DailyPawLog() {
 }
 
 const styles = StyleSheet.create({
+  // See SELECT_PET_BACKGROUND's own comment above for why this needs explicit
+  // width/height:"100%" alongside the absolute-fill positioning below on
+  // react-native-web. Written out literally (rather than spreading
+  // StyleSheet.absoluteFillObject) since that helper isn't declared in this
+  // project's installed react-native type definitions (TS2551) — the literal
+  // object is exactly what absoluteFillObject itself is under the hood.
+  background: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: "100%",
+    height: "100%",
+  },
+
   almanacBackdrop: {
     backgroundColor: WOOD_DARK,
   },
