@@ -2,7 +2,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused } from 'expo-router/react-navigation';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,

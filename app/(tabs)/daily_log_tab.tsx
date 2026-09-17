@@ -14,7 +14,6 @@ import OriginStoryWizard from "../../components/OriginStoryWizard";
 import { AVATAR_BACKDROP_COLOR, AvatarDisplay, findAvatarOption } from "../../components/ui/AvatarDisplay";
 import { CoinIcon } from "../../components/ui/CoinIcon";
 import { PressableScale } from "../../components/ui/PressableScale";
-import { TabBackground } from "../../components/ui/TabBackground";
 import { WalkingSprite } from "../../components/ui/WalkingSprite";
 import { WalkingVideo } from "../../components/ui/WalkingVideo";
 import { API_BASE_URL, GOLD, PARCHMENT, WOOD_DARK, WOOD_MID } from "../../constants/pet-log-theme";
@@ -23,6 +22,12 @@ import { useTheme } from "../../context/ThemeContext";
 import { findWalkFrames } from "../../data/walkAnimations";
 import { findWalkVideo } from "../../data/walkVideos";
 import { useTabBarClearance } from "../../hooks/useTabBarClearance";
+
+// Cream notebook-paper art behind the "Choose your pet" screen, before an almanac page is
+// open. 852x1846 (aspect ~0.46) already lands close to a typical phone's own aspect ratio, so a
+// plain resizeMode="cover" fills the screen with only minimal cropping — no manual fit math
+// needed here the way PetRoomBackground's wider art required.
+const SELECT_PET_BACKGROUND = require("../../assets/backgrounds/daily_log_notebook_paper.png");
 
 type AttributeKey =
   | "speed"
@@ -195,10 +200,14 @@ export default function DailyPawLog() {
 
   return (
     <View style={{ flex: 1 }}>
-      {/* Grey glossy background while picking a pet; once one's selected,
-          the almanac goes full-bleed wood-dark instead (no grey behind it). */}
+      {/* Notebook-paper background while picking a pet; once one's selected,
+          the almanac goes full-bleed wood-dark instead (no paper behind it). */}
       {!selectedPet ? (
-        <TabBackground />
+        <Image
+          source={SELECT_PET_BACKGROUND}
+          resizeMode="cover"
+          style={StyleSheet.absoluteFill}
+        />
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.almanacBackdrop]} />
       )}
@@ -216,7 +225,11 @@ export default function DailyPawLog() {
 
       {!selectedPet ? (
         <>
-          <Text style={[styles.header, { color: theme.text.primary }]}>Choose your pet</Text>
+          {/* Fixed dark-brown, not theme.text.primary — the notebook-paper art behind this
+              screen is a fixed light background regardless of theme, unlike the other tabs'
+              theme-reactive TabBackground gradient, so a light-mode-only text color reads
+              reliably here across every theme instead of going near-white-on-cream in dark mode. */}
+          <Text style={[styles.header, { color: WOOD_DARK }]}>Choose your pet</Text>
 
           {pets
             .filter((pet) => pet.confirmed)

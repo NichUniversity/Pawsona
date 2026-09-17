@@ -21,18 +21,10 @@ export const WALK_ANIMATIONS: Record<string, ImageSourcePropType[]> = {
     require("../assets/animations/golden_retriever_walk_8.png"),
     require("../assets/animations/golden_retriever_walk_9.png"),
   ],
-  "bulldog-myavatar": [
-    require("../assets/animations/bulldog_walk_0.png"),
-    require("../assets/animations/bulldog_walk_1.png"),
-    require("../assets/animations/bulldog_walk_2.png"),
-    require("../assets/animations/bulldog_walk_3.png"),
-    require("../assets/animations/bulldog_walk_4.png"),
-    require("../assets/animations/bulldog_walk_5.png"),
-    require("../assets/animations/bulldog_walk_6.png"),
-    require("../assets/animations/bulldog_walk_7.png"),
-    require("../assets/animations/bulldog_walk_8.png"),
-    require("../assets/animations/bulldog_walk_9.png"),
-  ],
+  // Bulldog's sprite-frame PNGs were removed — it now falls back to the
+  // video clip in data/walkVideos.ts (WALK_VIDEOS still has a
+  // "bulldog-myavatar" entry), same fallback pattern golden retriever
+  // used before it got its own sprite loop above.
 };
 
 export function findWalkFrames(

@@ -3,9 +3,6 @@ import { useFocusEffect, useNavigation } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
-  Dimensions,
-  Image,
-  ImageSourcePropType,
   ScrollView,
   StyleSheet,
   Text,
@@ -31,11 +28,6 @@ const AREAS: { name: AreaName; emoji: string; price: number }[] = [
   { name: "Bone Desert", emoji: "🦴", price: 80 },
 ];
 
-// Add an entry here whenever a new area gets its own custom background art.
-const AREA_BACKGROUNDS: Partial<Record<AreaName, ImageSourcePropType>> = {
-  "Magical Forest": require("../../assets/backgrounds/EnchantedForestCartoon.png"),
-};
-
 // Used when stepping into a whole new area — long enough for the label to build in and hold.
 const AREA_TRANSITION = {
   fadeIn: 900,
@@ -51,105 +43,6 @@ const SCENE_TRANSITION = {
   hold: 120,
   fadeOut: 320,
 };
-
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
-const FIREFLY_COUNT = 12;
-
-type FireflyConfig = {
-  id: number;
-  left: number;
-  top: number;
-  size: number;
-  duration: number;
-  delay: number;
-  driftX: number;
-  driftY: number;
-};
-
-// Scatters fireflies with randomized size/timing/drift so they don't twinkle in unison.
-function buildFireflies(): FireflyConfig[] {
-  return Array.from({ length: FIREFLY_COUNT }).map((_, i) => ({
-    id: i,
-    left: Math.random() * SCREEN_WIDTH,
-    top: 100 + Math.random() * (SCREEN_HEIGHT - 220),
-    size: 3 + Math.random() * 4,
-    duration: 2000 + Math.random() * 2200,
-    delay: Math.random() * 2500,
-    driftX: (Math.random() - 0.5) * 36,
-    driftY: (Math.random() - 0.5) * 46,
-  }));
-}
-
-// A single glowing dot that twinkles and drifts, looping forever; purely decorative.
-function Firefly({ config }: { config: FireflyConfig }) {
-  const progress = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.delay(config.delay),
-        Animated.timing(progress, {
-          toValue: 1,
-          duration: config.duration,
-          useNativeDriver: true,
-        }),
-        Animated.timing(progress, {
-          toValue: 0,
-          duration: config.duration,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [config, progress]);
-
-  const opacity = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.1, 0.95],
-  });
-  const scale = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.7, 1.3],
-  });
-  const translateX = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, config.driftX],
-  });
-  const translateY = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, config.driftY],
-  });
-
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[
-        styles.firefly,
-        {
-          left: config.left,
-          top: config.top,
-          width: config.size,
-          height: config.size,
-          borderRadius: config.size / 2,
-          opacity,
-          transform: [{ translateX }, { translateY }, { scale }],
-        },
-      ]}
-    />
-  );
-}
-
-// Renders a full-screen, non-interactive layer of fireflies over the area's background art.
-function FireflyField({ fireflies }: { fireflies: FireflyConfig[] }) {
-  return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {fireflies.map((firefly) => (
-        <Firefly key={firefly.id} config={firefly} />
-      ))}
-    </View>
-  );
-}
 
 export default function Adventure() {
   const navigation = useNavigation();
@@ -211,16 +104,11 @@ export default function Adventure() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   // Starts the transition label slightly small and scales it up once the screen is fully black.
   const transitionTextScale = useRef(new Animated.Value(0.82)).current;
-  const fireflies = useMemo(() => buildFireflies(), []);
 
   const currentStory =
     selectedArea && currentNodeId
       ? ADVENTURES[selectedArea].nodes[currentNodeId]
       : null;
-
-  const currentBackground = selectedArea
-    ? AREA_BACKGROUNDS[selectedArea]
-    : undefined;
 
   // Fades a black overlay in, swaps screen state while covered (onMidpoint), then fades back out; shared by area and choice transitions.
   const runSceneTransition = (
@@ -313,32 +201,11 @@ export default function Adventure() {
   // Only relevant inside a story, since ending an adventure returns to area-select rather than leaving the tab.
   const showEndAdventureButton = selectedArea !== null;
 
-  // Full-screen background art for the selected area, sitting behind a transparent ScrollView so it shows through everywhere.
-  const showFullScreenBackground = Boolean(selectedArea && currentBackground);
-
   return (
     <View style={{ flex: 1 }}>
       <TabBackground />
 
-      {showFullScreenBackground && (
-        <View style={styles.fullScreenBackgroundWrap}>
-          <Image
-            source={currentBackground}
-            style={styles.fullScreenBackground}
-            resizeMode="contain"
-          />
-        </View>
-      )}
-
-      {showFullScreenBackground && <FireflyField fireflies={fireflies} />}
-
-      <ScrollView
-        contentContainerStyle={[
-          styles.container,
-          showFullScreenBackground && styles.containerTransparent,
-        ]}
-        style={showFullScreenBackground ? styles.transparentScroll : undefined}
-      >
+      <ScrollView contentContainerStyle={styles.container}>
         {!selectedArea && (
           <View style={styles.coinBadge}>
             <CoinIcon size={16} />
@@ -460,132 +327,51 @@ export default function Adventure() {
         )}
 
         {currentStory && !currentStory.isEnding && (
-          <View
-            style={[
-              styles.storyBox,
-              showFullScreenBackground && styles.storyBoxThemed,
-            ]}
-          >
-            <Text
-              style={[
-                styles.storyText,
-                showFullScreenBackground && styles.storyTextThemed,
-              ]}
-            >
-              {currentStory.story}
-            </Text>
+          <View style={styles.storyBox}>
+            <Text style={styles.storyText}>{currentStory.story}</Text>
 
             {currentStory.choices.map((choice) => (
               <PressableScale
                 key={choice.text}
-                style={[
-                  styles.choiceButton,
-                  !showFullScreenBackground && { backgroundColor: accentColor },
-                  showFullScreenBackground && styles.choiceButtonThemed,
-                ]}
+                style={[styles.choiceButton, { backgroundColor: accentColor }]}
                 onPress={() => handleChoice(choice.next)}
               >
-                <Text
-                  style={[
-                    styles.choiceText,
-                    showFullScreenBackground && styles.choiceTextThemed,
-                  ]}
-                >
-                  {choice.text}
-                </Text>
+                <Text style={styles.choiceText}>{choice.text}</Text>
               </PressableScale>
             ))}
           </View>
         )}
 
         {currentStory && currentStory.isEnding && currentStory.givesBookOfOrigin && (
-          <View
-            style={[
-              styles.bookBox,
-              showFullScreenBackground && styles.storyBoxThemed,
-            ]}
-          >
+          <View style={styles.bookBox}>
             <Text style={styles.bookEmoji}>🧙📖</Text>
-            <Text
-              style={[
-                styles.storyText,
-                showFullScreenBackground && styles.storyTextThemed,
-              ]}
-            >
-              {currentStory.story}
-            </Text>
+            <Text style={styles.storyText}>{currentStory.story}</Text>
 
-            <View
-              style={[
-                styles.bookBanner,
-                !showFullScreenBackground && { backgroundColor: withAlpha(accentColor, 0.15) },
-                showFullScreenBackground && styles.bookBannerThemed,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.bookBannerText,
-                  !showFullScreenBackground && { color: accentColor },
-                  showFullScreenBackground && styles.bookBannerTextThemed,
-                ]}
-              >
+            <View style={[styles.bookBanner, { backgroundColor: withAlpha(accentColor, 0.15) }]}>
+              <Text style={[styles.bookBannerText, { color: accentColor }]}>
                 Book of Origin unlocked! You can now use the Origin Story
                 wizard on the Daily Paw Log tab.
               </Text>
             </View>
 
             <PressableScale
-              style={[
-                styles.finishButton,
-                !showFullScreenBackground && { backgroundColor: accentColor },
-                showFullScreenBackground && styles.choiceButtonThemed,
-              ]}
+              style={[styles.finishButton, { backgroundColor: accentColor }]}
               onPress={resetAdventureState}
             >
-              <Text
-                style={[
-                  styles.finishButtonText,
-                  showFullScreenBackground && styles.choiceTextThemed,
-                ]}
-              >
-                Explore More
-              </Text>
+              <Text style={styles.finishButtonText}>Explore More</Text>
             </PressableScale>
           </View>
         )}
 
         {currentStory && currentStory.isEnding && !currentStory.givesBookOfOrigin && (
-          <View
-            style={[
-              styles.storyBox,
-              showFullScreenBackground && styles.storyBoxThemed,
-            ]}
-          >
-            <Text
-              style={[
-                styles.storyText,
-                showFullScreenBackground && styles.storyTextThemed,
-              ]}
-            >
-              {currentStory.story}
-            </Text>
+          <View style={styles.storyBox}>
+            <Text style={styles.storyText}>{currentStory.story}</Text>
 
             <PressableScale
-              style={[
-                styles.finishButton,
-                !showFullScreenBackground && { backgroundColor: accentColor },
-                showFullScreenBackground && styles.choiceButtonThemed,
-              ]}
+              style={[styles.finishButton, { backgroundColor: accentColor }]}
               onPress={resetAdventureState}
             >
-              <Text
-                style={[
-                  styles.finishButtonText,
-                  showFullScreenBackground && styles.choiceTextThemed,
-                ]}
-              >
-                Explore More
-              </Text>
+              <Text style={styles.finishButtonText}>Explore More</Text>
             </PressableScale>
           </View>
         )}
@@ -713,55 +499,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
-  // Full-bleed area artwork behind the ScrollView; wrap's backgroundColor fills "contain"'s letterbox space.
-  fullScreenBackgroundWrap: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#1B3B2F",
-  },
-
-  fullScreenBackground: {
-    width: "100%",
-    height: "100%",
-  },
-
-  // Small glowing dot for the Firefly component (Android needs elevation + shadow* both set to render the glow).
-  firefly: {
-    position: "absolute",
-    backgroundColor: "#EFFFC2",
-    shadowColor: "#D9FF7A",
-    shadowOpacity: 0.9,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 4,
-  },
-
-  // Lets the area art show through instead of the default orange fill.
-  transparentScroll: {
-    backgroundColor: "transparent",
-  },
-
-  containerTransparent: {
-    backgroundColor: "transparent",
-  },
-
   storyBox: {
     backgroundColor: "rgba(28,28,30,0.92)",
     borderRadius: 20,
     padding: 20,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
-  },
-
-  // Applied over storyBox/bookBox when the area has its own art, so the card reads as a mist-glass panel in the scene.
-  storyBoxThemed: {
-    backgroundColor: "rgba(8, 24, 18, 0.68)",
-    borderWidth: 1.5,
-    borderColor: "rgba(168, 235, 195, 0.35)",
-    shadowColor: "#8CFFC2",
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 6,
   },
 
   storyText: {
@@ -771,33 +514,16 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
 
-  storyTextThemed: {
-    color: "#EAF7EE",
-    textShadowColor: "rgba(0,0,0,0.5)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-
   choiceButton: {
     borderRadius: 15,
     padding: 15,
     marginBottom: 12,
   },
 
-  choiceButtonThemed: {
-    backgroundColor: "rgba(38, 84, 58, 0.85)",
-    borderWidth: 1,
-    borderColor: "rgba(168, 235, 195, 0.45)",
-  },
-
   choiceText: {
     color: "#fff",
     fontWeight: "700",
     fontSize: 16,
-  },
-
-  choiceTextThemed: {
-    color: "#D9FFE6",
   },
 
   bookBox: {
@@ -821,20 +547,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
 
-  bookBannerThemed: {
-    backgroundColor: "rgba(255, 216, 130, 0.18)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 216, 130, 0.5)",
-  },
-
   bookBannerText: {
     fontWeight: "700",
     fontSize: 14,
     textAlign: "center",
-  },
-
-  bookBannerTextThemed: {
-    color: "#FFD873",
   },
 
   finishButton: {
@@ -850,7 +566,11 @@ const styles = StyleSheet.create({
   },
 
   transitionOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: "#000",
     alignItems: "center",
     justifyContent: "center",
