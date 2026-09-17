@@ -10,28 +10,32 @@ import { WalkingVideo } from "./WalkingVideo";
 
 const BACKYARD_IMAGE = require("../../assets/backgrounds/home_backyard_sunset.png");
 
-// home_backyard_sunset.png is 941x1672 px (swapped 2026-09-16 for a new render of the same
-// scene — measure this again if the art changes size). resizeMode="contain" alone doesn't center
-// reliably on every target — on react-native-web in particular, a wide/short desktop browser
-// window (very different aspect ratio than this art) was observed rendering the scaled image
-// flush to the top-left instead of centered, leaving the whole letterbox gap on one side. So the
-// contain-fit math is done by hand below (same approach as the territory-minigame house art) and
-// the image is placed with explicit width/height/left/top, which centers correctly on both web
-// and native regardless of how a given platform's Image implementation handles resizeMode.
+// home_backyard_sunset.png is 941x1672 px — measure this again if the art changes size.
+//
+// This renders as a manual "cover" fit (fill the screen completely, crop whatever overflows)
+// rather than resizeMode="contain". "contain" was tried first so the full picture is always
+// visible, but this art (941x1672, aspect ~0.56) is noticeably shorter/wider than a typical
+// phone screen (~0.46), so "contain" left a visible gap above and below it — filled with a flat
+// LETTERBOX_FILL color — that read as the background being cut short. There's no taller version
+// of the art to fix that at the source, so "cover" is the deliberate tradeoff: it always fills
+// edge-to-edge (no gap, ever), at the cost of cropping a bit off the left/right on phones (the
+// tree or house corner can get trimmed on unusually narrow/wide screens) instead of top/bottom.
+// The fit math is done by hand (same approach as the territory-minigame house art) and the image
+// is placed with explicit width/height/left/top, which is also what keeps it reliably *centered*
+// on every platform — see the home-background centering fix earlier in this file's history for
+// why resizeMode's own centering wasn't trustworthy on react-native-web.
 const BACKYARD_IMAGE_ASPECT = 941 / 1672;
 
-// Sampled from the top edge of home_backyard_sunset.png (deep dusk-purple sky). Fills any
-// letterboxing from the contain-fit on a device whose aspect ratio doesn't exactly match the art,
-// per this project's standing "contain, never cover" rule for full-screen backgrounds.
+// Backdrop behind the image itself — with a cover fit this is only ever visible for the one
+// frame before onLayout first measures the container (the image is sized to 0 until then), but
+// it's kept as a safe fallback matching the art's own sky color.
 const LETTERBOX_FILL = "#3A2F55";
 
 // Fractions of the rendered image's height, read straight off the art: sky down to the
 // fence/string-lights line, then lawn down to the foreground patio. The pet is placed by these
-// fractions (not fixed px) so it tracks the artwork itself rather than the screen — "contain"
-// scales the whole image uniformly, so a fraction of its height always lands on the same part
-// of the picture regardless of device size. (Re-measured for the 941x1672 art above — its wider,
-// shorter canvas puts the fence at nearly the same fraction down but pushes the patio much
-// further down than the old 870x1808 art did.)
+// fractions (not fixed px) so it tracks the artwork itself rather than the screen — the image is
+// scaled uniformly, so a fraction of its height always lands on the same part of the picture
+// regardless of device size, even where a cover-fit crop clips the sides.
 const LAWN_TOP_FRACTION = 0.57;
 const LAWN_BOTTOM_FRACTION = 0.94;
 
@@ -67,10 +71,11 @@ export function PetRoomBackground({ category, emoji, color }: Props) {
   const [facing, setFacing] = useState<"left" | "right">("right");
   const [isWalking, setIsWalking] = useState(false);
 
-  // Manual contain-fit: how big the art renders inside the measured container, and where its
-  // top-left lands, so the image (and everything anchored to it below) is centered on every
-  // aspect ratio — see the BACKYARD_IMAGE_ASPECT comment above for why this isn't left to
-  // resizeMode="contain" alone.
+  // Manual cover-fit: how big the art renders inside the measured container, and where its
+  // top-left lands (usually off-screen negative on one axis, since cover overflows by design),
+  // so the image (and everything anchored to it below) always fills the screen and stays
+  // centered — see the BACKYARD_IMAGE_ASPECT comment above for why this isn't left to
+  // resizeMode="cover" alone, and why cover instead of contain at all.
   const renderedImage = useMemo(() => {
     const { width: containerWidth, height: containerHeight } = containerSize;
     if (containerWidth <= 0 || containerHeight <= 0) {
@@ -82,14 +87,16 @@ export function PetRoomBackground({ category, emoji, color }: Props) {
     let height: number;
     if (containerAspect > BACKYARD_IMAGE_ASPECT) {
       // Container is relatively wider than the art (e.g. a wide desktop browser window) —
-      // height-locked, with the leftover width split evenly left/right.
-      height = containerHeight;
-      width = height * BACKYARD_IMAGE_ASPECT;
-    } else {
-      // Container is relatively taller/narrower than the art (typical phone portrait) —
-      // width-locked, with the leftover height split evenly top/bottom.
+      // width-locked so it still fully covers the width, overflowing (and getting cropped)
+      // top/bottom instead of leaving a gap there.
       width = containerWidth;
       height = width / BACKYARD_IMAGE_ASPECT;
+    } else {
+      // Container is relatively taller/narrower than the art (typical phone portrait) —
+      // height-locked so it still fully covers the height, overflowing (and getting cropped)
+      // left/right instead of leaving a gap there.
+      height = containerHeight;
+      width = height * BACKYARD_IMAGE_ASPECT;
     }
 
     return {
@@ -100,12 +107,16 @@ export function PetRoomBackground({ category, emoji, color }: Props) {
     };
   }, [containerSize]);
 
+  // The pet's walking lane is bounded by the visible SCREEN width, not the rendered image's own
+  // width — with a cover fit the image is often wider than the screen (that's the overflow that
+  // gets cropped), and letting the pet roam that full width would walk it off into the cropped,
+  // invisible part of the art.
   useEffect(() => {
     walkableWidthRef.current = Math.max(
-      renderedImage.width - PET_SIZE - EDGE_PADDING * 2,
+      containerSize.width - PET_SIZE - EDGE_PADDING * 2,
       0
     );
-  }, [renderedImage.width]);
+  }, [containerSize.width]);
 
   // Idle <-> stroll loop: wait, pick a random lawn spot, walk there, repeat; resets when the
   // shown pet changes or the component remounts.
@@ -173,7 +184,7 @@ export function PetRoomBackground({ category, emoji, color }: Props) {
 
   return (
     <View
-      style={[styles.fill, { backgroundColor: LETTERBOX_FILL }]}
+      style={[styles.fill, { backgroundColor: LETTERBOX_FILL, overflow: "hidden" }]}
       pointerEvents="none"
       onLayout={(e) => {
         const { width, height } = e.nativeEvent.layout;
@@ -203,7 +214,7 @@ export function PetRoomBackground({ category, emoji, color }: Props) {
           <Animated.View
             style={[
               styles.petColumn,
-              { left: offsetX + EDGE_PADDING, transform: [{ translateX: posX }] },
+              { left: EDGE_PADDING, transform: [{ translateX: posX }] },
             ]}
           >
             <View style={styles.petShadow} />

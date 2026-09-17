@@ -29,10 +29,13 @@ export function WalkingVideo({ source, playing, style }: Props) {
   }, [playing, player]);
 
   return (
-    <View style={[{ backgroundColor: AVATAR_BACKDROP_COLOR }, style]} pointerEvents="none">
+    <View style={[{ backgroundColor: AVATAR_BACKDROP_COLOR, pointerEvents: "none" }, style]}>
       <VideoView
         player={player}
         // VideoView paints its own opaque (white) background under letterboxed gaps, so set the backdrop color directly to avoid a white sliver.
+        // pointerEvents stays a direct prop here (not style.pointerEvents) -- VideoView is
+        // expo-video's own native component, not a plain RN View, so it isn't part of the
+        // RN-View pointerEvents-prop deprecation the outer View above needed fixing for.
         style={{ width: "100%", height: "100%", backgroundColor: AVATAR_BACKDROP_COLOR }}
         contentFit="contain"
         nativeControls={false}

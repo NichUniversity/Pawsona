@@ -4,10 +4,10 @@ import {
   Fredoka_700Bold,
   useFonts,
 } from '@expo-google-fonts/fredoka';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router/react-navigation';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { LogBox, View } from 'react-native';
+import { LogBox, Platform, View } from 'react-native';
 import 'react-native-reanimated';
 
 import { LoginScreen } from '../components/ui/LoginScreen';
@@ -22,9 +22,19 @@ export const unstable_settings = {
 };
 
 // Known cosmetic false-positive from react-native-reanimated misfiring on plain RN `Animated` usage (upstream issue #5094).
-LogBox.ignoreLogs([
-  "shared value's .value inside reanimated inline style",
-]);
+const REANIMATED_FALSE_POSITIVE = "shared value's .value inside reanimated inline style";
+LogBox.ignoreLogs([REANIMATED_FALSE_POSITIVE]);
+
+// LogBox only filters the native in-app overlay -- on web the same warning goes
+// straight to console.warn with no LogBox in between, so it still spammed the
+// browser console. Patch console.warn there too, once, for this one known string.
+if (Platform.OS === "web") {
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    if (typeof args[0] === "string" && args[0].includes(REANIMATED_FALSE_POSITIVE)) return;
+    originalWarn(...args);
+  };
+}
 
 export default function RootLayout() {
   // Wraps everything, including the font-loading gate, so the first screen flash uses the right background.
