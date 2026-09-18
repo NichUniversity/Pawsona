@@ -985,7 +985,16 @@ const styles = StyleSheet.create({
   },
 
   territoryCaughtOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    // Written out literally (rather than spreading StyleSheet.absoluteFillObject)
+    // since that helper isn't declared in this project's installed react-native
+    // type definitions (TS2551) — the literal object below is exactly what
+    // absoluteFillObject itself is under the hood. Same fix already applied in
+    // minigames.tsx and daily_log_tab.tsx.
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
     backgroundColor: "rgba(0,0,0,0.45)",
     alignItems: "center",
     justifyContent: "center",

@@ -261,8 +261,17 @@ export function PetRoomBackground({ category, emoji, color }: Props) {
 }
 
 const styles = StyleSheet.create({
+  // Written out literally (rather than spreading StyleSheet.absoluteFillObject)
+  // since that helper isn't declared in this project's installed react-native
+  // type definitions (TS2551) — the literal object below is exactly what
+  // absoluteFillObject itself is under the hood. Same fix already applied in
+  // minigames.tsx and daily_log_tab.tsx.
   fill: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
   },
 
   lawn: {
