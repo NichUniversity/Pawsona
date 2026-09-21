@@ -1,6 +1,6 @@
 import { useFocusEffect, useNavigation } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Animated, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextStyle, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CoinIcon } from "../../components/ui/CoinIcon";
@@ -99,6 +99,54 @@ function computeScreenGlassRect(containerWidth: number, containerHeight: number)
   };
 }
 
+// Arcade look for everything drawn inside the cabinet's screen glass (credits counter, headings,
+// game cards, passive-coin cards). The cabinet art is a fixed dark-navy scene regardless of the
+// app's theme, so these are fixed neon colors — sampled from the cabinet's own trim (cyan and
+// magenta invaders, yellow/pink side stripes, blue bezel) — rather than theme.card / theme.text,
+// which flip to light-mode values and would look pasted-on over the navy glass.
+const ARCADE = {
+  panel: "rgba(6, 10, 46, 0.88)",
+  panelPressed: "rgba(38, 24, 108, 0.95)",
+  text: "#FFFFFF",
+  textMuted: "#A9B4FF",
+  textDim: "#6C76B8",
+  cyan: "#3DD5FF",
+  magenta: "#FF3DA0",
+  yellow: "#FFD23F",
+  green: "#39FF88",
+  purple: "#B26BFF",
+  ink: "#07093A", // dark navy for text on top of a bright neon fill
+};
+
+// Each game card takes the next neon color, so the menu reads like the cabinet's colored buttons.
+const NEON_CYCLE = [ARCADE.cyan, ARCADE.magenta, ARCADE.yellow, ARCADE.green, ARCADE.purple];
+
+// Monospace stands in for a pixel font (no extra font dependency; Fredoka is too soft for this).
+const ARCADE_FONT = Platform.select({
+  ios: "Menlo",
+  android: "monospace",
+  default: '"Courier New", monospace',
+});
+
+// Outer neon glow; "80" is a hex alpha suffix on the color (~50% opacity).
+function neonGlow(color: string) {
+  return { boxShadow: `0 0 10px ${color}80` };
+}
+
+// Same glow for text. react-native-web deprecates the textShadow* props in favor of a CSS
+// `textShadow` string (and warns in the console), which RN's native TextStyle has no type for —
+// so web gets the string and native keeps the props.
+function neonText(color: string, radius: number): TextStyle {
+  if (Platform.OS === "web") {
+    return { textShadow: `0 0 ${radius}px ${color}` } as unknown as TextStyle;
+  }
+  return {
+    textShadowColor: color,
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: radius,
+  };
+}
+
 type GameId = "simon" | "minesweeper" | "fetchfrenzy" | "tightsqueeze" | "territory";
 
 const GAMES: {
@@ -147,7 +195,7 @@ const GAMES: {
 
 export default function Minigames() {
   const { coins } = usePets();
-  const { accentColor, theme } = useTheme();
+  const { theme } = useTheme();
   const [activeGame, setActiveGame] = useState<GameId | "menu">("menu");
   const tabBarClearance = useTabBarClearance();
 
@@ -247,38 +295,48 @@ export default function Minigames() {
             { paddingBottom: tabBarClearance },
           ]}
         >
-        <View style={styles.coinBadge}>
+        <View style={styles.creditsBadge}>
+          <Text style={styles.creditsLabel}>CREDITS</Text>
           <CoinIcon size={16} />
-          <Text style={[styles.coinText, { color: accentColor }]}> {coins}</Text>
+          <Text style={styles.creditsValue}>{String(coins).padStart(2, "0")}</Text>
         </View>
 
         <PassiveActivitiesSection />
 
-        <Text style={[styles.sectionHeading, { color: theme.text.primary }]}>🎮 Games</Text>
+        <Text style={[styles.sectionHeading, styles.gamesHeading]}>🎮 SELECT GAME</Text>
         <View style={styles.grid}>
-          {GAMES.map((game) => (
-            <Pressable
-              key={game.id}
-              style={[
-                styles.gameCard,
-                {
-                  backgroundColor: theme.card.background,
-                  borderColor: theme.card.border,
-                },
-                !game.available && styles.gameCardLocked,
-              ]}
-              onPress={() => game.available && setActiveGame(game.id)}
-              disabled={!game.available}
-            >
-              <Text style={styles.gameEmoji}>
-                {game.available ? game.emoji : "🔒"}
-              </Text>
-              <Text style={[styles.gameName, { color: theme.text.primary }]}>{game.name}</Text>
-              <Text style={[styles.gameDescription, { color: theme.text.secondary }]}>
-                {game.description}
-              </Text>
-            </Pressable>
-          ))}
+          {GAMES.map((game, index) => {
+            const neon = NEON_CYCLE[index % NEON_CYCLE.length];
+
+            return (
+              <Pressable
+                key={game.id}
+                style={({ pressed }) => [
+                  styles.gameCard,
+                  { borderColor: neon },
+                  neonGlow(neon),
+                  pressed && { backgroundColor: ARCADE.panelPressed, transform: [{ scale: 0.97 }] },
+                  !game.available && styles.gameCardLocked,
+                ]}
+                onPress={() => game.available && setActiveGame(game.id)}
+                disabled={!game.available}
+              >
+                <Text style={[styles.gameNumber, { color: neon }]}>
+                  GAME {String(index + 1).padStart(2, "0")}
+                </Text>
+                <Text style={styles.gameEmoji}>
+                  {game.available ? game.emoji : "🔒"}
+                </Text>
+                <Text style={[styles.gameName, neonText(neon, 6)]}>
+                  {game.name.toUpperCase()}
+                </Text>
+                <Text style={styles.gameDescription}>{game.description}</Text>
+                <Text style={[styles.gamePlayTag, { color: game.available ? neon : ARCADE.textDim }]}>
+                  {game.available ? "▶ PLAY" : "LOCKED"}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
         </ScrollView>
       </View>
@@ -332,7 +390,6 @@ function cooldownKey(activityId: ActivityId, petId: string) {
 
 function PassiveActivitiesSection() {
   const { pets, setPets, earnCoins } = usePets();
-  const { accentColor, theme } = useTheme();
 
   const confirmedPets = pets.filter((pet) => pet.confirmed);
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
@@ -400,22 +457,17 @@ function PassiveActivitiesSection() {
 
   return (
     <View style={styles.activitiesSection}>
-      <Text style={[styles.sectionHeading, { color: theme.text.primary }]}>
-        <CoinIcon size={18} /> Passive Coins
+      <Text style={[styles.sectionHeading, styles.passiveHeading]}>
+        <CoinIcon size={18} /> PASSIVE COINS
       </Text>
-      <Text style={[styles.activitiesSubtitle, { color: theme.text.secondary }]}>
+      <Text style={styles.activitiesSubtitle}>
         Check in every 30 seconds to earn a few coins — and sometimes a
         cosmetic!
       </Text>
 
       {confirmedPets.length === 0 ? (
-        <View
-          style={[
-            styles.activitiesEmptyCard,
-            { backgroundColor: theme.card.background, borderColor: theme.card.border },
-          ]}
-        >
-          <Text style={[styles.activitiesEmptyText, { color: theme.text.primary }]}>
+        <View style={styles.activitiesEmptyCard}>
+          <Text style={styles.activitiesEmptyText}>
             Confirm a pet on the Home tab to start earning passive coins!
           </Text>
         </View>
@@ -427,32 +479,32 @@ function PassiveActivitiesSection() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.activityPetRow}
             >
-              {confirmedPets.map((pet) => (
-                <Pressable
-                  key={pet.id}
-                  style={[
-                    styles.activityPetChip,
-                    {
-                      backgroundColor: theme.card.background,
-                      borderColor: theme.card.border,
-                    },
-                    selectedPetId === pet.id && {
-                      backgroundColor: accentColor,
-                      borderColor: accentColor,
-                    },
-                  ]}
-                  onPress={() => setSelectedPetId(pet.id)}
-                >
-                  <Text
+              {confirmedPets.map((pet) => {
+                const isSelected = selectedPetId === pet.id;
+
+                return (
+                  <Pressable
+                    key={pet.id}
                     style={[
-                      styles.activityPetChipName,
-                      { color: selectedPetId === pet.id ? "#fff" : theme.text.primary },
+                      styles.activityPetChip,
+                      isSelected && {
+                        backgroundColor: ARCADE.yellow,
+                        borderColor: ARCADE.yellow,
+                      },
                     ]}
+                    onPress={() => setSelectedPetId(pet.id)}
                   >
-                    {pet.name || "Unnamed Pet"}
-                  </Text>
-                </Pressable>
-              ))}
+                    <Text
+                      style={[
+                        styles.activityPetChipName,
+                        { color: isSelected ? ARCADE.ink : ARCADE.text },
+                      ]}
+                    >
+                      {(pet.name || "Unnamed Pet").toUpperCase()}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </ScrollView>
           )}
 
@@ -466,31 +518,21 @@ function PassiveActivitiesSection() {
             const remainingSec = Math.ceil(remainingMs / 1000);
 
             return (
-              <View
-                key={activity.id}
-                style={[
-                  styles.activityCard,
-                  { backgroundColor: theme.card.background, borderColor: theme.card.border },
-                ]}
-              >
+              <View key={activity.id} style={[styles.activityCard, neonGlow(ARCADE.cyan)]}>
                 <View style={styles.activityCardHeader}>
                   <Text style={styles.activityEmoji}>{activity.emoji}</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.activityName, { color: theme.text.primary }]}>
-                      {activity.name}
-                    </Text>
-                    <Text style={[styles.activityDescription, { color: theme.text.secondary }]}>
-                      {activity.description}
-                    </Text>
+                    <Text style={styles.activityName}>{activity.name.toUpperCase()}</Text>
+                    <Text style={styles.activityDescription}>{activity.description}</Text>
                   </View>
                 </View>
 
                 <Pressable
-                  style={[
+                  style={({ pressed }) => [
                     styles.activityButton,
                     onCooldown
                       ? styles.activityButtonDisabled
-                      : { backgroundColor: accentColor },
+                      : { backgroundColor: pressed ? "#FFE58A" : ARCADE.yellow },
                   ]}
                   disabled={onCooldown}
                   onPress={() => handleActivity(activity)}
@@ -501,12 +543,12 @@ function PassiveActivitiesSection() {
                       onCooldown && styles.activityButtonTextDisabled,
                     ]}
                   >
-                    {onCooldown ? `Ready in ${remainingSec}s` : `Let's go!`}
+                    {onCooldown ? `READY IN ${remainingSec}S` : `LET'S GO!`}
                   </Text>
                 </Pressable>
 
                 {resultText[activity.id] && (
-                  <Text style={[styles.activityResultText, { color: accentColor }]}>
+                  <Text style={styles.activityResultText}>
                     {resultText[activity.id]}
                   </Text>
                 )}
@@ -576,30 +618,57 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  coinBadge: {
+  // Arcade "CREDITS" counter — replaces the plain white coin pill. (Colors/fonts: see ARCADE above.)
+  creditsBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     alignSelf: "center",
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 18,
-    marginBottom: 24,
+    backgroundColor: ARCADE.panel,
+    borderWidth: 2,
+    borderColor: ARCADE.yellow,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    marginBottom: 22,
+    boxShadow: `0 0 10px ${ARCADE.yellow}80`,
   },
 
-  coinText: {
+  creditsLabel: {
+    fontFamily: ARCADE_FONT,
+    fontSize: 11,
     fontWeight: "800",
-    fontSize: 16,
+    letterSpacing: 1.5,
+    color: ARCADE.textMuted,
+  },
+
+  creditsValue: {
+    fontFamily: ARCADE_FONT,
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: 1,
+    color: ARCADE.yellow,
   },
 
   sectionHeading: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#fff",
+    fontFamily: ARCADE_FONT,
+    fontSize: 15,
+    fontWeight: "900",
+    letterSpacing: 2,
+    color: ARCADE.text,
     alignSelf: "flex-start",
     marginBottom: 12,
     marginTop: 4,
+  },
+
+  gamesHeading: {
+    color: ARCADE.magenta,
+    ...neonText(ARCADE.magenta, 8),
+  },
+
+  passiveHeading: {
+    color: ARCADE.cyan,
+    ...neonText(ARCADE.cyan, 8),
   },
 
   activitiesSection: {
@@ -608,50 +677,59 @@ const styles = StyleSheet.create({
   },
 
   activitiesSubtitle: {
-    fontSize: 13,
+    fontFamily: ARCADE_FONT,
+    fontSize: 11,
     fontWeight: "600",
-    marginBottom: 16,
+    lineHeight: 16,
+    color: ARCADE.textMuted,
+    marginBottom: 14,
   },
 
   activitiesEmptyCard: {
-    borderRadius: 20,
-    padding: 20,
+    backgroundColor: ARCADE.panel,
+    borderRadius: 10,
+    padding: 16,
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderWidth: 2,
+    borderColor: ARCADE.cyan,
   },
 
   activitiesEmptyText: {
-    fontSize: 14,
-    fontWeight: "600",
+    fontFamily: ARCADE_FONT,
+    fontSize: 12,
+    fontWeight: "700",
+    color: ARCADE.text,
     textAlign: "center",
   },
 
   activityPetRow: {
-    gap: 10,
-    paddingBottom: 14,
+    gap: 8,
+    paddingBottom: 12,
   },
 
   activityPetChip: {
-    borderRadius: 16,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: ARCADE.panel,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderWidth: 2,
+    borderColor: ARCADE.cyan,
   },
 
   activityPetChipName: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#fff",
+    fontFamily: ARCADE_FONT,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1,
   },
 
   activityCard: {
-    borderRadius: 18,
-    padding: 16,
+    backgroundColor: ARCADE.panel,
+    borderRadius: 10,
+    padding: 14,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderWidth: 2,
+    borderColor: ARCADE.cyan,
   },
 
   activityCardHeader: {
@@ -662,45 +740,56 @@ const styles = StyleSheet.create({
   },
 
   activityEmoji: {
-    fontSize: 32,
+    fontSize: 30,
   },
 
   activityName: {
-    fontSize: 16,
-    fontWeight: "800",
+    fontFamily: ARCADE_FONT,
+    fontSize: 14,
+    fontWeight: "900",
+    letterSpacing: 1,
+    color: ARCADE.text,
     marginBottom: 2,
   },
 
   activityDescription: {
-    fontSize: 12,
+    fontFamily: ARCADE_FONT,
+    fontSize: 11,
     fontWeight: "600",
+    lineHeight: 15,
+    color: ARCADE.textMuted,
   },
 
   activityButton: {
-    borderRadius: 14,
-    paddingVertical: 12,
+    borderRadius: 8,
+    paddingVertical: 10,
     alignItems: "center",
   },
 
   activityButtonDisabled: {
-    backgroundColor: "#3A3A3C",
+    backgroundColor: "#1B2160",
   },
 
   activityButtonText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 14,
+    fontFamily: ARCADE_FONT,
+    color: ARCADE.ink,
+    fontWeight: "900",
+    fontSize: 13,
+    letterSpacing: 1.5,
   },
 
   activityButtonTextDisabled: {
-    color: "#8E8E93",
+    color: ARCADE.textDim,
   },
 
   activityResultText: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontFamily: ARCADE_FONT,
+    fontSize: 12,
+    fontWeight: "800",
+    color: ARCADE.green,
     textAlign: "center",
     marginTop: 10,
+    ...neonText(ARCADE.green, 6),
   },
 
   grid: {
@@ -708,37 +797,63 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     justifyContent: "space-between",
     width: "100%",
-    gap: 14,
+    gap: 12,
   },
 
+  // Border color + glow are per-card (see NEON_CYCLE), applied inline at the call site.
   gameCard: {
-    borderRadius: 20,
-    padding: 18,
+    backgroundColor: ARCADE.panel,
+    borderRadius: 10,
+    borderWidth: 2,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
     width: "47%",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
   },
 
   gameCardLocked: {
-    opacity: 0.4,
+    opacity: 0.45,
+  },
+
+  gameNumber: {
+    fontFamily: ARCADE_FONT,
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 1.5,
+    alignSelf: "flex-start",
+    marginBottom: 6,
   },
 
   gameEmoji: {
-    fontSize: 40,
-    marginBottom: 8,
+    fontSize: 36,
+    marginBottom: 6,
   },
 
   gameName: {
-    fontSize: 16,
-    fontWeight: "700",
+    fontFamily: ARCADE_FONT,
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+    color: ARCADE.text,
     textAlign: "center",
     marginBottom: 4,
   },
 
   gameDescription: {
-    fontSize: 12,
+    fontFamily: ARCADE_FONT,
+    fontSize: 10,
     fontWeight: "600",
+    lineHeight: 14,
+    color: ARCADE.textMuted,
     textAlign: "center",
+    marginBottom: 8,
+  },
+
+  gamePlayTag: {
+    fontFamily: ARCADE_FONT,
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    marginTop: "auto",
   },
 });

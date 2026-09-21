@@ -11,8 +11,9 @@ import {
 } from "react-native";
 
 import OriginStoryWizard from "../../components/OriginStoryWizard";
-import { AVATAR_BACKDROP_COLOR, AvatarDisplay, findAvatarOption } from "../../components/ui/AvatarDisplay";
+import { AVATAR_BACKDROP_COLOR, findAvatarOption } from "../../components/ui/AvatarDisplay";
 import { CoinIcon } from "../../components/ui/CoinIcon";
+import { NotebookPetPicker } from "../../components/ui/NotebookPetPicker";
 import { PressableScale } from "../../components/ui/PressableScale";
 import { WalkingSprite } from "../../components/ui/WalkingSprite";
 import { WalkingVideo } from "../../components/ui/WalkingVideo";
@@ -72,7 +73,7 @@ const MAX_RATING = 5;
 export default function DailyPawLog() {
   const { pets, setPets, coins, earnCoins, hasBookOfOrigin, hasBondKeeper } =
     usePets();
-  const { accentColor, theme } = useTheme();
+  const { accentColor } = useTheme();
   const tabBarClearance = useTabBarClearance();
 
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
@@ -214,18 +215,29 @@ export default function DailyPawLog() {
 
   return (
     <View style={{ flex: 1, backgroundColor: NOTEBOOK_LETTERBOX_COLOR }}>
-      {/* Notebook-paper background while picking a pet; once one's selected,
-          the almanac goes full-bleed wood-dark instead (no paper behind it). */}
+      {/* Notebook-paper background while picking a pet — the pet list is then written
+          right onto its ruled lines (see NotebookPetPicker). Once one's selected, the almanac
+          goes full-bleed wood-dark instead (no paper behind it). */}
       {!selectedPet ? (
-        <Image
-          source={SELECT_PET_BACKGROUND}
-          resizeMode="contain"
-          style={styles.background}
-        />
+        <>
+          <Image
+            source={SELECT_PET_BACKGROUND}
+            resizeMode="contain"
+            style={styles.background}
+          />
+          <NotebookPetPicker
+            pets={pets.filter((pet) => pet.confirmed)}
+            coins={coins}
+            accentColor={accentColor}
+            bottomClearance={tabBarClearance}
+            onSelect={changePet}
+          />
+        </>
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.almanacBackdrop]} />
       )}
 
+      {selectedPet && (
       <ScrollView
         contentContainerStyle={[
           styles.container,
@@ -237,46 +249,6 @@ export default function DailyPawLog() {
         <Text style={[styles.coinText, { color: accentColor }]}> {coins}</Text>
       </View>
 
-      {!selectedPet ? (
-        <>
-          {/* Fixed dark-brown, not theme.text.primary — the notebook-paper art behind this
-              screen is a fixed light background regardless of theme, unlike the other tabs'
-              theme-reactive TabBackground gradient, so a light-mode-only text color reads
-              reliably here across every theme instead of going near-white-on-cream in dark mode. */}
-          <Text style={[styles.header, { color: WOOD_DARK }]}>Choose your pet</Text>
-
-          {pets
-            .filter((pet) => pet.confirmed)
-            .map((pet) => (
-              <PressableScale
-                key={pet.id}
-                style={[
-                  styles.petCard,
-                  {
-                    backgroundColor: theme.card.background,
-                    borderColor: theme.card.border,
-                  },
-                ]}
-                onPress={() => changePet(pet)}
-              >
-                <View style={{ marginRight: 20 }}>
-                  <AvatarDisplay
-                    category={pet.category}
-                    emoji={pet.selectedEmoji}
-                    color={pet.color}
-                    size={35}
-                    variant="face"
-                    transparentBackdrop
-                  />
-                </View>
-
-                <Text style={[styles.petName, { color: theme.text.primary }]}>
-                  {pet.name || "Unnamed Pet"}
-                </Text>
-              </PressableScale>
-            ))}
-        </>
-      ) : (
         <View style={styles.pageBody}>
           <View style={styles.almanacPage}>
             <PressableScale
@@ -516,8 +488,8 @@ export default function DailyPawLog() {
             </View>
           </View>
         </View>
-      )}
       </ScrollView>
+      )}
 
       {selectedPet && (
         <OriginStoryWizard
@@ -577,30 +549,6 @@ const styles = StyleSheet.create({
     color: "#FF8C42",
     fontWeight: "800",
     fontSize: 16,
-  },
-
-  header: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#fff",
-    marginBottom: 20,
-  },
-
-  petCard: {
-    backgroundColor: "#1C1C1E",
-    borderRadius: 20,
-    padding: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 15,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-  },
-
-  petName: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#F5F5F5",
   },
 
   pageBody: {

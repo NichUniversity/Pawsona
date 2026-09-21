@@ -2,8 +2,8 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
+import { GOLD, PARCHMENT, WOOD_DARK, WOOD_MID } from "../../constants/backyard-theme";
 import { DAILY_REWARD_SCHEDULE } from "../../context/PetInformation";
-import { useTheme, withAlpha } from "../../context/ThemeContext";
 import { CoinIcon } from "./CoinIcon";
 import { PressableScale } from "./PressableScale";
 
@@ -17,7 +17,12 @@ type Props = {
   onClose: () => void;
 };
 
-// Once-a-day "come back and claim your coins" popup shown from the Home tab.
+// Deeper brass than GOLD, for the big reward number so it still reads on the parchment card.
+const BRASS_DARK = "#A9701A";
+
+// Once-a-day "come back and claim your coins" popup shown from the Home tab. Styled as a
+// parchment notice in a wooden frame to match the Home tab's backyard signs (see
+// constants/backyard-theme.ts) rather than a theme-colored card.
 export function DailyRewardModal({
   visible,
   streakDay,
@@ -25,8 +30,6 @@ export function DailyRewardModal({
   onClaim,
   onClose,
 }: Props) {
-  const { theme, accentColor } = useTheme();
-
   // Slot in the repeating reward schedule to highlight in the strip below.
   const cycleDay = ((streakDay - 1) % DAILY_REWARD_SCHEDULE.length) + 1;
 
@@ -39,33 +42,19 @@ export function DailyRewardModal({
     >
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable
-          style={[
-            styles.card,
-            { backgroundColor: theme.card.background, borderColor: theme.card.border },
-          ]}
+          style={styles.card}
           onPress={(e) => e.stopPropagation()}
         >
-          <View
-            style={[
-              styles.iconBadge,
-              { backgroundColor: withAlpha(accentColor, 0.15) },
-            ]}
-          >
-            <MaterialCommunityIcons name="fire" size={30} color={accentColor} />
+          <View style={styles.iconBadge}>
+            <MaterialCommunityIcons name="fire" size={30} color={GOLD} />
           </View>
 
-          <Text style={[styles.title, { color: theme.text.primary }]}>
-            Day {streakDay} Streak!
-          </Text>
-          <Text style={[styles.subtitle, { color: theme.text.secondary }]}>
-            Come back every day to keep it going
-          </Text>
+          <Text style={styles.title}>Day {streakDay} Streak!</Text>
+          <Text style={styles.subtitle}>Come back every day to keep it going</Text>
 
           <View style={styles.rewardRow}>
             <CoinIcon size={22} />
-            <Text style={[styles.rewardText, { color: accentColor }]}>
-              +{reward}
-            </Text>
+            <Text style={styles.rewardText}>+{reward}</Text>
           </View>
 
           <View style={styles.scheduleRow}>
@@ -78,17 +67,15 @@ export function DailyRewardModal({
                   key={day}
                   style={[
                     styles.scheduleDay,
-                    {
-                      backgroundColor: isToday
-                        ? accentColor
-                        : withAlpha(theme.text.primary, isPast ? 0.18 : 0.08),
-                    },
+                    isPast && styles.scheduleDayPast,
+                    isToday && styles.scheduleDayToday,
                   ]}
                 >
                   <Text
                     style={[
                       styles.scheduleDayLabel,
-                      { color: isToday ? "#fff" : theme.text.secondary },
+                      isPast && { color: PARCHMENT },
+                      isToday && { color: WOOD_DARK },
                     ]}
                   >
                     {day}
@@ -98,10 +85,7 @@ export function DailyRewardModal({
             })}
           </View>
 
-          <PressableScale
-            style={[styles.claimButton, { backgroundColor: accentColor }]}
-            onPress={onClaim}
-          >
+          <PressableScale style={styles.claimButton} onPress={onClaim}>
             <Text style={styles.claimButtonText}>Claim +{reward} coins</Text>
           </PressableScale>
         </Pressable>
@@ -113,7 +97,7 @@ export function DailyRewardModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: "rgba(20, 10, 0, 0.6)",
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
@@ -122,8 +106,10 @@ const styles = StyleSheet.create({
   card: {
     width: "100%",
     maxWidth: 340,
-    borderRadius: 24,
-    borderWidth: 1,
+    backgroundColor: PARCHMENT,
+    borderRadius: 22,
+    borderWidth: 5,
+    borderColor: WOOD_MID,
     paddingVertical: 28,
     paddingHorizontal: 24,
     alignItems: "center",
@@ -136,12 +122,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 12,
+    backgroundColor: WOOD_MID,
+    borderWidth: 3,
+    borderColor: GOLD,
   },
 
   title: {
     fontSize: 22,
     fontWeight: "800",
     marginBottom: 4,
+    color: WOOD_DARK,
   },
 
   subtitle: {
@@ -149,6 +139,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "center",
     marginBottom: 18,
+    color: WOOD_MID,
   },
 
   rewardRow: {
@@ -161,6 +152,7 @@ const styles = StyleSheet.create({
   rewardText: {
     fontSize: 28,
     fontWeight: "800",
+    color: BRASS_DARK,
   },
 
   scheduleRow: {
@@ -175,22 +167,38 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "rgba(107, 74, 40, 0.12)",
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+
+  scheduleDayPast: {
+    backgroundColor: "rgba(107, 74, 40, 0.5)",
+  },
+
+  scheduleDayToday: {
+    backgroundColor: GOLD,
+    borderColor: WOOD_DARK,
   },
 
   scheduleDayLabel: {
     fontSize: 12,
     fontWeight: "800",
+    color: WOOD_MID,
   },
 
   claimButton: {
     width: "100%",
-    borderRadius: 16,
-    paddingVertical: 14,
+    borderRadius: 14,
+    paddingVertical: 13,
     alignItems: "center",
+    backgroundColor: GOLD,
+    borderWidth: 3,
+    borderColor: WOOD_DARK,
   },
 
   claimButtonText: {
-    color: "#fff",
+    color: WOOD_DARK,
     fontSize: 15,
     fontWeight: "800",
   },

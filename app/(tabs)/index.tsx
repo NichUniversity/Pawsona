@@ -27,6 +27,16 @@ import { PetRoomBackground } from '../../components/ui/PetRoomBackground';
 import { PressableScale } from '../../components/ui/PressableScale';
 import { SettingsMenu } from '../../components/ui/SettingsMenu';
 import { TabBackground } from '../../components/ui/TabBackground';
+import {
+  BULB_GLOW,
+  CLAY_RED,
+  FENCE_WOOD,
+  GOLD,
+  PARCHMENT,
+  PARCHMENT_INK_MUTED,
+  WOOD_DARK,
+  WOOD_MID,
+} from '../../constants/backyard-theme';
 import { ONBOARDING_STORAGE_KEY } from '../../constants/onboarding';
 import { useAuth } from '../../context/AuthContext';
 import { useOnboarding } from '../../context/OnboardingContext';
@@ -77,16 +87,16 @@ function categoryMeta(category: PetCategory) {
   return PET_CATEGORIES.find((c) => c.key === category)!;
 }
 
+// Printed on the wooden stats board, so fixed brass/cream colors rather than theme text.
 function PawRating({ value }: { value: number }) {
-  const { theme } = useTheme();
   return (
     <View style={styles.pawsRow}>
       {[1, 2, 3, 4, 5].map((paw) => (
         <MaterialCommunityIcons
           key={paw}
           name={paw <= value ? 'paw' : 'paw-outline'}
-          size={18}
-          color={paw <= value ? theme.text.primary : withAlpha(theme.text.primary, 0.35)}
+          size={16}
+          color={paw <= value ? GOLD : withAlpha(PARCHMENT, 0.4)}
         />
       ))}
     </View>
@@ -109,7 +119,7 @@ export default function HomeScreen() {
   } = usePets();
   const { signOut, deleteAccount } = useAuth();
   const { replayOnboarding } = useOnboarding();
-  const { accentKey, accentColor, setAccentKey, theme } = useTheme();
+  const { accentKey, accentColor, setAccentKey } = useTheme();
   const { hapticsEnabled, setHapticsEnabled, livingHomeScreen, setLivingHomeScreen } =
     useSettings();
   const tabBarClearance = useTabBarClearance();
@@ -414,7 +424,7 @@ export default function HomeScreen() {
         style={[styles.settingsButton, { top: insets.top + 8 }]}
         onPress={() => setSettingsVisible(true)}
       >
-        <MaterialCommunityIcons name="cog" size={22} color={withAlpha(theme.text.primary, 0.7)} />
+        <MaterialCommunityIcons name="cog" size={20} color={PARCHMENT} />
       </PressableScale>
 
       <ScrollView
@@ -432,38 +442,35 @@ export default function HomeScreen() {
               style={styles.logoImage}
               resizeMode="contain"
             />
-            <Text style={[styles.subtitle, { color: withAlpha(theme.text.primary, 0.85) }]}>
-              {hasConfirmedPet
-                ? 'Your pet pals, ready for adventure 🐾'
-                : 'Upload a photo to bring your pet to life'}
-            </Text>
+            <View style={styles.subtitlePlank}>
+              <Text style={styles.subtitle}>
+                {hasConfirmedPet
+                  ? 'Your pet pals, ready for adventure 🐾'
+                  : 'Upload a photo to bring your pet to life'}
+              </Text>
+            </View>
           </View>
 
           <PressableScale
-            style={[
-              styles.streakBanner,
-              {
-                backgroundColor: theme.card.background,
-                borderColor: theme.card.border,
-              },
-            ]}
+            style={styles.streakBanner}
             disabled={!canClaimDailyReward}
             onPress={handleClaimDailyReward}
           >
-            <View
-              style={[
-                styles.streakIconBadge,
-                { backgroundColor: withAlpha(accentColor, 0.15) },
-              ]}
-            >
-              <MaterialCommunityIcons name="fire" size={18} color={accentColor} />
+            {/* Four nails — it's a wooden sign screwed to the fence. */}
+            <View style={[styles.nail, { top: 5, left: 5 }]} />
+            <View style={[styles.nail, { top: 5, right: 5 }]} />
+            <View style={[styles.nail, { bottom: 5, left: 5 }]} />
+            <View style={[styles.nail, { bottom: 5, right: 5 }]} />
+
+            <View style={styles.streakIconBadge}>
+              <MaterialCommunityIcons name="fire" size={18} color={GOLD} />
             </View>
 
             <View style={styles.streakTextColumn}>
-              <Text style={[styles.streakTitle, { color: theme.text.primary }]}>
+              <Text style={styles.streakTitle}>
                 {streak > 0 ? `Day ${streak} streak` : 'Start your streak'}
               </Text>
-              <Text style={[styles.streakSubtitle, { color: theme.text.secondary }]}>
+              <Text style={styles.streakSubtitle}>
                 {canClaimDailyReward
                   ? `Tap to claim Day ${previewStreak} · +${previewReward} coins`
                   : longestStreak > streak
@@ -473,7 +480,7 @@ export default function HomeScreen() {
             </View>
 
             {canClaimDailyReward && (
-              <View style={[styles.streakClaimPill, { backgroundColor: accentColor }]}>
+              <View style={styles.streakClaimPill}>
                 <Text style={styles.streakClaimPillText}>Claim</Text>
               </View>
             )}
@@ -521,9 +528,9 @@ export default function HomeScreen() {
 
                       <View style={styles.nameInputWrapper}>
                         <TextInput
-                          style={[styles.nameInput, { color: accentColor }]}
+                          style={styles.nameInput}
                           placeholder="Pet's name"
-                          placeholderTextColor="#aaa"
+                          placeholderTextColor="#C9AD75"
                           value={currentEntry.name}
                           onChangeText={(text) =>
                             updateEntry(currentEntry.id, { name: text })
@@ -588,7 +595,7 @@ export default function HomeScreen() {
                             <MaterialCommunityIcons
                               name="paw"
                               size={32}
-                              color="#FFB067"
+                              color={GOLD}
                               style={styles.uploadIcon}
                             />
                             <Text style={styles.uploadText}>
@@ -612,7 +619,7 @@ export default function HomeScreen() {
                         key={attr.key}
                         style={styles.attributeRowSide}
                       >
-                        <Text style={[styles.attributeLabelSide, { color: theme.text.primary }]}>
+                        <Text style={styles.attributeLabelSide}>
                           {attr.label}
                         </Text>
 
@@ -643,7 +650,7 @@ export default function HomeScreen() {
                     <MaterialCommunityIcons
                       name="chevron-left"
                       size={20}
-                      color={theme.text.primary}
+                      color={PARCHMENT}
                     />
                   </PressableScale>
 
@@ -657,9 +664,7 @@ export default function HomeScreen() {
                         <View
                           style={[
                             styles.dot,
-                            { backgroundColor: withAlpha(theme.text.primary, 0.35) },
                             i === currentIndex && styles.dotActive,
-                            i === currentIndex && { backgroundColor: theme.text.primary },
                           ]}
                         />
                       </PressableScale>
@@ -678,7 +683,7 @@ export default function HomeScreen() {
                     <MaterialCommunityIcons
                       name="chevron-right"
                       size={20}
-                      color={theme.text.primary}
+                      color={PARCHMENT}
                     />
                   </PressableScale>
                 </View>
@@ -691,13 +696,13 @@ export default function HomeScreen() {
                       style={styles.chooseTypeButton}
                       onPress={() => setCategoryModalId(currentEntry.id)}
                     >
-                      <Text style={[styles.chooseTypeButtonText, { color: accentColor }]}>
+                      <Text style={styles.chooseTypeButtonText}>
                         What kind of pet is this?
                       </Text>
                       <MaterialCommunityIcons
                         name="chevron-down"
                         size={20}
-                        color={accentColor}
+                        color={GOLD}
                       />
                     </PressableScale>
                   ) : (
@@ -707,8 +712,7 @@ export default function HomeScreen() {
                           styles.smallAvatarBox,
                           {
                             backgroundColor:
-                              currentEntry.color ??
-                              'rgba(255,255,255,0.6)',
+                              currentEntry.color ?? PARCHMENT,
                           },
                         ]}
                       >
@@ -735,7 +739,7 @@ export default function HomeScreen() {
                             })
                           }
                         >
-                          <Text style={[styles.dropdownButtonText, { color: accentColor }]}>
+                          <Text style={styles.dropdownButtonText}>
                             {currentEntry.selectedEmoji
                               ? findAvatarOption(
                                   currentEntry.category,
@@ -750,7 +754,7 @@ export default function HomeScreen() {
                           <MaterialCommunityIcons
                             name="chevron-down"
                             size={20}
-                            color={accentColor}
+                            color={GOLD}
                           />
                         </PressableScale>
 
@@ -760,7 +764,7 @@ export default function HomeScreen() {
                             handleChangeCategory(currentEntry.id)
                           }
                         >
-                          <Text style={[styles.changeTypeLinkText, { color: withAlpha(theme.text.primary, 0.85) }]}>
+                          <Text style={styles.changeTypeLinkText}>
                             Change pet type
                           </Text>
                         </PressableScale>
@@ -779,7 +783,7 @@ export default function HomeScreen() {
                       handleConfirm(currentEntry.id)
                     }
                   >
-                    <Text style={[styles.confirmButtonText, { color: accentColor }]}>
+                    <Text style={styles.confirmButtonText}>
                       Confirm Avatar
                     </Text>
                   </PressableScale>
@@ -1059,16 +1063,41 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
 
+  // Small painted plank under the logo — the sky/lawn behind it changes with the art (and the
+  // gradient behind it changes with the theme when Living Home Screen is off), so the caption
+  // gets its own fixed surface instead of trusting a text color to stay legible.
+  subtitlePlank: {
+    marginTop: 8,
+    backgroundColor: 'rgba(62, 42, 24, 0.78)',
+    borderWidth: 1.5,
+    borderColor: WOOD_MID,
+    borderRadius: 12,
+    paddingVertical: 5,
+    paddingHorizontal: 14,
+  },
+
   streakBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
-    borderRadius: 18,
-    borderWidth: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    backgroundColor: FENCE_WOOD,
+    borderRadius: 14,
+    borderWidth: 3,
+    borderColor: WOOD_DARK,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
     marginBottom: 24,
     gap: 12,
+    boxShadow: '0 3px 8px rgba(0, 0, 0, 0.35)',
+  },
+
+  nail: {
+    position: 'absolute',
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: WOOD_DARK,
+    opacity: 0.85,
   },
 
   streakIconBadge: {
@@ -1077,6 +1106,9 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(62, 42, 24, 0.55)',
+    borderWidth: 1.5,
+    borderColor: GOLD,
   },
 
   streakTextColumn: {
@@ -1087,23 +1119,28 @@ const styles = StyleSheet.create({
     fontFamily: 'Fredoka_600SemiBold',
     fontSize: 14,
     fontWeight: '700',
+    color: PARCHMENT,
   },
 
   streakSubtitle: {
     fontFamily: 'Fredoka_400Regular',
     fontSize: 12,
     marginTop: 2,
+    color: '#E8D5AB',
   },
 
   streakClaimPill: {
-    borderRadius: 12,
-    paddingVertical: 6,
+    borderRadius: 10,
+    paddingVertical: 5,
     paddingHorizontal: 12,
+    backgroundColor: GOLD,
+    borderWidth: 2,
+    borderColor: WOOD_DARK,
   },
 
   streakClaimPillText: {
     fontFamily: 'Fredoka_700Bold',
-    color: '#fff',
+    color: WOOD_DARK,
     fontSize: 12,
     fontWeight: '800',
   },
@@ -1112,11 +1149,14 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 16,
     zIndex: 20,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(62, 42, 24, 0.85)',
+    borderWidth: 2,
+    borderColor: WOOD_MID,
   },
 
   logoImage: {
@@ -1131,9 +1171,8 @@ const styles = StyleSheet.create({
 
   subtitle: {
     fontFamily: 'Fredoka_400Regular',
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.85)',
-    marginTop: 6,
+    fontSize: 13,
+    color: PARCHMENT,
     textAlign: 'center',
   },
 
@@ -1156,10 +1195,12 @@ const styles = StyleSheet.create({
   },
 
   arrowButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: WOOD_MID,
+    borderWidth: 2,
+    borderColor: WOOD_DARK,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1187,13 +1228,15 @@ const styles = StyleSheet.create({
   },
 
   nameInput: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    paddingVertical: 10,
+    backgroundColor: WOOD_MID,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: WOOD_DARK,
+    paddingVertical: 9,
     paddingHorizontal: 16,
     fontFamily: 'Fredoka_600SemiBold',
     fontSize: 14,
-    color: '#FF8C42',
+    color: PARCHMENT,
     textAlign: 'center',
   },
 
@@ -1211,7 +1254,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(220,60,60,0.9)',
+    backgroundColor: CLAY_RED,
+    borderWidth: 2,
+    borderColor: PARCHMENT,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
@@ -1225,7 +1270,7 @@ const styles = StyleSheet.create({
     left: -10,
     width: 190,
     height: 190,
-    borderRadius: 34,
+    borderRadius: 26,
     backgroundColor: '#FF8C42',
     shadowColor: '#FF8C42',
     shadowOffset: { width: 0, height: 0 },
@@ -1235,7 +1280,7 @@ const styles = StyleSheet.create({
   },
 
   uploadBoxShadow: {
-    borderRadius: 24,
+    borderRadius: 14,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -1248,18 +1293,27 @@ const styles = StyleSheet.create({
   uploadBox: {
     width: 170,
     height: 170,
-    borderRadius: 24,
-    borderStyle: 'dashed',
+    borderRadius: 14,
+    // A wooden picture frame: the photo (or the empty-state parchment) sits inside the border.
+    borderWidth: 7,
+    borderColor: WOOD_MID,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    backgroundColor: '#fff',
+    backgroundColor: PARCHMENT,
   },
 
   uploadEmptyState: {
+    flex: 1,
+    alignSelf: 'stretch',
+    margin: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 10,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: '#C9AD75',
+    borderRadius: 8,
   },
 
   uploadIcon: {
@@ -1268,9 +1322,9 @@ const styles = StyleSheet.create({
 
   uploadText: {
     fontFamily: 'Fredoka_400Regular',
+    fontSize: 13,
     textAlign: 'center',
-    color: '#888',
-    paddingHorizontal: 10,
+    color: PARCHMENT_INK_MUTED,
   },
 
   uploadedImage: {
@@ -1281,7 +1335,9 @@ const styles = StyleSheet.create({
   avatarBox: {
     width: 62,
     height: 62,
-    borderRadius: 18,
+    borderRadius: 16,
+    borderWidth: 3,
+    borderColor: WOOD_MID,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -1315,19 +1371,28 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: 'rgba(255, 217, 138, 0.4)',
   },
 
   dotActive: {
-    backgroundColor: '#fff',
+    backgroundColor: BULB_GLOW,
     width: 20,
+    // Lit like one of the string-light bulbs along the fence.
+    boxShadow: `0 0 8px ${BULB_GLOW}`,
   },
 
   attributesSide: {
-    marginLeft: -10,
+    marginLeft: -22,
     marginTop: 55,
-    gap: 10,
+    gap: 8,
     justifyContent: 'center',
+    // A little wooden stats board: the labels/paws are printed on it, not on the sky.
+    backgroundColor: 'rgba(62, 42, 24, 0.88)',
+    borderWidth: 2,
+    borderColor: WOOD_MID,
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
   },
 
   attributeRowSide: {
@@ -1337,7 +1402,7 @@ const styles = StyleSheet.create({
 
   attributeLabelSide: {
     fontFamily: 'Fredoka_600SemiBold',
-    color: '#fff',
+    color: PARCHMENT,
     fontSize: 11,
   },
 
@@ -1357,15 +1422,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#fff',
-    paddingVertical: 14,
+    backgroundColor: FENCE_WOOD,
+    borderWidth: 3,
+    borderColor: WOOD_DARK,
+    paddingVertical: 12,
     paddingHorizontal: 20,
-    borderRadius: 16,
+    borderRadius: 12,
   },
 
   chooseTypeButtonText: {
     fontFamily: 'Fredoka_600SemiBold',
-    color: '#FF8C42',
+    color: PARCHMENT,
     fontSize: 14,
   },
 
@@ -1380,7 +1447,9 @@ const styles = StyleSheet.create({
   smallAvatarBox: {
     width: 70,
     height: 70,
-    borderRadius: 16,
+    borderRadius: 14,
+    borderWidth: 3,
+    borderColor: WOOD_MID,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1393,15 +1462,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#fff',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 16,
+    backgroundColor: FENCE_WOOD,
+    borderWidth: 3,
+    borderColor: WOOD_DARK,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 12,
   },
 
   dropdownButtonText: {
     fontFamily: 'Fredoka_600SemiBold',
-    color: '#FF8C42',
+    color: PARCHMENT,
     fontSize: 14,
   },
 
@@ -1409,19 +1480,24 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginTop: 8,
     marginLeft: 4,
+    backgroundColor: 'rgba(62, 42, 24, 0.78)',
+    borderRadius: 10,
+    paddingVertical: 3,
+    paddingHorizontal: 10,
   },
 
   changeTypeLinkText: {
     fontFamily: 'Fredoka_600SemiBold',
-    color: 'rgba(255,255,255,0.85)',
+    color: PARCHMENT,
     fontSize: 12,
-    textDecorationLine: 'underline',
   },
 
   confirmButton: {
-    backgroundColor: '#fff',
+    backgroundColor: GOLD,
+    borderWidth: 3,
+    borderColor: WOOD_DARK,
     paddingVertical: 10,
-    paddingHorizontal: 24,
+    paddingHorizontal: 26,
     borderRadius: 12,
     marginTop: 16,
     alignSelf: 'center',
@@ -1429,13 +1505,13 @@ const styles = StyleSheet.create({
 
   confirmButtonText: {
     fontFamily: 'Fredoka_700Bold',
-    color: '#FF8C42',
+    color: WOOD_DARK,
     fontSize: 14,
   },
 
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(20, 10, 0, 0.55)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1443,15 +1519,17 @@ const styles = StyleSheet.create({
   dropdownMenu: {
     width: '80%',
     maxHeight: 380,
-    backgroundColor: '#fff',
+    backgroundColor: PARCHMENT,
     borderRadius: 16,
+    borderWidth: 4,
+    borderColor: WOOD_MID,
     paddingVertical: 8,
   },
 
   modalTitle: {
     fontFamily: 'Fredoka_700Bold',
     fontSize: 15,
-    color: '#333',
+    color: WOOD_DARK,
     textAlign: 'center',
     paddingVertical: 10,
     paddingHorizontal: 16,
@@ -1461,8 +1539,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 12,
+    paddingVertical: 11,
     paddingHorizontal: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(107, 74, 40, 0.18)',
   },
 
   dropdownItemEmoji: {
@@ -1472,13 +1552,15 @@ const styles = StyleSheet.create({
   dropdownItemText: {
     fontFamily: 'Fredoka_600SemiBold',
     fontSize: 15,
-    color: '#333',
+    color: WOOD_DARK,
   },
 
   confirmCard: {
     width: '82%',
-    backgroundColor: '#fff',
+    backgroundColor: PARCHMENT,
     borderRadius: 16,
+    borderWidth: 4,
+    borderColor: WOOD_MID,
     paddingVertical: 18,
     paddingHorizontal: 20,
   },
@@ -1486,7 +1568,7 @@ const styles = StyleSheet.create({
   confirmBody: {
     fontFamily: 'Fredoka_400Regular',
     fontSize: 13,
-    color: '#555',
+    color: WOOD_MID,
     textAlign: 'center',
     lineHeight: 18,
     marginTop: 4,
@@ -1504,13 +1586,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: 'rgba(107, 74, 40, 0.14)',
   },
 
   confirmCancelButtonText: {
     fontFamily: 'Fredoka_600SemiBold',
     fontSize: 14,
-    color: '#555',
+    color: WOOD_MID,
   },
 
   confirmDeleteButton: {
@@ -1519,7 +1601,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#DC3C3C',
+    backgroundColor: CLAY_RED,
   },
 
   confirmDeleteButtonText: {
@@ -1532,6 +1614,8 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
+    borderWidth: 2,
+    borderColor: WOOD_MID,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1547,14 +1631,14 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: '#8C6C4B',
+    backgroundColor: WOOD_MID,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#fff',
+    borderColor: PARCHMENT,
   },
 
   dropdownItemTextLocked: {
-    color: '#999',
+    color: '#A89880',
   },
 });
