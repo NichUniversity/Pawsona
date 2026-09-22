@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AvatarDisplay } from "../../components/ui/AvatarDisplay";
 import { CoinIcon } from "../../components/ui/CoinIcon";
 import { PressableScale } from "../../components/ui/PressableScale";
+import { SailingAdventureBackground } from "../../components/ui/SailingAdventureBackground";
 import { TabBackground } from "../../components/ui/TabBackground";
 import { PetEntry, usePets } from "../../context/PetInformation";
 import { useTheme, withAlpha } from "../../context/ThemeContext";
@@ -203,7 +204,10 @@ export default function Adventure() {
 
   return (
     <View style={{ flex: 1 }}>
-      <TabBackground />
+      {/* TEMP PREVIEW: swapped in to preview the new sailing background/flag
+          animation without wiring a real area yet. Revert to <TabBackground />
+          once approved (see SailingAdventureBackground.tsx). */}
+      <SailingAdventureBackground />
 
       <ScrollView contentContainerStyle={styles.container}>
         {!selectedArea && (

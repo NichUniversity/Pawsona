@@ -9,6 +9,7 @@ import {
 import { AvatarDisplay } from "../../components/ui/AvatarDisplay";
 import { CoinIcon } from "../../components/ui/CoinIcon";
 import { PressableScale } from "../../components/ui/PressableScale";
+import { StoreDiagonalPattern } from "../../components/ui/StoreDiagonalPattern";
 import { TabBackground } from "../../components/ui/TabBackground";
 import { PetEntry, usePets } from "../../context/PetInformation";
 import { useTheme, withAlpha } from "../../context/ThemeContext";
@@ -84,6 +85,7 @@ export default function StoreTab() {
   return (
     <View style={{ flex: 1 }}>
       <TabBackground />
+      <StoreDiagonalPattern accentColor={accentColor} />
 
       <ScrollView
         contentContainerStyle={[
