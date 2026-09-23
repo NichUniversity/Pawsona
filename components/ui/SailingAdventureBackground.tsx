@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Easing,
@@ -15,8 +15,8 @@ import Svg, { Path } from "react-native-svg";
 // flapping toward the sunset. Everything but the flag is built on RN's
 // built-in Animated API (not Reanimated) to match AmbientEffects/
 // WalkingSprite/ScrollingLayer, which all use the same API already; the flag
-// is a hand-drawn 6-frame sprite cycle (see FlagCloth below) played the same
-// way WalkingSprite plays a pet's walk cycle.
+// and collar are hand-drawn sprite cycles (see SpriteLoop below)
+// played the same way WalkingSprite plays a pet's walk cycle.
 //
 // None of these elements existed as separate art in the source painting — the
 // flag and collar are new additions (drawn into bare sky/neck), and the three
@@ -36,21 +36,17 @@ const IMAGE_HEIGHT = 1672;
 const IMAGE_ASPECT = IMAGE_WIDTH / IMAGE_HEIGHT;
 const SKY_BACKDROP = "#5E7EC8";
 
-// --- Flag: a 6-frame hand-drawn flap cycle (assets/animations/flag_wave_0..5
-// .png), not a shape we transform ourselves — the art already supplies the
-// waving motion. Each frame is a tall, mostly-transparent canvas (362x724)
-// with the flag drawn in the lower-middle, giving the cloth room to swing
-// without ever getting clipped; the pole edge sits close to the frame's
-// right side and is already oriented flowing left, matching this scene's
-// wind direction, so no mirroring is needed.
+// --- Flag: a 12-frame hand-drawn flap cycle (assets/animations/flag_wave_0..11
+// .png) that loops seamlessly (frame 11 flows straight back into frame 0).
+// The art already supplies the waving motion, so we only step through frames.
 //
-// The pole edge isn't at the exact same spot in every frame — the whole flag
-// rocks a few pixels frame to frame, not just the tail (natural secondary
-// motion in the source art, not a bug). Anchoring to one averaged position
-// made that rocking read as the flag drifting loose from the mast instead of
-// flapping on it, so FLAG_POLE_FRACS gives each frame's own measured pole
-// point instead, and FlagCloth repositions the box per frame so that point
-// always lands exactly on FLAG_ANCHOR_X/Y_FRAC — the fixed spot on the mast.
+// All 12 frames were cut from one hand-drawn strip and pre-aligned when
+// exported: each sits on an identical 186x372 transparent canvas with its
+// pole edge registered to the same pixel (FLAG_POLE below) in every frame,
+// so the box never moves — only the cloth changes. (The earlier 6-frame set
+// drifted up to ~20px between frames and needed a per-frame offset table.)
+// Alpha was also cleaned on export: the cloth body had been ~2% translucent,
+// letting the sky tint through, and a faint haze surrounded each flag.
 const FLAG_FRAMES = [
   require("../../assets/animations/flag_wave_0.png"),
   require("../../assets/animations/flag_wave_1.png"),
@@ -58,39 +54,36 @@ const FLAG_FRAMES = [
   require("../../assets/animations/flag_wave_3.png"),
   require("../../assets/animations/flag_wave_4.png"),
   require("../../assets/animations/flag_wave_5.png"),
+  require("../../assets/animations/flag_wave_6.png"),
+  require("../../assets/animations/flag_wave_7.png"),
+  require("../../assets/animations/flag_wave_8.png"),
+  require("../../assets/animations/flag_wave_9.png"),
+  require("../../assets/animations/flag_wave_10.png"),
+  require("../../assets/animations/flag_wave_11.png"),
 ];
-const FLAG_SLOT_ASPECT = 724 / 362;
-// Measured per-frame pole position, as a fraction of each frame's own 362x724 canvas.
-const FLAG_POLE_FRACS = [
-  { x: 0.9641, y: 0.5359 },
-  { x: 0.9641, y: 0.5028 },
-  { x: 0.9392, y: 0.5256 },
-  { x: 0.9475, y: 0.5166 },
-  { x: 0.9254, y: 0.5035 },
-  { x: 0.9088, y: 0.5311 },
-];
+const FLAG_SLOT_ASPECT = 372 / 186;
+// Pole point, as a fraction of the frame canvas — identical for every frame.
+const FLAG_POLE = { x: 349 / 362, y: 388 / 724 };
 const FLAG_ANCHOR_X_FRAC = 0.4017;
 const FLAG_ANCHOR_Y_FRAC = 0.2414;
 const FLAG_BOX_WIDTH_FRAC = 0.175;
-const FLAG_FPS = 3;
+// 12 frames at 5.5fps = a ~2.2s loop — an easy, relaxed wave. Raise to
+// speed it up (7 = ~1.7s), lower to slow it further.
+const FLAG_FPS = 5.5;
+const FLAG_SEQUENCE = FLAG_FRAMES.map((_, i) => i);
 
-// --- Collar: a 6-frame hand-drawn flap cycle (assets/animations/collar_wave_0..5
-// .png), the same kind of asset and the same technique as the flag above — a
-// knotted bandana collar with a trailing tail that catches the wind, where the
-// art already supplies the flowing motion instead of us transforming a shape.
-// Each frame is a tall, mostly-transparent 362x724 canvas with the collar's
-// ring/knot on the right and the tail trailing left, oriented flowing with
-// this scene's wind (no mirroring needed, same as the flag).
+// --- Collar: a 10-frame hand-drawn flap cycle (assets/animations/collar_wave_0..9
+// .png) — a red bandana tied in a knot at the neck, its long tail whipping
+// and curling in the wind. Prepared like the flag: cut from one hand-drawn
+// sheet (two rows of five), alpha cleaned, scaled so the band is 132px wide
+// (matching the previous collar art exactly), and pre-aligned so the
+// band and knot sit on the same pixel of an identical 320x640 canvas in every
+// frame (COLLAR_POLE = the band's top-left corner). Only the tails move.
+// All 10 frames loop cleanly (frame 9 flows straight back into frame 0).
 //
-// As with the flag, the ring isn't pixel-identical across frames — it rocks
-// slightly along with the tail's flap cycle — so COLLAR_POLE_FRACS gives each
-// frame's own measured ring/knot position (the rivet ball on the ring, found
-// by scanning in from the right edge for the first column whose vertical
-// content run exceeds 40px) and Collar repositions the box per frame so that
-// point always lands on COLLAR_ANCHOR_X/Y_FRAC — the fixed spot on the neck.
-// Anchor position and scale were tuned by compositing test frames directly
-// onto assets/backgrounds/adventure_sailing_sunset.png until the ring's dark
-// opening sat right at the dog's neck at a believable size.
+// Placement was tuned by compositing the frames onto
+// adventure_sailing_sunset.png: the band spans the dog's neck at the same
+// width and height the previous collar's ring did.
 const COLLAR_FRAMES = [
   require("../../assets/animations/collar_wave_0.png"),
   require("../../assets/animations/collar_wave_1.png"),
@@ -98,22 +91,49 @@ const COLLAR_FRAMES = [
   require("../../assets/animations/collar_wave_3.png"),
   require("../../assets/animations/collar_wave_4.png"),
   require("../../assets/animations/collar_wave_5.png"),
+  require("../../assets/animations/collar_wave_6.png"),
+  require("../../assets/animations/collar_wave_7.png"),
+  require("../../assets/animations/collar_wave_8.png"),
+  require("../../assets/animations/collar_wave_9.png"),
 ];
-const COLLAR_SLOT_ASPECT = 724 / 362;
-// Measured per-frame ring/knot position, as a fraction of each frame's own 362x724 canvas.
-const COLLAR_POLE_FRACS = [
-  { x: 0.9972, y: 0.471 },
-  { x: 0.9365, y: 0.4696 },
-  { x: 0.9227, y: 0.4682 },
-  { x: 0.884, y: 0.4675 },
-  { x: 0.8702, y: 0.4675 },
-  { x: 0.8812, y: 0.4675 },
+const COLLAR_SLOT_ASPECT = 640 / 320;
+// Band top-left corner, as a fraction of the frame canvas — identical for every frame.
+const COLLAR_POLE = { x: 150 / 320, y: 300 / 640 };
+const COLLAR_ANCHOR_X_FRAC = 0.3241;
+const COLLAR_ANCHOR_Y_FRAC = 0.5712;
+const COLLAR_BOX_WIDTH_FRAC = 0.2777;
+// Same frame rate as the flag, so both move to one wind (10 frames = ~1.8s loop).
+const COLLAR_FPS = FLAG_FPS;
+const COLLAR_SEQUENCE = COLLAR_FRAMES.map((_, i) => i);
+
+// --- Wind: soft curled streaks that drift right-to-left (the same way the
+// flag and collar are blowing), fading in, crossing part of the scene, and
+// fading out. Each gust has its own lane, speed and start offset so they
+// never pulse in unison. Drawn as SVG strokes and moved with the native
+// driver only (translateX + opacity), so they cost nothing on the JS thread.
+type GustSpec = {
+  xFrac: number; // where the gust starts (its right edge), as a fraction of image width
+  yFrac: number; // vertical lane, as a fraction of image height
+  widthFrac: number; // streak length, as a fraction of image width
+  travelFrac: number; // how far left it drifts over its life, fraction of image width
+  duration: number; // ms from fade-in to fade-out
+  gap: number; // ms of rest between passes
+  delay: number; // ms before the first pass
+  maxOpacity: number;
+};
+const WIND_COLOR = "#FFF6E8";
+const GUSTS: GustSpec[] = [
+  { xFrac: 0.95, yFrac: 0.14, widthFrac: 0.3, travelFrac: 0.45, duration: 3600, gap: 1800, delay: 0, maxOpacity: 0.55 },
+  { xFrac: 0.7, yFrac: 0.22, widthFrac: 0.22, travelFrac: 0.4, duration: 3000, gap: 2600, delay: 1400, maxOpacity: 0.45 },
+  { xFrac: 1.0, yFrac: 0.3, widthFrac: 0.26, travelFrac: 0.5, duration: 4000, gap: 2000, delay: 2600, maxOpacity: 0.5 },
+  { xFrac: 0.6, yFrac: 0.44, widthFrac: 0.2, travelFrac: 0.35, duration: 3200, gap: 3000, delay: 800, maxOpacity: 0.4 },
+  { xFrac: 0.95, yFrac: 0.55, widthFrac: 0.28, travelFrac: 0.45, duration: 3800, gap: 2400, delay: 3400, maxOpacity: 0.45 },
+  { xFrac: 0.5, yFrac: 0.68, widthFrac: 0.22, travelFrac: 0.4, duration: 3400, gap: 2800, delay: 2000, maxOpacity: 0.35 },
 ];
-const COLLAR_ANCHOR_X_FRAC = 0.43;
-const COLLAR_ANCHOR_Y_FRAC = 0.585;
-const COLLAR_BOX_WIDTH_FRAC = 0.2;
-// A touch faster than the flag — this is loose fabric, not canvas.
-const COLLAR_FPS = 3.5;
+// Streak shape in a 120x24 box: a long tail on the right tapering into a
+// small curl on the left — the leading edge, since the wind blows leftward.
+const GUST_PATH = "M118,13 C96,13 80,8 60,10 C42,12 30,19 18,16 C9,14 8,6 15,6 C20,6 21,11 17,12";
+const GUST_ASPECT = 24 / 120;
 
 type BirdSpec = { xFrac: number; yFrac: number; widthFrac: number; phase: number };
 
@@ -178,6 +198,23 @@ export function SailingAdventureBackground() {
               height: rect.height,
             }}
           />
+          {/* Clipped to the painting so streaks never drift over the
+              letterbox bars around it; inside it, gusts are positioned
+              relative to the painting's own top-left corner. */}
+          <View
+            style={{
+              position: "absolute",
+              left: rect.left,
+              top: rect.top,
+              width: rect.width,
+              height: rect.height,
+              overflow: "hidden",
+            }}
+          >
+            {GUSTS.map((gust, i) => (
+              <WindGust key={i} rect={{ ...rect, left: 0, top: 0 }} gust={gust} />
+            ))}
+          </View>
           <FlagCloth rect={rect} />
           <Collar rect={rect} />
           {BIRDS.map((bird, i) => (
@@ -220,189 +257,171 @@ function useOscillation(from: number, to: number, duration: number, delay = 0) {
 }
 
 /**
- * Plays the flag's 6-frame flap cycle via requestAnimationFrame — the same
- * crisp, drift-free stepping technique WalkingSprite uses, just without its
- * body bob/sway (that's tuned for a walking gait and belongs to pet avatars,
- * per WalkingSprite's own doc comment; this flag's motion already comes
- * entirely from the art itself).
+ * Steps through a pre-aligned sprite cycle via requestAnimationFrame (the
+ * same drift-free stepping WalkingSprite uses), forward-only through
+ * `sequence` so ripples always travel with the wind rather than rewinding.
  *
- * Played as a forward-then-backward "ping-pong" (0,1,2,3,4,5,4,3,2,1,0,...)
- * rather than wrapping straight back to frame 0. The source art is a single
- * calm-to-windswept-to-calm sweep, so a hard wrap briefly showed two similar
- * calm frames back to back at the loop seam (5 then 0), which read as the
- * flag pausing for a beat. Reversing direction at each end instead means the
- * frame never repeats itself, so the motion never visibly stalls.
+ * No cross-fade: frames cut instantly. Every frame stays mounted and decoded
+ * in the same box, and only the current one is visible, so a swap is just an
+ * opacity flip — no blank flash while an image source loads, and never two
+ * poses on screen at once (the old two-layer cross-fade could show both on
+ * web when the layers finished loading at different times).
  */
+function SpriteLoop({
+  frames,
+  sequence,
+  fps,
+  box,
+}: {
+  frames: number[];
+  sequence: number[];
+  fps: number;
+  box: { left: number; top: number; width: number; height: number };
+}) {
+  const [frameIndex, setFrameIndex] = useState(sequence[0]);
+
+  useEffect(() => {
+    const frameDuration = 1000 / fps;
+    const period = sequence.length;
+    let rafId: number;
+    let lastTime: number | null = null;
+    let step = 0;
+    let stopped = false;
+
+    const tick = (time: number) => {
+      if (stopped) return;
+      if (lastTime === null) lastTime = time;
+      const elapsed = time - lastTime;
+
+      if (elapsed >= frameDuration) {
+        const advance = Math.floor(elapsed / frameDuration);
+        lastTime += advance * frameDuration;
+        step = (step + advance) % period;
+        setFrameIndex(sequence[step]);
+      }
+
+      rafId = requestAnimationFrame(tick);
+    };
+
+    rafId = requestAnimationFrame(tick);
+    return () => {
+      stopped = true;
+      cancelAnimationFrame(rafId);
+    };
+  }, [fps, sequence]);
+
+  return (
+    <>
+      {frames.map((src, i) => (
+        <Image
+          key={i}
+          source={src}
+          style={[{ position: "absolute" }, box, { opacity: i === frameIndex ? 1 : 0 }]}
+          resizeMode="stretch"
+        />
+      ))}
+    </>
+  );
+}
+
+/** The flag on the mast — its pole point pinned to FLAG_ANCHOR. */
 function FlagCloth({ rect }: { rect: ContainRect }) {
   const boxW = rect.width * FLAG_BOX_WIDTH_FRAC;
   const boxH = boxW * FLAG_SLOT_ASPECT;
   const anchorX = rect.left + rect.width * FLAG_ANCHOR_X_FRAC;
   const anchorY = rect.top + rect.height * FLAG_ANCHOR_Y_FRAC;
-
-  const [frameIndex, setFrameIndex] = useState(0);
-  // The just-previous frame, kept on-screen at full opacity underneath while
-  // the new frame fades in on top of it (see the fade effect below) — this is
-  // what makes consecutive frames cross-dissolve instead of cutting instantly.
-  const prevFrameIndexRef = useRef(0);
-  const fade = useRef(new Animated.Value(1)).current;
-
-  // Each frame's own pole point, so the box shifts slightly per frame and the
-  // pole always lands exactly on (anchorX, anchorY) — see the comment above
-  // FLAG_POLE_FRACS for why this can't just be one fixed offset.
-  const pole = FLAG_POLE_FRACS[frameIndex];
-  const left = anchorX - boxW * pole.x;
-  const top = anchorY - boxH * pole.y;
-
-  useEffect(() => {
-    const frameDuration = 1000 / FLAG_FPS;
-    const frameCount = FLAG_FRAMES.length;
-    // Ping-pong period: 0,1,2,3,4,5,4,3,2,1,(0,...) — each end frame is a
-    // single beat, not held for two, so the direction reverses cleanly.
-    const period = 2 * (frameCount - 1);
-    let rafId: number;
-    let lastTime: number | null = null;
-    let step = 0;
-    let currentIndex = 0;
-    let stopped = false;
-
-    const tick = (time: number) => {
-      if (stopped) return;
-      if (lastTime === null) lastTime = time;
-      const elapsed = time - lastTime;
-
-      if (elapsed >= frameDuration) {
-        const advance = Math.floor(elapsed / frameDuration);
-        lastTime += advance * frameDuration;
-        step = (step + advance) % period;
-        const index = step < frameCount ? step : period - step;
-        // Recorded synchronously here (not in a render/effect keyed off
-        // frameIndex) so it's always one step ahead of the state update below
-        // and never lags a frame behind what's about to render.
-        prevFrameIndexRef.current = currentIndex;
-        currentIndex = index;
-        setFrameIndex(index);
-      }
-
-      rafId = requestAnimationFrame(tick);
-    };
-
-    rafId = requestAnimationFrame(tick);
-    return () => {
-      stopped = true;
-      cancelAnimationFrame(rafId);
-    };
-  }, []);
-
-  // Cross-fade into the new frame: snap the fade to 0 the instant frameIndex
-  // changes (the previous-frame layer below is still opaque underneath at
-  // that point, so nothing flashes), then animate it up to 1 over a chunk of
-  // the frame's own hold time — short enough to fully settle before the next
-  // frame swap starts, so it reads as a smooth blend rather than a held cross-fade.
-  useEffect(() => {
-    fade.setValue(0);
-    Animated.timing(fade, {
-      toValue: 1,
-      duration: Math.min(180, (1000 / FLAG_FPS) * 0.6),
-      easing: Easing.linear,
-      useNativeDriver: true,
-    }).start();
-  }, [frameIndex, fade]);
-
   return (
-    <View style={{ position: "absolute", left, top, width: boxW, height: boxH }}>
-      <Image
-        source={FLAG_FRAMES[prevFrameIndexRef.current]}
-        style={{ position: "absolute", width: "100%", height: "100%" }}
-        resizeMode="contain"
-      />
-      <Animated.Image
-        source={FLAG_FRAMES[frameIndex]}
-        style={{ position: "absolute", width: "100%", height: "100%", opacity: fade }}
-        resizeMode="contain"
-      />
-    </View>
+    <SpriteLoop
+      frames={FLAG_FRAMES}
+      sequence={FLAG_SEQUENCE}
+      fps={FLAG_FPS}
+      box={{
+        left: anchorX - boxW * FLAG_POLE.x,
+        top: anchorY - boxH * FLAG_POLE.y,
+        width: boxW,
+        height: boxH,
+      }}
+    />
   );
 }
 
-/**
- * Plays the collar's 6-frame flap cycle exactly like FlagCloth above — same
- * rAF stepping, same per-frame anchor repositioning, same ping-pong playback
- * (0,1,2,3,4,5,4,3,2,1,0,...) so the loop never stalls at the seam between a
- * calm end frame and a hard-wrapped start frame.
- */
+/** The dog's bandana collar — its band pinned to COLLAR_ANCHOR on the neck. */
 function Collar({ rect }: { rect: ContainRect }) {
   const boxW = rect.width * COLLAR_BOX_WIDTH_FRAC;
   const boxH = boxW * COLLAR_SLOT_ASPECT;
   const anchorX = rect.left + rect.width * COLLAR_ANCHOR_X_FRAC;
   const anchorY = rect.top + rect.height * COLLAR_ANCHOR_Y_FRAC;
+  return (
+    <SpriteLoop
+      frames={COLLAR_FRAMES}
+      sequence={COLLAR_SEQUENCE}
+      fps={COLLAR_FPS}
+      box={{
+        left: anchorX - boxW * COLLAR_POLE.x,
+        top: anchorY - boxH * COLLAR_POLE.y,
+        width: boxW,
+        height: boxH,
+      }}
+    />
+  );
+}
 
-  const [frameIndex, setFrameIndex] = useState(0);
-  // Same cross-fade technique as FlagCloth above — see its comments for why.
-  const prevFrameIndexRef = useRef(0);
-  const fade = useRef(new Animated.Value(1)).current;
+/** One wind streak: fades in, drifts left, fades out, rests, repeats. */
+function WindGust({ rect, gust }: { rect: ContainRect; gust: GustSpec }) {
+  const w = rect.width * gust.widthFrac;
+  const h = w * GUST_ASPECT;
+  const left = rect.left + rect.width * gust.xFrac - w;
+  const top = rect.top + rect.height * gust.yFrac - h / 2;
+  const travel = rect.width * gust.travelFrac;
 
-  const pole = COLLAR_POLE_FRACS[frameIndex];
-  const left = anchorX - boxW * pole.x;
-  const top = anchorY - boxH * pole.y;
-
-  useEffect(() => {
-    const frameDuration = 1000 / COLLAR_FPS;
-    const frameCount = COLLAR_FRAMES.length;
-    const period = 2 * (frameCount - 1);
-    let rafId: number;
-    let lastTime: number | null = null;
-    let step = 0;
-    let currentIndex = 0;
-    let stopped = false;
-
-    const tick = (time: number) => {
-      if (stopped) return;
-      if (lastTime === null) lastTime = time;
-      const elapsed = time - lastTime;
-
-      if (elapsed >= frameDuration) {
-        const advance = Math.floor(elapsed / frameDuration);
-        lastTime += advance * frameDuration;
-        step = (step + advance) % period;
-        const index = step < frameCount ? step : period - step;
-        prevFrameIndexRef.current = currentIndex;
-        currentIndex = index;
-        setFrameIndex(index);
-      }
-
-      rafId = requestAnimationFrame(tick);
-    };
-
-    rafId = requestAnimationFrame(tick);
-    return () => {
-      stopped = true;
-      cancelAnimationFrame(rafId);
-    };
-  }, []);
+  const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    fade.setValue(0);
-    Animated.timing(fade, {
-      toValue: 1,
-      duration: Math.min(180, (1000 / COLLAR_FPS) * 0.6),
-      easing: Easing.linear,
-      useNativeDriver: true,
-    }).start();
-  }, [frameIndex, fade]);
+    // Animated.loop resets progress to 0 before each pass.
+    const pass = Animated.sequence([
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: gust.duration,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.delay(gust.gap),
+    ]);
+    const anim = Animated.sequence([Animated.delay(gust.delay), Animated.loop(pass)]);
+    anim.start();
+    return () => anim.stop();
+  }, [progress, gust]);
+
+  const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [0, -travel] });
+  // Stretch slightly as it gathers, then relax — reads as a gust, not a sticker.
+  const scaleX = progress.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.7, 1, 0.85] });
+  const opacity = progress.interpolate({
+    inputRange: [0, 0.25, 0.7, 1],
+    outputRange: [0, gust.maxOpacity, gust.maxOpacity, 0],
+  });
 
   return (
-    <View style={{ position: "absolute", left, top, width: boxW, height: boxH }}>
-      <Image
-        source={COLLAR_FRAMES[prevFrameIndexRef.current]}
-        style={{ position: "absolute", width: "100%", height: "100%" }}
-        resizeMode="contain"
-      />
-      <Animated.Image
-        source={COLLAR_FRAMES[frameIndex]}
-        style={{ position: "absolute", width: "100%", height: "100%", opacity: fade }}
-        resizeMode="contain"
-      />
-    </View>
+    <Animated.View
+      style={{
+        position: "absolute",
+        left,
+        top,
+        width: w,
+        height: h,
+        opacity,
+        transform: [{ translateX }, { scaleX }],
+      }}
+    >
+      <Svg width={w} height={h} viewBox="0 0 120 24">
+        <Path
+          d={GUST_PATH}
+          stroke={WIND_COLOR}
+          strokeWidth={1.8}
+          strokeLinecap="round"
+          fill="none"
+        />
+      </Svg>
+    </Animated.View>
   );
 }
 
