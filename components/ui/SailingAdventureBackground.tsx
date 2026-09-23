@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Component, type ComponentProps, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Easing,
@@ -7,7 +7,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import Svg, { Path } from "react-native-svg";
+import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
 
 // Animated background for a new sailing/ocean Adventure area: the puppy-captain
 // sunset scene, with a red pennant flapping at the top of the mast, a red
@@ -78,7 +78,13 @@ const FLAG_SEQUENCE = FLAG_FRAMES.map((_, i) => i);
 // sheet (two rows of five), alpha cleaned, scaled so the band is 132px wide
 // (matching the previous collar art exactly), and pre-aligned so the
 // band and knot sit on the same pixel of an identical 320x640 canvas in every
-// frame (COLLAR_POLE = the band's top-left corner). Only the tails move.
+// frame (COLLAR_POLE = the band's top-left corner).
+// The band, knot and the two short tails under the knot are locked to frame
+// 0's drawing in every frame (each hand-drawn frame redrew them slightly
+// differently, which made the collar look like it was changing shape), so
+// only the long tail streaming in the wind animates. The band's left end is
+// trimmed along the neck's outline (and shaded darker toward that edge) so it
+// reads as wrapping around behind the neck rather than ending in a flat cut.
 // All 10 frames loop cleanly (frame 9 flows straight back into frame 0).
 //
 // Placement was tuned by compositing the frames onto
@@ -99,41 +105,53 @@ const COLLAR_FRAMES = [
 const COLLAR_SLOT_ASPECT = 640 / 320;
 // Band top-left corner, as a fraction of the frame canvas — identical for every frame.
 const COLLAR_POLE = { x: 150 / 320, y: 300 / 640 };
-const COLLAR_ANCHOR_X_FRAC = 0.3241;
-const COLLAR_ANCHOR_Y_FRAC = 0.5712;
+// Nudged 8px left and 18px up from the first fit so the knot sits on the
+// shoulder rather than hanging over the wheel, and the band hugs the spot
+// where the head meets the neck. The neck-wrap cut and fur shadow baked into
+// the frames were re-rendered for this exact spot — if you move the collar,
+// re-bake the frames too or the shadow won't line up with the fur.
+const COLLAR_ANCHOR_X_FRAC = 0.3156;
+const COLLAR_ANCHOR_Y_FRAC = 0.5604;
 const COLLAR_BOX_WIDTH_FRAC = 0.2777;
-// Same frame rate as the flag, so both move to one wind (10 frames = ~1.8s loop).
-const COLLAR_FPS = FLAG_FPS;
+// A little slower than the flag: 4.5fps = ~2.2s per loop of the 10 frames
+// (the flag is 5.5). Lower to slow the collar further, raise to speed it up.
+const COLLAR_FPS = 4.5;
 const COLLAR_SEQUENCE = COLLAR_FRAMES.map((_, i) => i);
 
-// --- Wind: soft curled streaks that drift right-to-left (the same way the
-// flag and collar are blowing), fading in, crossing part of the scene, and
-// fading out. Each gust has its own lane, speed and start offset so they
-// never pulse in unison. Drawn as SVG strokes and moved with the native
-// driver only (translateX + opacity), so they cost nothing on the JS thread.
+// --- Wind: soft curled streaks that flow right-to-left (the same way the
+// flag and collar are blowing). Rather than a finished shape sliding past,
+// each gust is DRAWN ON along its path: a soft segment of stroke sweeps in
+// from the tail, runs through the curl and erases itself from behind (an
+// animated strokeDashoffset), while the whole streak drifts left and lifts
+// slightly. A gradient fades both ends of the stroke so it never has a hard
+// start or finish, and the six gusts overlap with short, staggered rests so
+// the breeze reads as continuous rather than one streak at a time.
 type GustSpec = {
-  xFrac: number; // where the gust starts (its right edge), as a fraction of image width
+  xFrac: number; // right edge of the gust's box, as a fraction of image width
   yFrac: number; // vertical lane, as a fraction of image height
   widthFrac: number; // streak length, as a fraction of image width
-  travelFrac: number; // how far left it drifts over its life, fraction of image width
-  duration: number; // ms from fade-in to fade-out
+  travelFrac: number; // how far left the streak drifts over one pass, fraction of image width
+  lift: number; // how far it rises over one pass, fraction of its own box height (negative = up)
+  duration: number; // ms for one pass (draw on -> sweep -> erase)
   gap: number; // ms of rest between passes
   delay: number; // ms before the first pass
   maxOpacity: number;
 };
 const WIND_COLOR = "#FFF6E8";
 const GUSTS: GustSpec[] = [
-  { xFrac: 0.95, yFrac: 0.14, widthFrac: 0.3, travelFrac: 0.45, duration: 3600, gap: 1800, delay: 0, maxOpacity: 0.55 },
-  { xFrac: 0.7, yFrac: 0.22, widthFrac: 0.22, travelFrac: 0.4, duration: 3000, gap: 2600, delay: 1400, maxOpacity: 0.45 },
-  { xFrac: 1.0, yFrac: 0.3, widthFrac: 0.26, travelFrac: 0.5, duration: 4000, gap: 2000, delay: 2600, maxOpacity: 0.5 },
-  { xFrac: 0.6, yFrac: 0.44, widthFrac: 0.2, travelFrac: 0.35, duration: 3200, gap: 3000, delay: 800, maxOpacity: 0.4 },
-  { xFrac: 0.95, yFrac: 0.55, widthFrac: 0.28, travelFrac: 0.45, duration: 3800, gap: 2400, delay: 3400, maxOpacity: 0.45 },
-  { xFrac: 0.5, yFrac: 0.68, widthFrac: 0.22, travelFrac: 0.4, duration: 3400, gap: 2800, delay: 2000, maxOpacity: 0.35 },
+  { xFrac: 0.98, yFrac: 0.14, widthFrac: 0.34, travelFrac: 0.22, lift: -0.8, duration: 3400, gap: 700, delay: 0, maxOpacity: 0.55 },
+  { xFrac: 0.72, yFrac: 0.22, widthFrac: 0.26, travelFrac: 0.2, lift: -0.6, duration: 3000, gap: 1100, delay: 1500, maxOpacity: 0.45 },
+  { xFrac: 1.0, yFrac: 0.3, widthFrac: 0.3, travelFrac: 0.24, lift: -0.7, duration: 3800, gap: 900, delay: 2600, maxOpacity: 0.5 },
+  { xFrac: 0.62, yFrac: 0.44, widthFrac: 0.24, travelFrac: 0.18, lift: -0.5, duration: 3200, gap: 1300, delay: 700, maxOpacity: 0.4 },
+  { xFrac: 0.97, yFrac: 0.55, widthFrac: 0.32, travelFrac: 0.22, lift: -0.6, duration: 3600, gap: 1000, delay: 3300, maxOpacity: 0.45 },
+  { xFrac: 0.52, yFrac: 0.68, widthFrac: 0.26, travelFrac: 0.2, lift: -0.5, duration: 3300, gap: 1200, delay: 2000, maxOpacity: 0.35 },
 ];
 // Streak shape in a 120x24 box: a long tail on the right tapering into a
 // small curl on the left — the leading edge, since the wind blows leftward.
 const GUST_PATH = "M118,13 C96,13 80,8 60,10 C42,12 30,19 18,16 C9,14 8,6 15,6 C20,6 21,11 17,12";
 const GUST_ASPECT = 24 / 120;
+const GUST_PATH_LEN = 128;                  // measured length of GUST_PATH in its own units
+const GUST_SEGMENT = GUST_PATH_LEN * 0.55;  // how much of the streak is visible at once
 
 type BirdSpec = { xFrac: number; yFrac: number; widthFrac: number; phase: number };
 
@@ -212,7 +230,7 @@ export function SailingAdventureBackground() {
             }}
           >
             {GUSTS.map((gust, i) => (
-              <WindGust key={i} rect={{ ...rect, left: 0, top: 0 }} gust={gust} />
+              <WindGust key={i} index={i} rect={{ ...rect, left: 0, top: 0 }} gust={gust} />
             ))}
           </View>
           <FlagCloth rect={rect} />
@@ -366,8 +384,25 @@ function Collar({ rect }: { rect: ContainRect }) {
   );
 }
 
-/** One wind streak: fades in, drifts left, fades out, rests, repeats. */
-function WindGust({ rect, gust }: { rect: ContainRect; gust: GustSpec }) {
+// Animated tags its child with collapsable={false}; on react-native-web that
+// lands on the <path> DOM element and React warns about a non-boolean
+// attribute. This thin wrapper drops it before rendering the SVG path.
+class GustPath extends Component<ComponentProps<typeof Path> & { collapsable?: boolean }> {
+  render() {
+    const { collapsable: _collapsable, ...rest } = this.props;
+    return <Path {...rest} />;
+  }
+}
+const AnimatedPath = Animated.createAnimatedComponent(GustPath);
+
+/**
+ * One wind streak. Each pass, a soft segment of stroke sweeps along the path
+ * from its tail into the curl (animated dash offset), while the streak drifts
+ * left and lifts a little; opacity eases in and out so there is never a pop.
+ * The dash offset is an SVG prop, so this runs on the JS driver; it's six
+ * short paths, which is cheap.
+ */
+function WindGust({ rect, gust, index }: { rect: ContainRect; gust: GustSpec; index: number }) {
   const w = rect.width * gust.widthFrac;
   const h = w * GUST_ASPECT;
   const left = rect.left + rect.width * gust.xFrac - w;
@@ -382,8 +417,8 @@ function WindGust({ rect, gust }: { rect: ContainRect; gust: GustSpec }) {
       Animated.timing(progress, {
         toValue: 1,
         duration: gust.duration,
-        easing: Easing.inOut(Easing.quad),
-        useNativeDriver: true,
+        easing: Easing.inOut(Easing.sin),
+        useNativeDriver: false,
       }),
       Animated.delay(gust.gap),
     ]);
@@ -392,13 +427,18 @@ function WindGust({ rect, gust }: { rect: ContainRect; gust: GustSpec }) {
     return () => anim.stop();
   }, [progress, gust]);
 
+  // Segment enters at the path's start (the tail, on the right) and leaves past its end (the curl).
+  const dashOffset = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [GUST_SEGMENT, -GUST_PATH_LEN],
+  });
   const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [0, -travel] });
-  // Stretch slightly as it gathers, then relax — reads as a gust, not a sticker.
-  const scaleX = progress.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.7, 1, 0.85] });
+  const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [0, h * gust.lift] });
   const opacity = progress.interpolate({
-    inputRange: [0, 0.25, 0.7, 1],
+    inputRange: [0, 0.2, 0.75, 1],
     outputRange: [0, gust.maxOpacity, gust.maxOpacity, 0],
   });
+  const gradId = `gustFade${index}`;
 
   return (
     <Animated.View
@@ -409,16 +449,27 @@ function WindGust({ rect, gust }: { rect: ContainRect; gust: GustSpec }) {
         width: w,
         height: h,
         opacity,
-        transform: [{ translateX }, { scaleX }],
+        transform: [{ translateX }, { translateY }],
       }}
     >
       <Svg width={w} height={h} viewBox="0 0 120 24">
-        <Path
+        <Defs>
+          {/* soft ends: the stroke fades out toward both ends of the streak */}
+          <LinearGradient id={gradId} x1="0" y1="0" x2="120" y2="0" gradientUnits="userSpaceOnUse">
+            <Stop offset="0" stopColor={WIND_COLOR} stopOpacity="0.55" />
+            <Stop offset="0.25" stopColor={WIND_COLOR} stopOpacity="1" />
+            <Stop offset="0.7" stopColor={WIND_COLOR} stopOpacity="1" />
+            <Stop offset="1" stopColor={WIND_COLOR} stopOpacity="0" />
+          </LinearGradient>
+        </Defs>
+        <AnimatedPath
           d={GUST_PATH}
-          stroke={WIND_COLOR}
+          stroke={`url(#${gradId})`}
           strokeWidth={1.8}
           strokeLinecap="round"
           fill="none"
+          strokeDasharray={`${GUST_SEGMENT} ${GUST_PATH_LEN * 2}`}
+          strokeDashoffset={dashOffset}
         />
       </Svg>
     </Animated.View>

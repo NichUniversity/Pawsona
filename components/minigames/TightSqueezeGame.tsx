@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Animated, Image, PanResponder, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Circle, Path } from "react-native-svg";
+import Svg, { Circle, Ellipse, G, Path } from "react-native-svg";
 
 import { PressableScale } from "../ui/PressableScale";
 import { usePets } from "../../context/PetInformation";
@@ -128,6 +128,10 @@ const TS_DPAD_SPEED = 140;
 const TS_COINS_PER_LEVEL_CLEARED = 2;
 
 type TSPoint = { x: number; y: number };
+// One falling rock lane: drops from rockFallTop to rockFallBottom (design
+// space) every `period` ms, offset by `phase` (0..1 of a period) so the lanes
+// don't fall in unison. `radius` is its collision + drawn size.
+type TSFallingRock = { x: number; radius: number; period: number; phase: number };
 type TSLevelPath = { points: TSPoint[]; halfWidth: number };
 
 // A full level "design": the tunnel path itself (points + halfWidth, as
@@ -169,6 +173,10 @@ type TSLevelDesign = TSLevelPath & {
   boneRadius?: number;
   minAllowedHalfWidth?: number;
   finishRadius?: number;
+  // Optional hazard: rocks that repeatedly fall straight down through the
+  // tunnel at fixed x positions (design-space units). Touching one ends the
+  // run, same as touching a wall. See TS_FALLING_ROCKS below.
+  fallingRocks?: TSFallingRock[];
   label: string;
   instructions: string;
 };
@@ -259,144 +267,326 @@ function computeTightSqueezeLayout(
   };
 }
 
-// --- Level 1: "The Big Bone" ---
-// The actual reference image, dropped in as a project asset and rendered
-// full-bleed behind the play area (see the render logic further down) —
-// this is the real art, not a redraw. Same cross-shaped bone maze as
-// before, re-supplied with a thicker corridor and a corrected FINISH arrow
-// (now pointing up, matching the direction you actually travel) — re-traced
-// from scratch rather than reusing the old points, since the wider line
-// moves the true centerline slightly.
-const TS_LEVEL1_IMAGE = require("../../assets/images/tight-squeeze-bone-cross.png");
+// (The Big Bone loop maze that used to be a level here was removed per
+// explicit user request; its art, assets/images/tight-squeeze-bone-cross.png,
+// is no longer referenced. Git history has its traced two-route `paths`
+// data if a loop-style maze with more than one open route is ever needed
+// again.)
 
-// The image's own native pixel size. Used as this level's design-space
-// canvas (baseWidth/baseHeight) so the traced points below — which are
-// literally that image's own pixel coordinates — and the <Image> both scale
-// by the exact same scaleX/scaleY every frame and never drift apart.
-const TS_LEVEL1_BASE_WIDTH = 941;
-const TS_LEVEL1_BASE_HEIGHT = 1672;
-
-// Corridor half-width, bone(-token) fairness-inset, and finish tolerance,
-// all tuned to this image's own pixel scale. 37 matches the measured median
-// half-width of the maze line itself (distance-transform sampled along its
-// skeleton, min ~32 — noticeably thicker than the previous version of this
-// image); a boneRadius of 11 (allowed corridor = halfWidth - boneRadius =
-// 26) keeps every point of the route navigable with a little room to spare
-// rather than a literal pixel-perfect squeeze.
-const TS_LEVEL1_HALF_WIDTH = 37;
-const TS_LEVEL1_BONE_RADIUS = 11;
-const TS_LEVEL1_MIN_ALLOWED_HALF_WIDTH = 9;
-const TS_LEVEL1_FINISH_RADIUS = 60;
-
-// This image is a straight vertical stem (start at the bottom, finish at
-// the top) running through a closed bone-shaped loop in the middle: the
-// stem meets the loop at two junction points, and the loop's left knob and
-// right knob are both genuinely open white channel connecting those two
-// junctions — there's no single "real" path through the loop, the art
-// itself offers two. So, same as before, this level uses `paths` (two
-// independently-checked polylines, sharing the same start/finish points)
-// instead of a single `points` route — see the TSLevelDesign comment above
-// for why concatenating them into one array would be wrong (the seam
-// between the two would read as a false shortcut straight through the
-// solid middle of the bone).
+// Level 1 (per explicit user request): "The Cave Crawl" -- a painted cave wall with one straight,
+// glowing horizontal tunnel from START (left) to FINISH (right). A gentle
+// warm-up before the bone loop. Same image-as-canvas approach as the bone
+// level: baseWidth/baseHeight are the image's own pixel size, so the route
+// below is in that image's pixel coordinates.
 //
-// Extracted the same way as before: threshold the image to isolate the
-// white line from the brown fill, connected-component-filter out the
-// START/FINISH lettering and arrows, skeletonize to a centerline, find the
-// two degree-3+ junction nodes where the shared start/finish stems meet the
-// loop, shortest-path each stem once, then shortest-path junction-to-
-// junction twice (once normally for the left-knob arc, once more after
-// deleting that arc's edges from the graph to force the right-knob arc),
-// and resample each full stem+arc+stem route to 140 evenly-spaced points.
-const TS_LEVEL1_LEFT_PATH: TSPoint[] = [
-    { x: 464.0, y: 1632.0 }, { x: 465.0, y: 1613.2 }, { x: 465.0, y: 1594.0 }, { x: 465.0, y: 1574.8 },
-    { x: 465.0, y: 1555.6 }, { x: 465.0, y: 1536.4 }, { x: 465.0, y: 1517.2 }, { x: 465.0, y: 1498.0 },
-    { x: 465.0, y: 1478.9 }, { x: 465.0, y: 1459.7 }, { x: 465.0, y: 1440.5 }, { x: 465.0, y: 1421.3 },
-    { x: 465.0, y: 1402.1 }, { x: 465.0, y: 1382.9 }, { x: 465.0, y: 1363.7 }, { x: 465.0, y: 1344.5 },
-    { x: 465.0, y: 1325.3 }, { x: 465.0, y: 1306.1 }, { x: 465.0, y: 1286.9 }, { x: 465.0, y: 1267.7 },
-    { x: 465.0, y: 1248.5 }, { x: 465.0, y: 1229.3 }, { x: 465.0, y: 1210.1 }, { x: 465.0, y: 1190.9 },
-    { x: 465.0, y: 1171.7 }, { x: 465.0, y: 1152.5 }, { x: 465.0, y: 1133.3 }, { x: 465.0, y: 1114.1 },
-    { x: 465.0, y: 1094.9 }, { x: 465.0, y: 1075.8 }, { x: 465.0, y: 1056.6 }, { x: 465.0, y: 1037.4 },
-    { x: 465.0, y: 1018.2 }, { x: 465.0, y: 999.0 }, { x: 465.0, y: 979.8 }, { x: 465.0, y: 960.6 },
-    { x: 466.0, y: 941.8 }, { x: 462.4, y: 925.0 }, { x: 445.3, y: 920.0 }, { x: 426.5, y: 919.0 },
-    { x: 407.3, y: 919.0 }, { x: 388.1, y: 919.0 }, { x: 368.9, y: 919.0 }, { x: 349.7, y: 919.0 },
-    { x: 331.0, y: 920.0 }, { x: 312.2, y: 921.0 }, { x: 294.2, y: 923.8 }, { x: 276.3, y: 927.0 },
-    { x: 260.3, y: 934.7 }, { x: 247.4, y: 948.6 }, { x: 237.4, y: 963.6 }, { x: 227.0, y: 978.5 },
-    { x: 213.5, y: 991.5 }, { x: 197.9, y: 1000.1 }, { x: 180.7, y: 1005.0 }, { x: 162.7, y: 1008.0 },
-    { x: 144.3, y: 1008.0 }, { x: 126.4, y: 1005.0 }, { x: 108.9, y: 1000.9 }, { x: 93.3, y: 992.3 },
-    { x: 79.1, y: 980.1 }, { x: 67.7, y: 965.7 }, { x: 60.5, y: 949.5 }, { x: 57.0, y: 931.7 },
-    { x: 54.0, y: 913.7 }, { x: 57.0, y: 895.8 }, { x: 60.1, y: 877.9 }, { x: 67.3, y: 861.7 },
-    { x: 78.1, y: 846.9 }, { x: 91.5, y: 834.5 }, { x: 102.0, y: 820.8 }, { x: 106.5, y: 803.5 },
-    { x: 102.4, y: 786.4 }, { x: 92.8, y: 771.8 }, { x: 78.6, y: 759.6 }, { x: 67.9, y: 744.9 },
-    { x: 60.7, y: 728.7 }, { x: 57.0, y: 711.0 }, { x: 54.0, y: 693.0 }, { x: 56.2, y: 674.8 },
-    { x: 60.0, y: 657.1 }, { x: 66.0, y: 640.4 }, { x: 76.5, y: 625.5 }, { x: 89.6, y: 612.4 },
-    { x: 104.9, y: 603.0 }, { x: 121.6, y: 597.0 }, { x: 139.6, y: 594.0 }, { x: 157.1, y: 592.0 },
-    { x: 175.5, y: 594.0 }, { x: 193.0, y: 598.0 }, { x: 209.2, y: 605.2 }, { x: 223.7, y: 616.7 },
-    { x: 235.8, y: 630.8 }, { x: 245.0, y: 646.2 }, { x: 255.2, y: 661.2 }, { x: 269.4, y: 673.4 },
-    { x: 286.5, y: 678.5 }, { x: 304.2, y: 682.0 }, { x: 322.6, y: 684.0 }, { x: 341.3, y: 685.0 },
-    { x: 360.1, y: 684.0 }, { x: 379.3, y: 684.0 }, { x: 398.5, y: 684.0 }, { x: 417.7, y: 684.0 },
-    { x: 436.9, y: 684.0 }, { x: 454.8, y: 681.0 }, { x: 465.0, y: 671.0 }, { x: 465.0, y: 651.8 },
-    { x: 465.0, y: 632.6 }, { x: 465.0, y: 613.4 }, { x: 465.0, y: 594.2 }, { x: 465.0, y: 575.1 },
-    { x: 465.0, y: 555.9 }, { x: 465.0, y: 536.7 }, { x: 465.0, y: 517.5 }, { x: 465.0, y: 498.3 },
-    { x: 465.0, y: 479.1 }, { x: 465.0, y: 459.9 }, { x: 465.0, y: 440.7 }, { x: 465.0, y: 421.5 },
-    { x: 465.0, y: 402.3 }, { x: 465.0, y: 383.1 }, { x: 465.0, y: 363.9 }, { x: 465.0, y: 344.7 },
-    { x: 465.0, y: 325.5 }, { x: 465.0, y: 306.3 }, { x: 465.0, y: 287.1 }, { x: 465.0, y: 267.9 },
-    { x: 465.0, y: 248.7 }, { x: 465.0, y: 229.5 }, { x: 465.0, y: 210.3 }, { x: 465.0, y: 191.1 },
-    { x: 465.0, y: 172.0 }, { x: 465.0, y: 152.8 }, { x: 465.0, y: 133.6 }, { x: 465.0, y: 114.4 },
-    { x: 465.0, y: 95.2 }, { x: 465.0, y: 76.0 }, { x: 465.0, y: 56.8 }, { x: 466.0, y: 38.0 },
+// Traced by thresholding the lit tunnel (luminance > 200) column by column:
+// its center sits at y ~846 across the whole width and its half-height is
+// ~37 px (same as the bone level's corridor), so the route is a straight
+// line along that center, from just inside the left edge to just inside the
+// right edge (under the START / FINISH labels).
+const TS_CAVE_IMAGE = require("../../assets/images/tight-squeeze-cave-straight.png");
+const TS_CAVE_BASE_WIDTH = 941;
+const TS_CAVE_BASE_HEIGHT = 1672;
+const TS_CAVE_CENTER_Y = 846;
+const TS_CAVE_PATH: TSPoint[] = Array.from({ length: 44 }, (_, i) => ({
+  x: 40 + (i * (900 - 40)) / 43,
+  y: TS_CAVE_CENTER_Y,
+}));
+
+const TS_CAVE_DESIGN: TSLevelDesign = {
+  points: TS_CAVE_PATH,
+  halfWidth: 37,
+  baseWidth: TS_CAVE_BASE_WIDTH,
+  baseHeight: TS_CAVE_BASE_HEIGHT,
+  backgroundImage: TS_CAVE_IMAGE,
+  boneRadius: 11,
+  minAllowedHalfWidth: 9,
+  finishRadius: 60,
+  label: "The Cave Crawl",
+  instructions: "Drag the paw through the glowing tunnel from START to FINISH. Don't scrape the cave walls!",
+};
+
+// Level 2 (per explicit user request): "The Winding Tunnel" -- the same
+// cave wall, but the glowing tunnel now dips down in an S-curve around a
+// boulder before rising back up to FINISH. Traced like the Cave Crawl: the
+// lit tunnel (luminance > 200, largest connected region, so the START/FINISH
+// lettering is excluded) gives a per-column centerline, smoothed and
+// resampled to 70 evenly spaced points along its length. Measured against
+// the full lit area (luminance > 170), every route point sits at least ~29px
+// from a wall (median ~36), so halfWidth 34 with boneRadius 11 leaves a fair
+// but noticeably tighter squeeze than level 1.
+const TS_WAVE_IMAGE = require("../../assets/images/tight-squeeze-cave-wave.png");
+const TS_WAVE_PATH: TSPoint[] = [
+  { x: 30.0, y: 801.1 },
+  { x: 44.0, y: 801.2 },
+  { x: 58.1, y: 800.8 },
+  { x: 72.1, y: 801.3 },
+  { x: 86.2, y: 800.6 },
+  { x: 100.2, y: 800.2 },
+  { x: 114.2, y: 799.4 },
+  { x: 128.2, y: 798.0 },
+  { x: 141.8, y: 794.6 },
+  { x: 155.1, y: 790.0 },
+  { x: 168.2, y: 784.8 },
+  { x: 181.2, y: 779.5 },
+  { x: 194.6, y: 775.3 },
+  { x: 208.2, y: 771.9 },
+  { x: 222.3, y: 771.1 },
+  { x: 236.2, y: 773.0 },
+  { x: 249.9, y: 775.9 },
+  { x: 262.7, y: 781.7 },
+  { x: 274.6, y: 789.1 },
+  { x: 285.8, y: 797.7 },
+  { x: 296.4, y: 806.9 },
+  { x: 306.5, y: 816.6 },
+  { x: 316.4, y: 826.6 },
+  { x: 326.2, y: 836.8 },
+  { x: 335.9, y: 846.9 },
+  { x: 345.4, y: 857.3 },
+  { x: 355.2, y: 867.3 },
+  { x: 365.0, y: 877.4 },
+  { x: 375.3, y: 887.1 },
+  { x: 386.6, y: 895.4 },
+  { x: 398.5, y: 902.9 },
+  { x: 411.3, y: 908.6 },
+  { x: 424.9, y: 912.0 },
+  { x: 438.9, y: 913.7 },
+  { x: 452.9, y: 913.0 },
+  { x: 466.9, y: 912.0 },
+  { x: 480.7, y: 909.5 },
+  { x: 494.1, y: 905.4 },
+  { x: 507.0, y: 899.8 },
+  { x: 519.4, y: 893.1 },
+  { x: 531.1, y: 885.4 },
+  { x: 542.6, y: 877.2 },
+  { x: 554.0, y: 869.1 },
+  { x: 565.1, y: 860.4 },
+  { x: 576.3, y: 851.9 },
+  { x: 587.8, y: 843.9 },
+  { x: 599.5, y: 836.1 },
+  { x: 611.7, y: 829.1 },
+  { x: 624.5, y: 823.2 },
+  { x: 637.7, y: 818.6 },
+  { x: 651.5, y: 815.9 },
+  { x: 665.5, y: 814.7 },
+  { x: 679.5, y: 814.7 },
+  { x: 693.5, y: 816.1 },
+  { x: 707.1, y: 819.7 },
+  { x: 720.4, y: 824.1 },
+  { x: 733.2, y: 830.0 },
+  { x: 745.7, y: 836.3 },
+  { x: 758.3, y: 842.7 },
+  { x: 771.4, y: 847.7 },
+  { x: 784.9, y: 851.6 },
+  { x: 798.7, y: 854.4 },
+  { x: 812.7, y: 855.4 },
+  { x: 826.7, y: 855.7 },
+  { x: 840.8, y: 855.6 },
+  { x: 854.8, y: 856.1 },
+  { x: 868.9, y: 856.3 },
+  { x: 882.9, y: 855.5 },
+  { x: 896.9, y: 855.2 },
+  { x: 911.0, y: 855.5 }
 ];
 
-const TS_LEVEL1_RIGHT_PATH: TSPoint[] = [
-    { x: 464.0, y: 1632.0 }, { x: 465.0, y: 1613.1 }, { x: 465.0, y: 1593.8 }, { x: 465.0, y: 1574.5 },
-    { x: 465.0, y: 1555.2 }, { x: 465.0, y: 1535.9 }, { x: 465.0, y: 1516.6 }, { x: 465.0, y: 1497.3 },
-    { x: 465.0, y: 1478.0 }, { x: 465.0, y: 1458.7 }, { x: 465.0, y: 1439.4 }, { x: 465.0, y: 1420.1 },
-    { x: 465.0, y: 1400.8 }, { x: 465.0, y: 1381.5 }, { x: 465.0, y: 1362.2 }, { x: 465.0, y: 1342.9 },
-    { x: 465.0, y: 1323.6 }, { x: 465.0, y: 1304.3 }, { x: 465.0, y: 1284.9 }, { x: 465.0, y: 1265.6 },
-    { x: 465.0, y: 1246.3 }, { x: 465.0, y: 1227.0 }, { x: 465.0, y: 1207.7 }, { x: 465.0, y: 1188.4 },
-    { x: 465.0, y: 1169.1 }, { x: 465.0, y: 1149.8 }, { x: 465.0, y: 1130.5 }, { x: 465.0, y: 1111.2 },
-    { x: 465.0, y: 1091.9 }, { x: 465.0, y: 1072.6 }, { x: 465.0, y: 1053.3 }, { x: 465.0, y: 1034.0 },
-    { x: 465.0, y: 1014.7 }, { x: 465.0, y: 995.4 }, { x: 465.0, y: 976.1 }, { x: 465.0, y: 956.8 },
-    { x: 466.0, y: 937.9 }, { x: 473.2, y: 924.0 }, { x: 490.8, y: 920.0 }, { x: 509.7, y: 919.0 },
-    { x: 529.0, y: 919.0 }, { x: 548.3, y: 919.0 }, { x: 567.6, y: 919.0 }, { x: 586.9, y: 919.0 },
-    { x: 606.2, y: 919.0 }, { x: 624.7, y: 921.0 }, { x: 643.2, y: 923.0 }, { x: 660.8, y: 927.0 },
-    { x: 677.2, y: 934.0 }, { x: 689.7, y: 947.7 }, { x: 699.1, y: 963.1 }, { x: 709.9, y: 977.9 },
-    { x: 723.9, y: 990.9 }, { x: 739.4, y: 1000.0 }, { x: 756.6, y: 1005.0 }, { x: 774.7, y: 1008.0 },
-    { x: 792.7, y: 1009.0 }, { x: 810.8, y: 1006.0 }, { x: 828.4, y: 1002.0 }, { x: 844.3, y: 993.7 },
-    { x: 858.8, y: 982.2 }, { x: 870.4, y: 967.6 }, { x: 878.3, y: 951.7 }, { x: 882.8, y: 934.2 },
-    { x: 885.1, y: 915.9 }, { x: 883.8, y: 897.8 }, { x: 879.4, y: 880.4 }, { x: 873.0, y: 863.7 },
-    { x: 862.7, y: 848.7 }, { x: 848.7, y: 835.7 }, { x: 838.0, y: 821.4 }, { x: 833.0, y: 804.2 },
-    { x: 837.0, y: 786.6 }, { x: 847.0, y: 772.0 }, { x: 860.9, y: 759.1 }, { x: 872.0, y: 744.3 },
-    { x: 879.0, y: 727.9 }, { x: 883.0, y: 710.3 }, { x: 886.0, y: 692.2 }, { x: 883.8, y: 673.8 },
-    { x: 880.0, y: 656.1 }, { x: 873.0, y: 639.7 }, { x: 862.7, y: 624.7 }, { x: 849.0, y: 611.0 },
-    { x: 833.4, y: 602.0 }, { x: 816.6, y: 596.0 }, { x: 798.6, y: 593.0 }, { x: 780.5, y: 592.0 },
-    { x: 762.4, y: 595.0 }, { x: 744.8, y: 599.0 }, { x: 728.6, y: 606.4 }, { x: 714.0, y: 618.0 },
-    { x: 702.5, y: 632.5 }, { x: 692.4, y: 647.6 }, { x: 682.3, y: 662.7 }, { x: 667.8, y: 674.2 },
-    { x: 650.4, y: 679.0 }, { x: 632.4, y: 682.0 }, { x: 613.9, y: 684.0 }, { x: 595.0, y: 685.0 },
-    { x: 575.7, y: 685.0 }, { x: 556.4, y: 685.0 }, { x: 537.1, y: 685.0 }, { x: 517.8, y: 685.0 },
-    { x: 498.5, y: 685.0 }, { x: 480.4, y: 682.0 }, { x: 465.0, y: 674.6 }, { x: 465.0, y: 655.3 },
-    { x: 465.0, y: 636.0 }, { x: 465.0, y: 616.7 }, { x: 465.0, y: 597.4 }, { x: 465.0, y: 578.1 },
-    { x: 465.0, y: 558.8 }, { x: 465.0, y: 539.5 }, { x: 465.0, y: 520.2 }, { x: 465.0, y: 500.9 },
-    { x: 465.0, y: 481.6 }, { x: 465.0, y: 462.3 }, { x: 465.0, y: 443.0 }, { x: 465.0, y: 423.7 },
-    { x: 465.0, y: 404.4 }, { x: 465.0, y: 385.1 }, { x: 465.0, y: 365.7 }, { x: 465.0, y: 346.4 },
-    { x: 465.0, y: 327.1 }, { x: 465.0, y: 307.8 }, { x: 465.0, y: 288.5 }, { x: 465.0, y: 269.2 },
-    { x: 465.0, y: 249.9 }, { x: 465.0, y: 230.6 }, { x: 465.0, y: 211.3 }, { x: 465.0, y: 192.0 },
-    { x: 465.0, y: 172.7 }, { x: 465.0, y: 153.4 }, { x: 465.0, y: 134.1 }, { x: 465.0, y: 114.8 },
-    { x: 465.0, y: 95.5 }, { x: 465.0, y: 76.2 }, { x: 465.0, y: 56.9 }, { x: 466.0, y: 38.0 },
+const TS_WAVE_DESIGN: TSLevelDesign = {
+  points: TS_WAVE_PATH,
+  halfWidth: 34,
+  baseWidth: TS_CAVE_BASE_WIDTH,
+  baseHeight: TS_CAVE_BASE_HEIGHT,
+  backgroundImage: TS_WAVE_IMAGE,
+  boneRadius: 11,
+  minAllowedHalfWidth: 9,
+  finishRadius: 60,
+  label: "The Winding Tunnel",
+  instructions: "Follow the tunnel down around the boulder and back up to FINISH. Careful on the curves!",
+};
+
+// Level 3 (per explicit user request): the same straight tunnel as level 1,
+// but with rocks dropping through the middle of it. Three lanes spread along
+// the tunnel, each dropping a rock every ~2s on its own offset, so the player
+// has to time their dash under each one. Rocks start above the tunnel (over
+// the painted wall, so they appear to come from the ceiling) and fall past
+// it; each lane's rock spends roughly 0.7s crossing the tunnel and ~1.3s
+// clear, which leaves a comfortable window to slip past at normal drag or
+// D-pad speed.
+const TS_ROCK_FALL_TOP = 650;
+const TS_ROCK_FALL_BOTTOM = 1050;
+const TS_FALLING_ROCKS: TSFallingRock[] = [
+  { x: 250, radius: 26, period: 1900, phase: 0.0 },
+  { x: 470, radius: 26, period: 2200, phase: 0.45 },
+  { x: 690, radius: 26, period: 2000, phase: 0.8 },
+];
+const TS_ROCKFALL_DESIGN: TSLevelDesign = {
+  ...TS_CAVE_DESIGN,
+  fallingRocks: TS_FALLING_ROCKS,
+  label: "Rockfall",
+  instructions: "Same tunnel — but rocks are falling! Time your dash under each one. Touch a rock or a wall and it's game over.",
+};
+
+// Level 4 (per explicit user request): "The Switchback" -- a brighter cave
+// with blue crystals, and a tunnel that zigzags up, down and up again through
+// two tight hairpin turns on its way to FINISH. Unlike the earlier cave
+// levels the tunnel runs vertically in places, so it was traced from the
+// image's skeleton rather than column by column: threshold the lit tunnel
+// (luminance > 200, largest connected region), skeletonize it to a
+// one-pixel centerline, walk that from its leftmost point (START) to its
+// rightmost (FINISH), smooth, and resample every ~18px (137 points, ends
+// trimmed just inside the image edges). Against the full lit area
+// (luminance > 170), every route point sits at least ~29px from a wall, so
+// halfWidth 32 with boneRadius 11 is fair but tighter than levels 1-3.
+const TS_SWITCHBACK_IMAGE = require("../../assets/images/tight-squeeze-cave-switchback.png");
+const TS_SWITCHBACK_PATH: TSPoint[] = [
+  { x: 49.5, y: 877.0 },
+  { x: 67.5, y: 876.5 },
+  { x: 85.6, y: 876.0 },
+  { x: 103.7, y: 876.0 },
+  { x: 121.7, y: 875.0 },
+  { x: 139.7, y: 876.0 },
+  { x: 157.8, y: 875.0 },
+  { x: 175.9, y: 875.0 },
+  { x: 194.0, y: 875.0 },
+  { x: 212.0, y: 875.0 },
+  { x: 230.1, y: 875.0 },
+  { x: 248.2, y: 874.4 },
+  { x: 265.1, y: 868.2 },
+  { x: 279.1, y: 857.0 },
+  { x: 287.0, y: 841.0 },
+  { x: 290.0, y: 823.3 },
+  { x: 291.0, y: 805.2 },
+  { x: 290.8, y: 787.2 },
+  { x: 291.0, y: 769.1 },
+  { x: 291.0, y: 751.0 },
+  { x: 290.0, y: 732.9 },
+  { x: 290.7, y: 714.9 },
+  { x: 290.5, y: 696.9 },
+  { x: 290.0, y: 678.8 },
+  { x: 290.0, y: 660.7 },
+  { x: 290.0, y: 642.6 },
+  { x: 290.0, y: 624.5 },
+  { x: 290.3, y: 606.4 },
+  { x: 290.4, y: 588.4 },
+  { x: 290.0, y: 570.4 },
+  { x: 290.0, y: 552.3 },
+  { x: 290.0, y: 534.2 },
+  { x: 290.0, y: 516.1 },
+  { x: 290.0, y: 498.0 },
+  { x: 291.0, y: 480.0 },
+  { x: 291.0, y: 461.9 },
+  { x: 291.0, y: 443.8 },
+  { x: 291.0, y: 425.7 },
+  { x: 292.0, y: 407.7 },
+  { x: 292.2, y: 389.6 },
+  { x: 295.4, y: 371.8 },
+  { x: 303.7, y: 356.0 },
+  { x: 317.6, y: 344.9 },
+  { x: 335.1, y: 341.0 },
+  { x: 353.1, y: 339.0 },
+  { x: 371.1, y: 340.0 },
+  { x: 389.2, y: 340.0 },
+  { x: 407.3, y: 340.0 },
+  { x: 425.4, y: 340.0 },
+  { x: 443.5, y: 340.0 },
+  { x: 461.4, y: 340.9 },
+  { x: 478.4, y: 346.7 },
+  { x: 492.0, y: 358.2 },
+  { x: 499.3, y: 374.6 },
+  { x: 501.0, y: 392.4 },
+  { x: 501.0, y: 410.5 },
+  { x: 501.0, y: 428.6 },
+  { x: 501.0, y: 446.7 },
+  { x: 501.0, y: 464.8 },
+  { x: 501.1, y: 482.9 },
+  { x: 502.0, y: 500.9 },
+  { x: 501.0, y: 519.0 },
+  { x: 501.0, y: 537.0 },
+  { x: 501.0, y: 555.1 },
+  { x: 502.0, y: 573.2 },
+  { x: 501.9, y: 591.3 },
+  { x: 501.0, y: 609.3 },
+  { x: 501.7, y: 627.3 },
+  { x: 502.0, y: 645.4 },
+  { x: 502.0, y: 663.5 },
+  { x: 502.0, y: 681.6 },
+  { x: 502.0, y: 699.7 },
+  { x: 502.0, y: 717.8 },
+  { x: 502.0, y: 735.9 },
+  { x: 502.0, y: 753.9 },
+  { x: 502.0, y: 772.0 },
+  { x: 502.0, y: 790.1 },
+  { x: 502.0, y: 808.2 },
+  { x: 502.0, y: 826.3 },
+  { x: 502.0, y: 844.4 },
+  { x: 502.0, y: 862.5 },
+  { x: 502.0, y: 880.6 },
+  { x: 502.0, y: 898.6 },
+  { x: 502.0, y: 916.7 },
+  { x: 502.0, y: 934.8 },
+  { x: 502.0, y: 952.9 },
+  { x: 502.0, y: 971.0 },
+  { x: 502.0, y: 989.1 },
+  { x: 502.0, y: 1007.2 },
+  { x: 504.3, y: 1024.9 },
+  { x: 509.6, y: 1042.1 },
+  { x: 522.5, y: 1054.6 },
+  { x: 538.8, y: 1061.7 },
+  { x: 556.6, y: 1064.0 },
+  { x: 574.7, y: 1064.2 },
+  { x: 592.7, y: 1065.0 },
+  { x: 610.8, y: 1065.0 },
+  { x: 628.9, y: 1064.0 },
+  { x: 646.9, y: 1065.0 },
+  { x: 665.0, y: 1065.0 },
+  { x: 683.1, y: 1065.0 },
+  { x: 701.2, y: 1064.6 },
+  { x: 719.0, y: 1061.6 },
+  { x: 735.2, y: 1053.8 },
+  { x: 746.6, y: 1040.0 },
+  { x: 752.7, y: 1023.1 },
+  { x: 754.0, y: 1005.1 },
+  { x: 755.0, y: 987.1 },
+  { x: 755.0, y: 969.0 },
+  { x: 755.0, y: 950.9 },
+  { x: 755.0, y: 932.8 },
+  { x: 755.0, y: 914.7 },
+  { x: 755.0, y: 896.6 },
+  { x: 754.0, y: 878.6 },
+  { x: 754.0, y: 860.5 },
+  { x: 755.0, y: 842.5 },
+  { x: 754.0, y: 824.4 },
+  { x: 754.0, y: 806.3 },
+  { x: 755.0, y: 788.3 },
+  { x: 755.0, y: 770.2 },
+  { x: 754.0, y: 752.2 },
+  { x: 754.0, y: 734.1 },
+  { x: 754.0, y: 716.0 },
+  { x: 754.0, y: 697.9 },
+  { x: 754.0, y: 679.8 },
+  { x: 754.7, y: 661.8 },
+  { x: 755.0, y: 643.7 },
+  { x: 755.0, y: 625.6 },
+  { x: 757.7, y: 607.8 },
+  { x: 765.8, y: 592.0 },
+  { x: 780.3, y: 581.4 },
+  { x: 797.8, y: 577.1 },
+  { x: 815.8, y: 576.0 },
+  { x: 833.9, y: 576.0 },
+  { x: 852.0, y: 576.0 },
+  { x: 870.1, y: 576.0 },
+  { x: 888.2, y: 576.0 }
 ];
 
-const TS_LEVEL1_DESIGN: TSLevelDesign = {
-  points: TS_LEVEL1_LEFT_PATH,
-  paths: [TS_LEVEL1_LEFT_PATH, TS_LEVEL1_RIGHT_PATH],
-  halfWidth: TS_LEVEL1_HALF_WIDTH,
-  baseWidth: TS_LEVEL1_BASE_WIDTH,
-  baseHeight: TS_LEVEL1_BASE_HEIGHT,
-  backgroundImage: TS_LEVEL1_IMAGE,
-  boneRadius: TS_LEVEL1_BONE_RADIUS,
-  minAllowedHalfWidth: TS_LEVEL1_MIN_ALLOWED_HALF_WIDTH,
-  finishRadius: TS_LEVEL1_FINISH_RADIUS,
-  label: "The Big Bone",
-  instructions:
-    "Drag the bone up through the loop — swing left or right around it, your call — then on up to the finish.",
+const TS_SWITCHBACK_DESIGN: TSLevelDesign = {
+  points: TS_SWITCHBACK_PATH,
+  halfWidth: 32,
+  baseWidth: TS_CAVE_BASE_WIDTH,
+  baseHeight: TS_CAVE_BASE_HEIGHT,
+  backgroundImage: TS_SWITCHBACK_IMAGE,
+  boneRadius: 11,
+  minAllowedHalfWidth: 9,
+  finishRadius: 60,
+  label: "The Switchback",
+  instructions: "Up, down and up again — steer the paw around both hairpin turns to FINISH without brushing the walls.",
 };
 
 // Hand-traced levels, in order (index 0 = level 1). Append future critters
@@ -407,7 +597,7 @@ const TS_LEVEL1_DESIGN: TSLevelDesign = {
 // the new maze is a loop with more than one genuinely open route; a single
 // `points` route, like Rex's, covers the more common case). Anything past
 // the end of this array falls back to buildProceduralLevelDesign.
-const TS_CUSTOM_LEVELS: TSLevelDesign[] = [TS_LEVEL1_DESIGN];
+const TS_CUSTOM_LEVELS: TSLevelDesign[] = [TS_CAVE_DESIGN, TS_WAVE_DESIGN, TS_ROCKFALL_DESIGN, TS_SWITCHBACK_DESIGN];
 
 function buildProceduralLevelDesign(level: number): TSLevelDesign {
   const { points, halfWidth } = buildTightSqueezeLevelPath(level);
@@ -471,6 +661,11 @@ export function TightSqueezeGame({ onExit }: { onExit: () => void }) {
   const boneDragStartRef = useRef<TSPoint>({ ...TS_TUNNEL_ANCHOR_TOP });
   const bonePosX = useRef(new Animated.Value(0)).current;
   const bonePosY = useRef(new Animated.Value(0)).current;
+  // Falling-rock hazard (levels with design.fallingRocks): one screen-space
+  // Y position + spin per lane, driven by the rAF loop below. Pool of 6 is
+  // more than any level uses; unused lanes just aren't rendered.
+  const rockPosY = useRef(Array.from({ length: 6 }, () => new Animated.Value(-9999))).current;
+  const rockSpin = useRef(Array.from({ length: 6 }, () => new Animated.Value(0))).current;
 
   useEffect(() => {
     gameStateRef.current = gameState;
@@ -506,6 +701,55 @@ export function TightSqueezeGame({ onExit }: { onExit: () => void }) {
       if (clearedFlashTimeoutRef.current) clearTimeout(clearedFlashTimeoutRef.current);
     };
   }, []);
+
+  // Falling rocks: while a level with rocks is being played, move every rock
+  // each animation frame and end the run if one touches the paw. Collision is
+  // done in design space (the same space as the tunnel walls), treating rock
+  // and paw as circles: hit when their centres are closer than
+  // rock.radius + the level's boneRadius. Restarts cleanly whenever the level
+  // changes (the loop's time base resets, so every attempt at the level sees
+  // the same rock pattern).
+  useEffect(() => {
+    const rocks = design.fallingRocks;
+    if (gameState !== "playing" || !rocks || rocks.length === 0) {
+      rockPosY.forEach((v) => v.setValue(-9999));
+      return;
+    }
+    let raf: number;
+    const start = performance.now();
+    const tick = (now: number) => {
+      if (gameStateRef.current !== "playing") return;
+      const d = designRef.current;
+      if (d.fallingRocks !== rocks) return;
+      const layout = computeTightSqueezeLayout(
+        trackSizeRef.current.width,
+        trackSizeRef.current.height,
+        d.baseWidth,
+        d.baseHeight
+      );
+      const boneR = d.boneRadius ?? TS_BONE_RADIUS;
+      const bone = boneBaseRef.current;
+      const t = now - start;
+      for (let i = 0; i < rocks.length; i++) {
+        const r = rocks[i];
+        const p = (t / r.period + r.phase) % 1;
+        const y = TS_ROCK_FALL_TOP + p * (TS_ROCK_FALL_BOTTOM - TS_ROCK_FALL_TOP);
+        rockPosY[i].setValue(y * layout.scaleY);
+        rockSpin[i].setValue(p * 220);
+        const dx = bone.x - r.x;
+        const dy = bone.y - y;
+        const hit = r.radius + boneR;
+        if (dx * dx + dy * dy < hit * hit) {
+          endGame();
+          return;
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState, design]);
 
   // Moves the bone (ref + Animated visual position) to `point`. When called
   // mid-drag (level cleared while the same touch is still held down), pass
@@ -778,6 +1022,10 @@ export function TightSqueezeGame({ onExit }: { onExit: () => void }) {
   // render it small enough to get lost against the wide white corridor,
   // especially right at the start point before you know where to look.
   const boneDotSize = Math.max(14, Math.round(boneSize * 0.55));
+  // Per explicit user request the dot is now a paw print (see TSPawMarker).
+  // Drawn a bit larger than the old dot so the toes read, but it's purely
+  // visual: the drag target (boneSize) and collision radius are unchanged.
+  const pawSize = Math.max(20, Math.round(boneDotSize * 1.45));
   // One SVG path string per independently-checked sub-route (see the
   // TSLevelDesign `paths` comment) — a single-route design just gets a
   // one-element array here, same as before.
@@ -916,6 +1164,36 @@ export function TightSqueezeGame({ onExit }: { onExit: () => void }) {
                 )}
               </Svg>
 
+              {gameState === "playing" &&
+                design.fallingRocks?.map((rock, i) => {
+                  const w = rock.radius * 2 * layout.scaleX;
+                  const h = rock.radius * 2 * layout.scaleY;
+                  return (
+                    <Animated.View
+                      key={`rock-${i}`}
+                      style={{
+                        position: "absolute",
+                        left: rock.x * layout.scaleX - w / 2,
+                        top: 0,
+                        width: w,
+                        height: h,
+                        pointerEvents: "none",
+                        transform: [
+                          { translateY: Animated.subtract(rockPosY[i], h / 2) },
+                          {
+                            rotate: rockSpin[i].interpolate({
+                              inputRange: [0, 360],
+                              outputRange: ["0deg", "360deg"],
+                            }),
+                          },
+                        ],
+                      }}
+                    >
+                      <TSRock />
+                    </Animated.View>
+                  );
+                })}
+
               <Animated.View
                 style={[
                   styles.tsBoneWrapper,
@@ -929,19 +1207,7 @@ export function TightSqueezeGame({ onExit }: { onExit: () => void }) {
                   },
                 ]}
               >
-                <View
-                  style={{
-                    width: boneDotSize,
-                    height: boneDotSize,
-                    borderRadius: boneDotSize / 2,
-                    backgroundColor: "#000",
-                    // White ring so the dot reads clearly whether it's sitting on
-                    // the white corridor or the darker art around it -- see the
-                    // boneDotSize comment above for why this was added.
-                    borderWidth: 2,
-                    borderColor: "#fff",
-                  }}
-                />
+                <TSPawMarker size={pawSize} />
               </Animated.View>
 
               {justCleared && (
@@ -1085,3 +1351,68 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 });
+
+
+// The draggable piece: a paw print (per explicit user request, replacing the
+// small black dot). Black pads with a white outline, same as the old dot's
+// white ring, so it stays readable on both the white corridor and the darker
+// art around it. The outline is drawn as a slightly fatter white copy of each
+// pad underneath the black one.
+function TSPawMarker({ size }: { size: number }) {
+  const toes = [
+    { cx: 5.2, cy: 9.6, rx: 2.3, ry: 2.9, rot: -25 },
+    { cx: 9.4, cy: 5.6, rx: 2.4, ry: 3.1, rot: -8 },
+    { cx: 14.6, cy: 5.6, rx: 2.4, ry: 3.1, rot: 8 },
+    { cx: 18.8, cy: 9.6, rx: 2.3, ry: 2.9, rot: 25 },
+  ];
+  const pad = "M12 11.2c-3.1 0-6.4 3.4-6.4 6.3 0 2.1 1.6 3.1 3.3 3.1 1.3 0 2.1-.7 3.1-.7s1.8.7 3.1.7c1.7 0 3.3-1 3.3-3.1 0-2.9-3.3-6.3-6.4-6.3z";
+  const shapes = (fill: string, stroke?: string) => (
+    <G>
+      {toes.map((t, i) => (
+        // Rotate via a plain SVG transform string (rotation/origin props emit a
+        // transform-origin DOM attribute on react-native-web, which React warns about).
+        <G key={i} transform={`rotate(${t.rot} ${t.cx} ${t.cy})`}>
+          <Ellipse
+            cx={t.cx}
+            cy={t.cy}
+            rx={t.rx}
+            ry={t.ry}
+            fill={fill}
+            stroke={stroke}
+            strokeWidth={stroke ? 2.6 : 0}
+          />
+        </G>
+      ))}
+      <Path d={pad} fill={fill} stroke={stroke} strokeWidth={stroke ? 2.6 : 0} strokeLinejoin="round" />
+    </G>
+  );
+  return (
+    <View style={{ pointerEvents: "none" }}>
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        {shapes("#fff", "#fff")}
+        {shapes("#1A1A1A")}
+      </Svg>
+    </View>
+  );
+}
+
+
+// A falling rock: a chunky faceted boulder in the same warm browns as the
+// cave art (dark base, lighter top-left facet, a thin highlight edge), drawn
+// to fill whatever box it's given so it scales with the level.
+function TSRock() {
+  return (
+    <Svg width="100%" height="100%" viewBox="0 0 48 48">
+      <Path
+        d="M14 6 L32 4 L43 14 L45 30 L36 43 L18 45 L6 36 L3 20 Z"
+        fill="#4A2E1E"
+        stroke="#2B1A10"
+        strokeWidth={2}
+        strokeLinejoin="round"
+      />
+      <Path d="M14 6 L32 4 L38 16 L22 22 L8 18 Z" fill="#7A5236" />
+      <Path d="M22 22 L38 16 L43 28 L30 34 Z" fill="#5E3C27" />
+      <Path d="M14 6 L32 4" stroke="#B07A4E" strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  );
+}

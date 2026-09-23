@@ -213,7 +213,7 @@ export default function Adventure() {
         {!selectedArea && (
           <View style={styles.coinBadge}>
             <CoinIcon size={16} />
-            <Text style={[styles.coinText, { color: accentColor }]}> {coins}</Text>
+            <Text style={styles.coinText}> {coins}</Text>
           </View>
         )}
 
@@ -231,7 +231,7 @@ export default function Adventure() {
 
         {!selectedPet && (
           <>
-            <Text style={[styles.header, { color: theme.text.primary }]}>Choose your adventurer</Text>
+            <Text style={styles.header}>Choose your adventurer</Text>
 
             {pets
               .filter((pet) => pet.confirmed)
@@ -277,7 +277,7 @@ export default function Adventure() {
               <Text style={[styles.changePetPillText, { color: theme.text.primary }]}>Change Pet</Text>
             </PressableScale>
 
-            <Text style={[styles.header, { color: theme.text.primary }]}>
+            <Text style={styles.header}>
               Where should {selectedPet.name} explore?
             </Text>
 
@@ -409,21 +409,33 @@ const styles = StyleSheet.create({
     paddingTop: 80,
   },
 
+  // Coin badge + headers are styled to sit in the sailing-sunset scene
+  // (SailingAdventureBackground): a sail-cream pill edged in sunset orange with
+  // warm hull-brown text, and cream Fredoka headings lifted off the dusk sky
+  // with a soft plum shadow.
   coinBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     alignSelf: "center",
-    backgroundColor: "#fff",
+    backgroundColor: "rgba(255, 241, 220, 0.92)",
     borderRadius: 20,
-    paddingVertical: 8,
+    borderWidth: 1.5,
+    borderColor: "#F4A460",
+    paddingVertical: 7,
     paddingHorizontal: 18,
     marginBottom: 16,
+    shadowColor: "#FF9A4D",
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
   },
 
   coinText: {
-    fontWeight: "800",
-    fontSize: 16,
+    fontFamily: "Fredoka_700Bold",
+    fontSize: 17,
+    color: "#7A3E1E",
   },
 
   endAdventureButton: {
@@ -443,10 +455,15 @@ const styles = StyleSheet.create({
   },
 
   header: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#fff",
+    fontFamily: "Fredoka_700Bold",
+    fontSize: 24,
+    color: "#FFF4E2",
+    textAlign: "center",
+    letterSpacing: 0.3,
     marginBottom: 20,
+    textShadowColor: "rgba(58, 30, 58, 0.55)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
   },
 
   card: {
