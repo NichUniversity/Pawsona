@@ -8,9 +8,11 @@ import {
   ViewStyle,
 } from "react-native";
 
+import { findIdleAspect, findIdleFrames, findIdleSequence } from "../../data/idleAnimations";
 import { AVATAR_OPTIONS, AvatarOption, PetCategory } from "../../data/petcategories";
+import { IdleSprite } from "./IdleSprite";
 
-// Shared "picture frame mat" color behind avatar art (also baked into WALK_VIDEOS clips — recolor those separately).
+// Shared "picture frame mat" color behind avatar art.
 export const AVATAR_BACKDROP_COLOR = "#D8C79A";
 
 export function findAvatarOption(
@@ -38,6 +40,8 @@ type Props = {
   variant?: "face" | "full";
   /** Skip the default black backdrop (e.g. when already on a colored swatch). */
   transparentBackdrop?: boolean;
+  /** Full-body only: play the pet's idle loop (data/idleAnimations.ts) if it has one. */
+  animated?: boolean;
 };
 
 /** Renders a pet avatar: a custom image if the matched option has one, otherwise the emoji. */
@@ -49,10 +53,31 @@ export function AvatarDisplay({
   style,
   variant = "full",
   transparentBackdrop = false,
+  animated = false,
 }: Props) {
   const option = findAvatarOption(category, emoji, color);
   const source =
     variant === "face" ? option?.faceImage ?? option?.image : option?.image;
+  const idleFrames = animated && variant === "full" ? findIdleFrames(option?.emoji) : undefined;
+
+  // Idle-animated full-body art: drawn full-width and pinned to the bottom of the box (paws on
+  // the box's bottom edge, where the Home lawn's shadow sits), with no round clip -- the wide idle
+  // canvas would otherwise lose its paws and tail to the circle's corners.
+  if (source && idleFrames) {
+    return (
+      <View style={[{ width: size, height: size }, style as StyleProp<ViewStyle>]}>
+        {/* 1.2x wide (overhanging the box equally on both sides) so the dog stands about as tall
+            as the static avatar art does -- the idle canvas is much wider than it is tall. */}
+        <IdleSprite
+          key={option?.emoji}
+          frames={idleFrames}
+          sequence={findIdleSequence(option?.emoji)}
+          aspect={findIdleAspect(option?.emoji)}
+          style={{ position: "absolute", left: -size * 0.1, bottom: 0, width: size * 1.2, height: size }}
+        />
+      </View>
+    );
+  }
 
   if (source) {
     return (

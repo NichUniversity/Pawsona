@@ -22,7 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AvatarPickerModal, CategoryPickerModal, DeletePetModal } from '../../components/home/HomeModals';
 import { AvatarDisplay, findAvatarOption } from '../../components/ui/AvatarDisplay';
 import { DailyRewardModal } from '../../components/ui/DailyRewardModal';
-import { PetRoomBackground } from '../../components/ui/PetRoomBackground';
+import { PetRoomBackground, RoomPet } from '../../components/ui/PetRoomBackground';
 import { PressableScale } from '../../components/ui/PressableScale';
 import { SettingsMenu } from '../../components/ui/SettingsMenu';
 import { TabBackground } from '../../components/ui/TabBackground';
@@ -342,9 +342,13 @@ export default function HomeScreen() {
 
   const hasConfirmedPet = entries.some((e) => e.confirmed);
 
-  // The pet showing in the swiper walks around the room background, but
-  // only once confirmed.
-  const roomPet = currentEntry?.confirmed ? currentEntry : undefined;
+  // Every confirmed pet with an avatar stands on the backyard lawn, each in its own spot (in the
+  // order the pets were added), not just the one showing in the swiper.
+  const roomPets: RoomPet[] = entries.flatMap((e) =>
+    e.confirmed && e.category && e.selectedEmoji
+      ? [{ id: e.id, category: e.category, emoji: e.selectedEmoji, color: e.color }]
+      : []
+  );
 
   // Options to list in the avatar picker modal.
   const avatarModalOptions: AvatarOption[] = (() => {
@@ -371,11 +375,7 @@ export default function HomeScreen() {
   return (
     <View style={styles.screen}>
       {livingHomeScreen ? (
-        <PetRoomBackground
-          category={roomPet?.category}
-          emoji={roomPet?.selectedEmoji}
-          color={roomPet?.color}
-        />
+        <PetRoomBackground pets={roomPets} />
       ) : (
         <TabBackground />
       )}
@@ -1194,7 +1194,7 @@ const styles = StyleSheet.create({
   },
 
   attributesSide: {
-    marginLeft: -22,
+    marginLeft: -10,
     marginTop: 55,
     gap: 8,
     justifyContent: 'center',

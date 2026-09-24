@@ -15,13 +15,11 @@ import { AVATAR_BACKDROP_COLOR, findAvatarOption } from "../../components/ui/Ava
 import { CoinIcon } from "../../components/ui/CoinIcon";
 import { NotebookPetPicker } from "../../components/ui/NotebookPetPicker";
 import { PressableScale } from "../../components/ui/PressableScale";
-import { WalkingSprite } from "../../components/ui/WalkingSprite";
-import { WalkingVideo } from "../../components/ui/WalkingVideo";
+import { IdleSprite } from "../../components/ui/IdleSprite";
 import { API_BASE_URL, GOLD, PARCHMENT, WOOD_DARK, WOOD_MID } from "../../constants/pet-log-theme";
 import { PetEntry, usePets } from "../../context/PetInformation";
 import { useTheme } from "../../context/ThemeContext";
-import { findWalkFrames } from "../../data/walkAnimations";
-import { findWalkVideo } from "../../data/walkVideos";
+import { findIdleFrames, findIdleSequence } from "../../data/idleAnimations";
 import { useTabBarClearance } from "../../hooks/useTabBarClearance";
 
 // Notebook-paper art behind the "Choose your pet" screen. Drawn with
@@ -60,46 +58,27 @@ function StatRow({ label, emoji, value }: { label: string; emoji: string; value:
   );
 }
 
-// The pet's avatar. While held it walks: a video if the pet has one
-// (kept mounted and cross-faded to avoid a load flash), otherwise sprite
-// frames (pre-decoded off-screen to avoid a black flash).
-function AvatarWalker({ pet, isWalking }: { pet: PetEntry; isWalking: boolean }) {
-  const walkFrames = findWalkFrames(pet.selectedEmoji);
-  const walkVideo = findWalkVideo(pet.selectedEmoji);
+// The pet's full-body avatar in the card: its idle loop if it has one (data/idleAnimations.ts),
+// otherwise the static avatar image (or emoji).
+function PetAvatarArt({ pet }: { pet: PetEntry }) {
+  const idleFrames = findIdleFrames(pet.selectedEmoji);
   const avatarOption = findAvatarOption(pet.category, pet.selectedEmoji, pet.color);
 
-  const staticAvatar = avatarOption?.image ? (
-    <Image source={avatarOption.image} style={styles.avatarFrameImage} resizeMode="contain" />
-  ) : (
-    <Text style={styles.avatarFrameEmoji}>{avatarOption?.emoji ?? pet.selectedEmoji ?? "🐾"}</Text>
-  );
-
-  if (walkVideo) {
+  if (idleFrames) {
     return (
-      <>
-        <View style={[StyleSheet.absoluteFill, { opacity: isWalking ? 0 : 1 }]}>{staticAvatar}</View>
-        <View style={[StyleSheet.absoluteFill, { opacity: isWalking ? 1 : 0 }]} pointerEvents="none">
-          <WalkingVideo source={walkVideo} playing={isWalking} style={{ width: "100%", height: "100%" }} />
-        </View>
-      </>
+      <IdleSprite
+        key={pet.selectedEmoji ?? undefined}
+        frames={idleFrames}
+        sequence={findIdleSequence(pet.selectedEmoji)}
+        style={styles.avatarFrameImage}
+      />
     );
   }
 
-  return (
-    <>
-      {walkFrames && (
-        <View style={{ position: "absolute", width: 1, height: 1, opacity: 0 }} pointerEvents="none">
-          {walkFrames.map((frame, i) => (
-            <Image key={i} source={frame} style={{ width: 1, height: 1 }} />
-          ))}
-        </View>
-      )}
-      {isWalking && walkFrames ? (
-        <WalkingSprite frames={walkFrames} style={{ width: "100%", height: "100%" }} />
-      ) : (
-        staticAvatar
-      )}
-    </>
+  return avatarOption?.image ? (
+    <Image source={avatarOption.image} style={styles.avatarFrameImage} resizeMode="contain" />
+  ) : (
+    <Text style={styles.avatarFrameEmoji}>{avatarOption?.emoji ?? pet.selectedEmoji ?? "🐾"}</Text>
   );
 }
 
@@ -118,7 +97,6 @@ export default function DailyPawLog() {
   const [aiFeedback, setAiFeedback] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
   const [isOriginStoryVisible, setIsOriginStoryVisible] = useState(false);
-  const [isAvatarWalking, setIsAvatarWalking] = useState(false);
 
   const handleAiSubmit = async () => {
     if (!selectedPet || !logText.trim() || isAnalyzing) return;
@@ -198,7 +176,6 @@ export default function DailyPawLog() {
     setAiFeedback(null);
     setAiError(null);
     setIsOriginStoryVisible(false);
-    setIsAvatarWalking(false);
   };
 
   const updateBackstory = (petId: string, text: string) => {
@@ -281,13 +258,9 @@ export default function DailyPawLog() {
                 )}
               </View>
 
-              <PressableScale
-                style={styles.avatarFrame}
-                onPressIn={() => setIsAvatarWalking(true)}
-                onPressOut={() => setIsAvatarWalking(false)}
-              >
-                <AvatarWalker pet={selectedPet} isWalking={isAvatarWalking} />
-              </PressableScale>
+              <View style={styles.avatarFrame}>
+                <PetAvatarArt pet={selectedPet} />
+              </View>
             </View>
 
             <View style={styles.namePlaque}>

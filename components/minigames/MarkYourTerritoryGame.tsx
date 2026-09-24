@@ -302,41 +302,66 @@ function TerritoryBird({
   latestPropsRef.current = { size, containerWidth };
   const flightGeomRef = useRef({ size, containerWidth });
 
-  useEffect(() => {
-    let cancelled = false;
-    let timeoutId: ReturnType<typeof setTimeout>;
-    const randomPauseMs = () => Math.max(0, minCycleMs + Math.random() * (maxCycleMs - minCycleMs) - flightMs);
+  const cycleRef = useRef({ flightMs, minCycleMs, maxCycleMs });
+  cycleRef.current = { flightMs, minCycleMs, maxCycleMs };
+  const pauseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
 
-    const flyOnce = () => {
-      if (cancelled) return;
+  // Idle phase: wait (start delay first, then a random pause), then launch a
+  // flight by mounting the bird. Nothing is rendered while waiting.
+  const scheduleFlight = (delayMs: number) => {
+    if (pauseTimeoutRef.current) clearTimeout(pauseTimeoutRef.current);
+    pauseTimeoutRef.current = setTimeout(() => {
+      pauseTimeoutRef.current = null;
+      if (!mountedRef.current) return;
       flightGeomRef.current = latestPropsRef.current;
       progress.setValue(0);
       setIsFlying(true);
-      Animated.timing(progress, {
-        toValue: 1,
-        duration: flightMs,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }).start(({ finished }) => {
-        setIsFlying(false);
-        if (cancelled || !finished) return;
-        timeoutId = setTimeout(flyOnce, randomPauseMs());
-      });
-    };
+    }, delayMs);
+  };
 
-    timeoutId = setTimeout(flyOnce, startDelayMs);
+  useEffect(() => {
+    mountedRef.current = true;
+    scheduleFlight(startDelayMs);
     return () => {
-      cancelled = true;
-      clearTimeout(timeoutId);
+      mountedRef.current = false;
+      if (pauseTimeoutRef.current) clearTimeout(pauseTimeoutRef.current);
       progress.stopAnimation();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flightMs, minCycleMs, maxCycleMs, startDelayMs]);
+  }, []);
+
+  // Flight phase: runs only once the bird's view is mounted, and unmounts it
+  // again the moment it has fully left the screen.
+  useEffect(() => {
+    if (!isFlying) return;
+    const { flightMs: ms, minCycleMs: min, maxCycleMs: max } = cycleRef.current;
+    const anim = Animated.timing(progress, {
+      toValue: 1,
+      duration: ms,
+      easing: Easing.linear,
+      useNativeDriver: true,
+    });
+    anim.start(({ finished }) => {
+      if (!mountedRef.current) return;
+      setIsFlying(false);
+      if (!finished) return;
+      scheduleFlight(Math.max(0, min + Math.random() * (max - min) - ms));
+    });
+    return () => anim.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFlying]);
+
+  // Off-screen between flights: render nothing (no view, no image, no
+  // wing-flap updates) so idle birds cost nothing.
+  if (!isFlying) return null;
 
   const { size: flightSize, containerWidth: flightContainerWidth } = flightGeomRef.current;
   const width = flightSize * TERR_BIRD_ASPECT;
-  const startX = direction === "left-to-right" ? -width : flightContainerWidth + width;
-  const endX = direction === "left-to-right" ? flightContainerWidth + width : -width;
+  // Start/end a little past the edge so no sliver shows on spawn/despawn.
+  const edgeMargin = 4;
+  const startX = direction === "left-to-right" ? -width - edgeMargin : flightContainerWidth + edgeMargin;
+  const endX = direction === "left-to-right" ? flightContainerWidth + edgeMargin : -width - edgeMargin;
 
   return (
     <Animated.View

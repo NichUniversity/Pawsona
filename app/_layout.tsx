@@ -51,6 +51,9 @@ function RootLayoutFonts() {
     Fredoka_400Regular,
     Fredoka_600SemiBold,
     Fredoka_700Bold,
+    // Kid-handwriting face for the Daily Paw Log notebook (bundled .ttf, no npm package needed).
+    "Gaegu-Regular": require("../assets/fonts/Gaegu-Regular.ttf"),
+    "Gaegu-Bold": require("../assets/fonts/Gaegu-Bold.ttf"),
   });
 
   if (!fontsLoaded) {
