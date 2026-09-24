@@ -1,5 +1,5 @@
 import { useFocusEffect, useNavigation } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ComponentType, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextStyle, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -15,55 +15,18 @@ import { COSMETICS } from "../../data/cosmetics";
 import { useTabBarClearance } from "../../hooks/useTabBarClearance";
 import { getTabBarStyle } from "./_layout";
 
-// Retro arcade-cabinet art behind the game-picker screen (replaces the shared
-// theme-reactive TabBackground gradient, same treatment Home and Daily Log's
-// notebook-paper screen got with their own dedicated art).
-//
-// History: an earlier elaborate attempt at clipping the game-picker content
-// into the cabinet's own screen glass kept surfacing new bugs (a pager
-// layout-measurement bug, a ScrollView that didn't fill its box, a cabinet
-// that shrank with browser height), so it was scrapped for a plain full-bleed
-// background with content on top, matching Daily Log's pattern. That in turn
-// hit its own bug — resizeMode="cover" needs an explicit width/height: "100%"
-// on react-native-web, see `styles.background`'s own comment — which is now
-// fixed and confirmed working. With the background rock solid, the
-// screen-glass content-fit effect below is a second attempt, done
-// differently this time: instead of measuring anything at runtime
-// (onLayout, refs), the glass rectangle's position is *computed* from the
-// same fit math the browser/OS already applies to the image, driven only by
-// useWindowDimensions (the one layout source already proven reliable on web
-// in this codebase, per app/(tabs)/_layout.tsx). That keeps this fully
-// deterministic and resize-safe without depending on the pager's flaky
-// onLayout resolution at all.
-//
-// resizeMode is "contain", not "cover" — this screen briefly shipped with
-// "cover" (matching the plain-background version above) and it broke badly:
-// "cover" crops whichever axis overflows, and how much it crops scales with
-// how far the window's own aspect ratio differs from the image's. On a
-// typical wide desktop browser window (not phone-shaped) that crop is severe
-// enough to push the entire screen-glass rect — and therefore the whole
-// games menu — off the top of the visible viewport, making the menu
-// invisible even though the code was "working." "contain" guarantees the
-// full image (and therefore the glass rect, a sub-region of it) is always
-// entirely within the container bounds, for literally any window shape, at
-// the cost of letterbox bars on aspect ratios that don't match the art —
-// this is also the standing project preference for full-screen background
-// images for exactly this reason (Daily Log's plain "cover" is the deviation
-// there, justified only because its art's aspect ratio already lands close
-// to a phone's). backgroundColor on the wrapping view fills those bars with
-// a tone sampled from the image's own corners so they blend in.
+// Game-picker screen drawn inside an arcade-cabinet illustration.
+// The art uses resizeMode="contain" (never "cover", which can crop the
+// screen glass off-screen on wide windows); letterbox bars are filled with a
+// color sampled from the art. The menu is placed inside the cabinet's screen
+// glass by computing the glass rect from the same "contain" math, driven by
+// useWindowDimensions (no onLayout measuring, which is flaky in the pager).
 const MINIGAMES_BACKGROUND = require("../../assets/backgrounds/minigames_arcade_cabinet.png");
 const CABINET_LETTERBOX_COLOR = "#030c2f";
 
-// Source image's own pixel dimensions (used to replicate resizeMode="contain"'s
-// fit math in JS below) and the fractional bounds of the cabinet's screen
-// "glass" within it. Measured directly off the asset by sampling pixel
-// colors along the image's horizontal/vertical center lines to find where
-// the screen's dark-blue interior meets its black bezel rim (inset slightly
-// from the true edge so content sits safely inside the bezel, not touching
-// it) — see claude/minigames-arcade-cabinet-background.md for the sampled
-// values. If the art is ever swapped for a new cabinet illustration, these
-// four fractions need re-measuring against the new file.
+// Art size and the screen glass's bounds as fractions of it (sampled from
+// the image, inset slightly from the bezel). Re-measure if the art changes;
+// see claude/minigames-arcade-cabinet-background.md.
 const CABINET_IMAGE_WIDTH = 941;
 const CABINET_IMAGE_HEIGHT = 1672;
 const SCREEN_LEFT_FRAC = 0.11;
@@ -71,16 +34,8 @@ const SCREEN_RIGHT_FRAC = 0.89;
 const SCREEN_TOP_FRAC = 0.155;
 const SCREEN_BOTTOM_FRAC = 0.765;
 
-// Mirrors CSS background-size:contain / native resizeMode="contain": scale
-// the image down (or up) just enough that it fits entirely within the
-// container on whichever axis is the tighter constraint, letterboxing the
-// other. Unlike cover's Math.max, this never overflows either dimension, so
-// offsetX/offsetY are always >= 0 and the glass rect they produce is always
-// fully within [0, containerWidth] x [0, containerHeight] — it cannot be
-// pushed off-screen the way cover's crop could. Applying that same scale +
-// offset to the glass's fractional bounds gives its exact on-screen rect, in
-// sync with the background Image by construction (same inputs, same
-// formula) rather than by measuring the rendered Image after the fact.
+// Where the screen glass lands on screen when the art is drawn with
+// "contain" in a containerWidth x containerHeight box.
 function computeScreenGlassRect(containerWidth: number, containerHeight: number) {
   const scale = Math.min(
     containerWidth / CABINET_IMAGE_WIDTH,
@@ -99,11 +54,8 @@ function computeScreenGlassRect(containerWidth: number, containerHeight: number)
   };
 }
 
-// Arcade look for everything drawn inside the cabinet's screen glass (credits counter, headings,
-// game cards, passive-coin cards). The cabinet art is a fixed dark-navy scene regardless of the
-// app's theme, so these are fixed neon colors — sampled from the cabinet's own trim (cyan and
-// magenta invaders, yellow/pink side stripes, blue bezel) — rather than theme.card / theme.text,
-// which flip to light-mode values and would look pasted-on over the navy glass.
+// Fixed neon palette sampled from the cabinet art. Not theme-based: the
+// cabinet is always dark navy, so light-mode theme colors would clash.
 const ARCADE = {
   panel: "rgba(6, 10, 46, 0.88)",
   panelPressed: "rgba(38, 24, 108, 0.95)",
@@ -133,9 +85,8 @@ function neonGlow(color: string) {
   return { boxShadow: `0 0 10px ${color}80` };
 }
 
-// Same glow for text. react-native-web deprecates the textShadow* props in favor of a CSS
-// `textShadow` string (and warns in the console), which RN's native TextStyle has no type for —
-// so web gets the string and native keeps the props.
+// Text glow: web wants a CSS textShadow string (textShadow* props are
+// deprecated there), native uses the textShadow* props.
 function neonText(color: string, radius: number): TextStyle {
   if (Platform.OS === "web") {
     return { textShadow: `0 0 ${radius}px ${color}` } as unknown as TextStyle;
@@ -148,6 +99,15 @@ function neonText(color: string, radius: number): TextStyle {
 }
 
 type GameId = "simon" | "minesweeper" | "fetchfrenzy" | "tightsqueeze" | "territory";
+
+// Every game runs full screen and gets an onExit back to the menu.
+const GAME_COMPONENTS: Record<GameId, ComponentType<{ onExit: () => void }>> = {
+  simon: SimonSaysGame,
+  minesweeper: PetMinesweeperGame,
+  fetchfrenzy: FetchFrenzyGame,
+  tightsqueeze: TightSqueezeGame,
+  territory: MarkYourTerritoryGame,
+};
 
 const GAMES: {
   id: GameId;
@@ -182,7 +142,7 @@ const GAMES: {
     name: "Tight Squeeze",
     emoji: "🦴",
     available: true,
-    description: "Drag the bone through the hollow dog — don't touch the walls!",
+    description: "Guide the paw through the cave tunnels — don't touch the walls!",
   },
   {
     id: "territory",
@@ -201,18 +161,17 @@ export default function Minigames() {
 
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  // Every game now takes over the whole screen (Mark Your Territory always did; the rest used to sit as a small card in a scrollable page) — anything other than the menu itself counts as full screen.
   const isGameFullScreen = activeGame !== "menu";
 
-  // Background Image fills the full window edge-to-edge (see styles.background),
-  // so window dimensions are exactly the "container" the cover-crop math needs.
+  // The background fills the window, so the window is the "contain" box.
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const screenGlassRect = useMemo(
     () => computeScreenGlassRect(windowWidth, windowHeight),
     [windowWidth, windowHeight]
   );
 
-  // Same fade-tab-bar pattern as adventure_tab.tsx: re-apply getTabBarStyle rather than `undefined` when restoring it.
+  // Fade the tab bar out while a game is open (same pattern as
+  // adventure_tab.tsx). Restore with the full style, never `undefined`.
   const restoredTabBarStyle = useMemo(
     () => getTabBarStyle(theme, insets.bottom),
     [theme, insets.bottom]
@@ -240,12 +199,12 @@ export default function Minigames() {
     }).start();
   }, [isGameFullScreen, tabBarOpacity]);
 
-  // Blocks swiping to another tab while a game is being played — a per-screen options override (same mechanism the tabBarStyle listener above already uses) takes precedence over _layout.tsx's own swipeEnabled default for as long as this screen is focused. Tapping another tab directly still works even with swiping disabled (swipeEnabled only gates the drag gesture), which is why the focus-effect safety net below also resets this — otherwise a game left "in progress" via a tap-away would leave swiping stuck off next time this tab regains focus.
+  // No swiping between tabs while a game is open.
   useEffect(() => {
     navigation.setOptions({ swipeEnabled: !isGameFullScreen });
   }, [isGameFullScreen, navigation]);
 
-  // Safety net: instantly restores the tab bar (and swipe gesture) when leaving this tab entirely, since state persists across tab swaps.
+  // When leaving the tab (state persists), restore the tab bar and swiping.
   useFocusEffect(
     useCallback(() => {
       return () => {
@@ -256,21 +215,9 @@ export default function Minigames() {
     }, [navigation, restoredTabBarStyle, tabBarOpacity])
   );
 
-  // Every game takes over the whole screen now (no chrome/coin badge/scrollable page behind it) — only the menu itself keeps the scrollable layout.
-  if (activeGame === "territory") {
-    return <MarkYourTerritoryGame onExit={() => setActiveGame("menu")} />;
-  }
-  if (activeGame === "simon") {
-    return <SimonSaysGame onExit={() => setActiveGame("menu")} />;
-  }
-  if (activeGame === "minesweeper") {
-    return <PetMinesweeperGame onExit={() => setActiveGame("menu")} />;
-  }
-  if (activeGame === "fetchfrenzy") {
-    return <FetchFrenzyGame onExit={() => setActiveGame("menu")} />;
-  }
-  if (activeGame === "tightsqueeze") {
-    return <TightSqueezeGame onExit={() => setActiveGame("menu")} />;
+  if (isGameFullScreen) {
+    const ActiveGame = GAME_COMPONENTS[activeGame];
+    return <ActiveGame onExit={() => setActiveGame("menu")} />;
   }
 
   return (
@@ -344,7 +291,10 @@ export default function Minigames() {
   );
 }
 
-// --- Passive Coins (idle-clicker activities): 30s cooldown per pet, random coin payout, chance at an unowned cosmetic; cooldowns live in a ref with a 1s ticker to keep countdowns live. ---
+// --- Passive coins ---
+// Each activity has a 30s cooldown per pet, pays a random amount, and has a
+// small chance to award a cosmetic the pet doesn't own yet. Cooldowns live in
+// a ref; a 1s ticker re-renders to keep the countdowns live.
 
 const ACTIVITY_COOLDOWN_MS = 30 * 1000;
 
@@ -564,23 +514,9 @@ function PassiveActivitiesSection() {
 // --- Styles ---
 
 const styles = StyleSheet.create({
-  // StyleSheet.absoluteFill alone (top/left/right/bottom: 0, no width/height)
-  // isn't enough for react-native-web's Image: with a local require() asset,
-  // whose Metro-attached source carries its own pixel width/height, RN Web
-  // falls back to rendering the <img> at that raw intrinsic size (941x1672
-  // here) pinned to the top-left corner instead of stretching to fill the
-  // parent — which is exactly what looked like "stuck on the left" /
-  // "not centered" in the browser regardless of viewport width or the
-  // earlier pager initialLayout fix. Adding explicit 100% width/height
-  // forces it to actually fill its container, letting resizeMode="cover"
-  // do its job. (Confirmed via direct DOM measurement in the dev browser:
-  // the rendered <img>'s parent had inline `width: 941px; height: 1672px`
-  // instead of matching the viewport.) Daily Log's background Image has
-  // this same latent bug — not touched here since it wasn't reported broken.
-  // Written out literally (rather than spreading StyleSheet.absoluteFillObject)
-  // since that helper isn't declared in this project's installed react-native
-  // type definitions (TS2551) — the literal object below is exactly what
-  // absoluteFillObject itself is under the hood.
+  // Explicit 100% size is required: RN Web otherwise renders a local
+  // require() image at its natural pixel size. Written out literally since
+  // absoluteFillObject isn't in this project's RN types.
   background: {
     position: "absolute",
     top: 0,
@@ -591,20 +527,13 @@ const styles = StyleSheet.create({
     height: "100%",
   },
 
-  // Positioned absolutely with explicit left/top/width/height computed by
-  // computeScreenGlassRect (see top of file) — never via flex/onLayout, so
-  // it can't be thrown off by the pager's flaky web layout resolution.
-  // overflow: "hidden" keeps card content from ever visually spilling past
-  // the cabinet's own screen bezel if a game card's content runs long.
+  // Rect comes from computeScreenGlassRect; clips anything past the bezel.
   screenGlass: {
     position: "absolute",
     overflow: "hidden",
   },
 
-  // Explicit style (not just contentContainerStyle) so the ScrollView's own
-  // viewport actually fills screenGlass's box instead of shrinking to its
-  // content size — same fix this file's history notes a bare
-  // contentContainerStyle already got bitten by once before.
+  // Explicit size so the ScrollView fills the glass instead of its content.
   screenGlassScroll: {
     flex: 1,
     width: "100%",
@@ -618,7 +547,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  // Arcade "CREDITS" counter — replaces the plain white coin pill. (Colors/fonts: see ARCADE above.)
+  // Arcade "CREDITS" coin counter.
   creditsBadge: {
     flexDirection: "row",
     alignItems: "center",

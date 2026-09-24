@@ -3,15 +3,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
 import { useIsFocused } from 'expo-router/react-navigation';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
   Image,
   Linking,
-  Modal,
   PanResponder,
-  Pressable,
   ScrollView,
   Share,
   StyleSheet,
@@ -21,6 +19,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AvatarPickerModal, CategoryPickerModal, DeletePetModal } from '../../components/home/HomeModals';
 import { AvatarDisplay, findAvatarOption } from '../../components/ui/AvatarDisplay';
 import { DailyRewardModal } from '../../components/ui/DailyRewardModal';
 import { PetRoomBackground } from '../../components/ui/PetRoomBackground';
@@ -228,31 +227,25 @@ export default function HomeScreen() {
   const goLeft = () => goToIndex(currentIndex - 1);
   const goRight = () => goToIndex(currentIndex + 1);
 
-  const panResponder = PanResponder.create({
-    onStartShouldSetPanResponder: () => false,
-    onMoveShouldSetPanResponder: (_evt, gestureState) =>
-      Math.abs(gestureState.dx) > 15 &&
-      Math.abs(gestureState.dx) > Math.abs(gestureState.dy),
-    onPanResponderRelease: (_evt, gestureState) => {
-      if (gestureState.dx < -50) {
-        goRight();
-      } else if (gestureState.dx > 50) {
-        goLeft();
-      }
-    },
-  });
+  // Horizontal swipe on the photo switches pets. Memoized so a re-render
+  // mid-swipe doesn't replace the responder and drop the gesture.
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_evt, gestureState) =>
+          Math.abs(gestureState.dx) > 15 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy),
+        onPanResponderRelease: (_evt, gestureState) => {
+          if (gestureState.dx < -50) goRight();
+          else if (gestureState.dx > 50) goLeft();
+        },
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentIndex, entries.length]
+  );
 
-  const updateEntry = (
-    id: string,
-    patch: Partial<PetEntry>
-  ) => {
-    setEntries((prev) =>
-      prev.map((entry) =>
-        entry.id === id
-          ? { ...entry, ...patch }
-          : entry
-      )
-    );
+  const updateEntry = (id: string, patch: Partial<PetEntry>) => {
+    setEntries((prev) => prev.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)));
   };
 
   const handleUpload = async (id: string) => {
@@ -271,54 +264,23 @@ export default function HomeScreen() {
   };
 
   const handleSelectCategory = (id: string, category: PetCategory) => {
-    updateEntry(id, {
-      category,
-      selectedEmoji: null,
-      color: null,
-    });
-
+    updateEntry(id, { category, selectedEmoji: null, color: null });
     setCategoryModalId(null);
     setAvatarModalState({ entryId: id, category });
   };
 
-  const handleChangeCategory = (id: string) => {
-    setCategoryModalId(id);
-  };
-
   const handleSelectAvatar = (id: string, option: AvatarOption) => {
-    updateEntry(id, {
-      selectedEmoji: option.emoji,
-      color: option.color,
-    });
-
+    updateEntry(id, { selectedEmoji: option.emoji, color: option.color });
     setAvatarModalState(null);
   };
 
+  // Confirming the last entry adds a fresh empty slot for the next pet.
   const handleConfirm = (id: string) => {
     setEntries((prev) => {
-      const updated = prev.map((entry) =>
-        entry.id === id
-          ? {
-              ...entry,
-              confirmed: true,
-            }
-          : entry
-      );
-
-      const isLast =
-        prev[prev.length - 1]?.id === id;
-
-      if (isLast) {
-        updated.push(makeEmptyEntry());
-      }
-
+      const updated = prev.map((entry) => (entry.id === id ? { ...entry, confirmed: true } : entry));
+      if (prev[prev.length - 1]?.id === id) updated.push(makeEmptyEntry());
       return updated;
     });
-  };
-
-  // Opens the delete-confirm modal for this entry.
-  const handleDeleteEntry = (id: string) => {
-    setDeleteConfirmId(id);
   };
 
   // Removes a pet's photo/profile/stats, always leaving at least one entry.
@@ -380,11 +342,9 @@ export default function HomeScreen() {
 
   const hasConfirmedPet = entries.some((e) => e.confirmed);
 
-  // The pet currently showing in the swiper — same one `fadeAnim` above tracks — is the
-  // one that ambles in the PetRoomBackground floor. Only confirmed pets get to walk;
-  // an in-progress, unconfirmed entry just gets the empty gradient room.
-  const roomPet = entries[currentIndex];
-  const roomPetVisible = roomPet?.confirmed ?? false;
+  // The pet showing in the swiper walks around the room background, but
+  // only once confirmed.
+  const roomPet = currentEntry?.confirmed ? currentEntry : undefined;
 
   // Options to list in the avatar picker modal.
   const avatarModalOptions: AvatarOption[] = (() => {
@@ -412,9 +372,9 @@ export default function HomeScreen() {
     <View style={styles.screen}>
       {livingHomeScreen ? (
         <PetRoomBackground
-          category={roomPetVisible ? roomPet.category : undefined}
-          emoji={roomPetVisible ? roomPet.selectedEmoji : undefined}
-          color={roomPetVisible ? roomPet.color : undefined}
+          category={roomPet?.category}
+          emoji={roomPet?.selectedEmoji}
+          color={roomPet?.color}
         />
       ) : (
         <TabBackground />
@@ -560,7 +520,7 @@ export default function HomeScreen() {
                     {currentEntry.photoUri && (
                       <PressableScale
                         style={styles.deleteBadge}
-                        onPress={() => handleDeleteEntry(currentEntry.id)}
+                        onPress={() => setDeleteConfirmId(currentEntry.id)}
                       >
                         <MaterialCommunityIcons
                           name="trash-can-outline"
@@ -760,9 +720,7 @@ export default function HomeScreen() {
 
                         <PressableScale
                           style={styles.changeTypeLink}
-                          onPress={() =>
-                            handleChangeCategory(currentEntry.id)
-                          }
+                          onPress={() => setCategoryModalId(currentEntry.id)}
                         >
                           <Text style={styles.changeTypeLinkText}>
                             Change pet type
@@ -792,181 +750,35 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* Category picker modal */}
-          <Modal
+          <CategoryPickerModal
             visible={categoryModalId !== null}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setCategoryModalId(null)}
-          >
-            <Pressable
-              style={styles.modalOverlay}
-              onPress={() => setCategoryModalId(null)}
-            >
-              <View style={styles.dropdownMenu}>
-                <Text style={styles.modalTitle}>Choose pet type</Text>
-                <ScrollView>
-                  {PET_CATEGORIES.map((cat) => (
-                    <PressableScale
-                      key={cat.key}
-                      style={styles.dropdownItem}
-                      onPress={() =>
-                        categoryModalId &&
-                        handleSelectCategory(categoryModalId, cat.key)
-                      }
-                    >
-                      <Text style={styles.dropdownItemEmoji}>
-                        {cat.emoji}
-                      </Text>
+            onClose={() => setCategoryModalId(null)}
+            onSelect={(category) => categoryModalId && handleSelectCategory(categoryModalId, category)}
+          />
 
-                      <Text style={styles.dropdownItemText}>
-                        {cat.label}
-                      </Text>
-                    </PressableScale>
-                  ))}
-                </ScrollView>
-              </View>
-            </Pressable>
-          </Modal>
-
-          {/* Avatar picker modal */}
-          <Modal
+          <AvatarPickerModal
             visible={avatarModalState !== null}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setAvatarModalState(null)}
-          >
-            <Pressable
-              style={styles.modalOverlay}
-              onPress={() => setAvatarModalState(null)}
-            >
-              <View style={styles.dropdownMenu}>
-                <Text style={styles.modalTitle}>
-                  {avatarModalState?.variantsOnly
-                    ? 'Choose a look'
-                    : `${
-                        avatarModalState
-                          ? categoryMeta(avatarModalState.category).label
-                          : ''
-                      } avatars`}
-                </Text>
-                <ScrollView>
-                  {avatarModalState &&
-                    avatarModalOptions.map(
-                      (option) => {
-                        const locked = isAvatarLocked(option);
+            title={
+              avatarModalState?.variantsOnly
+                ? 'Choose a look'
+                : `${avatarModalState ? categoryMeta(avatarModalState.category).label : ''} avatars`
+            }
+            category={avatarModalState?.category ?? null}
+            options={avatarModalOptions}
+            isLocked={isAvatarLocked}
+            onClose={() => setAvatarModalState(null)}
+            onSelect={(option) => avatarModalState && handleSelectAvatar(avatarModalState.entryId, option)}
+            onSelectLocked={(option) =>
+              Alert.alert('Locked avatar', `Unlock "${option.label}" in the Paw Shop to use this look.`)
+            }
+          />
 
-                        return (
-                          <PressableScale
-                            key={`${option.emoji}-${option.color}`}
-                            style={styles.dropdownItem}
-                            onPress={() => {
-                              if (locked) {
-                                Alert.alert(
-                                  'Locked avatar',
-                                  `Unlock "${option.label}" in the Paw Shop to use this look.`
-                                );
-                                return;
-                              }
-                              handleSelectAvatar(
-                                avatarModalState.entryId,
-                                option
-                              );
-                            }}
-                          >
-                            <View
-                              style={[
-                                styles.avatarSwatch,
-                                { backgroundColor: option.color },
-                                locked && styles.avatarSwatchLocked,
-                              ]}
-                            >
-                              <AvatarDisplay
-                                category={avatarModalState.category}
-                                emoji={option.emoji}
-                                color={option.color}
-                                size={28}
-                                variant="face"
-                                transparentBackdrop
-                                style={locked ? { opacity: 0.35 } : undefined}
-                              />
-
-                              {locked && (
-                                <View style={styles.lockBadge}>
-                                  <MaterialCommunityIcons
-                                    name="lock"
-                                    size={12}
-                                    color="#fff"
-                                  />
-                                </View>
-                              )}
-                            </View>
-
-                            <Text
-                              style={[
-                                styles.dropdownItemText,
-                                locked && styles.dropdownItemTextLocked,
-                              ]}
-                            >
-                              {option.label}
-                              {locked ? '  🔒 Paw Shop' : ''}
-                            </Text>
-                          </PressableScale>
-                        );
-                      }
-                    )}
-                </ScrollView>
-              </View>
-            </Pressable>
-          </Modal>
-
-          {/* Delete-pet confirmation modal */}
-          <Modal
+          <DeletePetModal
             visible={deleteConfirmId !== null}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setDeleteConfirmId(null)}
-          >
-            <Pressable
-              style={styles.modalOverlay}
-              onPress={() => setDeleteConfirmId(null)}
-            >
-              <View style={styles.confirmCard}>
-                <Text style={styles.modalTitle}>Remove this pet?</Text>
-                <Text style={styles.confirmBody}>
-                  {(() => {
-                    const entry = entries.find(
-                      (e) => e.id === deleteConfirmId
-                    );
-                    const label = entry?.name
-                      ? `${entry.name}'s`
-                      : "this pet's";
-                    return `This will permanently delete ${label} photo, profile, and stats. This can't be undone.`;
-                  })()}
-                </Text>
-
-                <View style={styles.confirmButtonRow}>
-                  <PressableScale
-                    style={styles.confirmCancelButton}
-                    onPress={() => setDeleteConfirmId(null)}
-                  >
-                    <Text style={styles.confirmCancelButtonText}>
-                      Cancel
-                    </Text>
-                  </PressableScale>
-
-                  <PressableScale
-                    style={styles.confirmDeleteButton}
-                    onPress={confirmDeleteEntry}
-                  >
-                    <Text style={styles.confirmDeleteButtonText}>
-                      Delete
-                    </Text>
-                  </PressableScale>
-                </View>
-              </View>
-            </Pressable>
-          </Modal>
+            petName={entries.find((e) => e.id === deleteConfirmId)?.name}
+            onCancel={() => setDeleteConfirmId(null)}
+            onConfirm={confirmDeleteEntry}
+          />
 
           <SettingsMenu
             visible={settingsVisible}
@@ -1507,138 +1319,5 @@ const styles = StyleSheet.create({
     fontFamily: 'Fredoka_700Bold',
     color: WOOD_DARK,
     fontSize: 14,
-  },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(20, 10, 0, 0.55)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  dropdownMenu: {
-    width: '80%',
-    maxHeight: 380,
-    backgroundColor: PARCHMENT,
-    borderRadius: 16,
-    borderWidth: 4,
-    borderColor: WOOD_MID,
-    paddingVertical: 8,
-  },
-
-  modalTitle: {
-    fontFamily: 'Fredoka_700Bold',
-    fontSize: 15,
-    color: WOOD_DARK,
-    textAlign: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-  },
-
-  dropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 11,
-    paddingHorizontal: 16,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(107, 74, 40, 0.18)',
-  },
-
-  dropdownItemEmoji: {
-    fontSize: 28,
-  },
-
-  dropdownItemText: {
-    fontFamily: 'Fredoka_600SemiBold',
-    fontSize: 15,
-    color: WOOD_DARK,
-  },
-
-  confirmCard: {
-    width: '82%',
-    backgroundColor: PARCHMENT,
-    borderRadius: 16,
-    borderWidth: 4,
-    borderColor: WOOD_MID,
-    paddingVertical: 18,
-    paddingHorizontal: 20,
-  },
-
-  confirmBody: {
-    fontFamily: 'Fredoka_400Regular',
-    fontSize: 13,
-    color: WOOD_MID,
-    textAlign: 'center',
-    lineHeight: 18,
-    marginTop: 4,
-    marginBottom: 18,
-  },
-
-  confirmButtonRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-
-  confirmCancelButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(107, 74, 40, 0.14)',
-  },
-
-  confirmCancelButtonText: {
-    fontFamily: 'Fredoka_600SemiBold',
-    fontSize: 14,
-    color: WOOD_MID,
-  },
-
-  confirmDeleteButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: CLAY_RED,
-  },
-
-  confirmDeleteButtonText: {
-    fontFamily: 'Fredoka_600SemiBold',
-    fontSize: 14,
-    color: '#fff',
-  },
-
-  avatarSwatch: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: WOOD_MID,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  avatarSwatchLocked: {
-    opacity: 0.6,
-  },
-
-  lockBadge: {
-    position: 'absolute',
-    bottom: -2,
-    right: -2,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: WOOD_MID,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: PARCHMENT,
-  },
-
-  dropdownItemTextLocked: {
-    color: '#A89880',
   },
 });

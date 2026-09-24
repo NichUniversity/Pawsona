@@ -24,42 +24,15 @@ import { findWalkFrames } from "../../data/walkAnimations";
 import { findWalkVideo } from "../../data/walkVideos";
 import { useTabBarClearance } from "../../hooks/useTabBarClearance";
 
-// Cream notebook-paper art behind the "Choose your pet" screen, before an almanac page is
-// open. 852x1846 (aspect ~0.46) already lands close to a typical phone's own aspect ratio.
-//
-// resizeMode="contain" (not "cover") + explicit width/height:"100%" on styles.background, matching
-// the fix applied to the Minigames tab's arcade-cabinet background (see
-// claude/minigames-arcade-cabinet-background.md for the full writeup):
-// - StyleSheet.absoluteFill alone isn't sufficient for react-native-web's Image with a local
-//   require() asset — without an explicit width/height:"100%", the Image's container collapsed to
-//   the asset's own intrinsic pixel size (852x1846) pinned to the top-left corner on web, instead
-//   of stretching to fill the screen. That's exactly the same latent bug the Minigames background
-//   had, just less obvious here because this art's aspect ratio happens to be close to a phone's.
-// - "contain" instead of "cover" guarantees the full notebook page is always entirely on-screen
-//   for any window shape (never cropped or pushed off-screen), matching the project's general
-//   standing preference for full-screen background art. Since this art's aspect ratio is already
-//   very close to a typical phone's, the letterbox bars this introduces are minimal to invisible
-//   on real devices — NOTEBOOK_LETTERBOX_COLOR (sampled from the paper's own edge tone) fills any
-//   gap so it blends in rather than showing a stark bar.
+// Notebook-paper art behind the "Choose your pet" screen. Drawn with
+// "contain" (never cropped) plus a letterbox color sampled from the paper;
+// see claude/minigames-arcade-cabinet-background.md for why.
 const SELECT_PET_BACKGROUND = require("../../assets/backgrounds/daily_log_notebook_paper.png");
 const NOTEBOOK_LETTERBOX_COLOR = "#937558";
 
-type AttributeKey =
-  | "speed"
-  | "intelligence"
-  | "mischief"
-  | "strength"
-  | "energy";
+type AttributeKey = "speed" | "intelligence" | "mischief" | "strength" | "energy";
 
-const VALID_ATTRIBUTES: AttributeKey[] = [
-  "speed",
-  "intelligence",
-  "mischief",
-  "strength",
-  "energy",
-];
-
-// Drives the almanac card's stat rows, in display order.
+// The almanac card's stat rows, in display order.
 const ATTRIBUTE_META: { key: AttributeKey; label: string; emoji: string }[] = [
   { key: "speed", label: "Speed", emoji: "🏃" },
   { key: "intelligence", label: "Intelligence", emoji: "🧠" },
@@ -69,6 +42,66 @@ const ATTRIBUTE_META: { key: AttributeKey; label: string; emoji: string }[] = [
 ];
 
 const MAX_RATING = 5;
+const COINS_PER_STAT_POINT = 5;
+
+// A 5-pip meter for one attribute, filled up to `value`.
+function StatRow({ label, emoji, value }: { label: string; emoji: string; value: number }) {
+  return (
+    <View style={styles.statRow}>
+      <Text style={styles.statLabel}>
+        {emoji} {label}
+      </Text>
+      <View style={styles.statPips}>
+        {Array.from({ length: MAX_RATING }).map((_, i) => (
+          <View key={i} style={[styles.statPip, i < value ? styles.statPipFilled : styles.statPipEmpty]} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// The pet's avatar. While held it walks: a video if the pet has one
+// (kept mounted and cross-faded to avoid a load flash), otherwise sprite
+// frames (pre-decoded off-screen to avoid a black flash).
+function AvatarWalker({ pet, isWalking }: { pet: PetEntry; isWalking: boolean }) {
+  const walkFrames = findWalkFrames(pet.selectedEmoji);
+  const walkVideo = findWalkVideo(pet.selectedEmoji);
+  const avatarOption = findAvatarOption(pet.category, pet.selectedEmoji, pet.color);
+
+  const staticAvatar = avatarOption?.image ? (
+    <Image source={avatarOption.image} style={styles.avatarFrameImage} resizeMode="contain" />
+  ) : (
+    <Text style={styles.avatarFrameEmoji}>{avatarOption?.emoji ?? pet.selectedEmoji ?? "🐾"}</Text>
+  );
+
+  if (walkVideo) {
+    return (
+      <>
+        <View style={[StyleSheet.absoluteFill, { opacity: isWalking ? 0 : 1 }]}>{staticAvatar}</View>
+        <View style={[StyleSheet.absoluteFill, { opacity: isWalking ? 1 : 0 }]} pointerEvents="none">
+          <WalkingVideo source={walkVideo} playing={isWalking} style={{ width: "100%", height: "100%" }} />
+        </View>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {walkFrames && (
+        <View style={{ position: "absolute", width: 1, height: 1, opacity: 0 }} pointerEvents="none">
+          {walkFrames.map((frame, i) => (
+            <Image key={i} source={frame} style={{ width: 1, height: 1 }} />
+          ))}
+        </View>
+      )}
+      {isWalking && walkFrames ? (
+        <WalkingSprite frames={walkFrames} style={{ width: "100%", height: "100%" }} />
+      ) : (
+        staticAvatar
+      )}
+    </>
+  );
+}
 
 export default function DailyPawLog() {
   const { pets, setPets, coins, earnCoins, hasBookOfOrigin, hasBondKeeper } =
@@ -77,15 +110,8 @@ export default function DailyPawLog() {
   const tabBarClearance = useTabBarClearance();
 
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
-  const selectedPet =
-    pets.find((pet) => pet.id === selectedPetId) ?? null;
-  const walkFrames = selectedPet
-    ? findWalkFrames(selectedPet.selectedEmoji)
-    : undefined;
-  // Video takes priority over sprite frames when both exist for a pet.
-  const walkVideo = selectedPet
-    ? findWalkVideo(selectedPet.selectedEmoji)
-    : undefined;
+  // Derived from the live pets array each render (never a stored snapshot).
+  const selectedPet = pets.find((pet) => pet.id === selectedPetId) ?? null;
 
   const [logText, setLogText] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -117,23 +143,22 @@ export default function DailyPawLog() {
       }
 
       const data = await response.json();
-      const changes: Partial<Record<AttributeKey, number>> =
-        data.attributeChanges ?? {};
+      const changes: Partial<Record<AttributeKey, number>> = data.attributeChanges ?? {};
 
-      let totalIncrease = 0;
+      // Only positive changes to known attributes count. Summed here, not
+      // inside the setPets updater, since React may run that later (or twice).
+      const increases = ATTRIBUTE_META.map(({ key }) => ({ key, delta: changes[key] ?? 0 })).filter(
+        ({ delta }) => delta > 0
+      );
+      const totalIncrease = increases.reduce((sum, { delta }) => sum + delta, 0);
 
       setPets((currentPets) =>
         currentPets.map((pet) => {
           if (pet.id !== selectedPet.id) return pet;
 
           const newRatings = { ...pet.ratings };
-
-          VALID_ATTRIBUTES.forEach((key) => {
-            const delta = changes[key] ?? 0;
-            if (delta > 0) {
-              newRatings[key] = Math.min(newRatings[key] + delta, MAX_RATING);
-              totalIncrease += delta;
-            }
+          increases.forEach(({ key, delta }) => {
+            newRatings[key] = Math.min(newRatings[key] + delta, MAX_RATING);
           });
 
           return {
@@ -152,7 +177,7 @@ export default function DailyPawLog() {
       );
 
       if (totalIncrease > 0) {
-        earnCoins(totalIncrease * 5);
+        earnCoins(totalIncrease * COINS_PER_STAT_POINT);
       }
 
       setAiFeedback(
@@ -183,35 +208,6 @@ export default function DailyPawLog() {
       )
     );
   };
-
-  // Renders a 5-pip meter for a single attribute, filled up to `value`.
-  const StatRow = ({
-    label,
-    emoji,
-    value,
-  }: {
-    label: string;
-    emoji: string;
-    value: number;
-  }) => (
-    <View style={styles.statRow}>
-      <Text style={styles.statLabel}>
-        {emoji} {label}
-      </Text>
-
-      <View style={styles.statPips}>
-        {Array.from({ length: MAX_RATING }).map((_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.statPip,
-              i < value ? styles.statPipFilled : styles.statPipEmpty,
-            ]}
-          />
-        ))}
-      </View>
-    </View>
-  );
 
   return (
     <View style={{ flex: 1, backgroundColor: NOTEBOOK_LETTERBOX_COLOR }}>
@@ -290,77 +286,7 @@ export default function DailyPawLog() {
                 onPressIn={() => setIsAvatarWalking(true)}
                 onPressOut={() => setIsAvatarWalking(false)}
               >
-                {/* Off-screen decode pass so walk frames are pre-cached before the user holds the avatar (avoids a black flash); skipped for video pets. */}
-                {walkFrames && !walkVideo && (
-                  <View
-                    style={{ position: "absolute", width: 1, height: 1, opacity: 0 }}
-                    pointerEvents="none"
-                  >
-                    {walkFrames.map((frame, i) => (
-                      <Image key={i} source={frame} style={{ width: 1, height: 1 }} />
-                    ))}
-                  </View>
-                )}
-
-                {(() => {
-                  const avatarOption = findAvatarOption(
-                    selectedPet.category,
-                    selectedPet.selectedEmoji,
-                    selectedPet.color
-                  );
-
-                  const staticAvatar = avatarOption?.image ? (
-                    <Image
-                      source={avatarOption.image}
-                      style={styles.avatarFrameImage}
-                      resizeMode="contain"
-                    />
-                  ) : (
-                    <Text style={styles.avatarFrameEmoji}>
-                      {avatarOption?.emoji ?? selectedPet.selectedEmoji ?? "🐾"}
-                    </Text>
-                  );
-
-                  if (walkVideo) {
-                    // Stays mounted, just opacity-swapped with the static avatar.
-                    return (
-                      <>
-                        <View
-                          style={[
-                            StyleSheet.absoluteFill,
-                            { opacity: isAvatarWalking ? 0 : 1 },
-                          ]}
-                        >
-                          {staticAvatar}
-                        </View>
-                        <View
-                          style={[
-                            StyleSheet.absoluteFill,
-                            { opacity: isAvatarWalking ? 1 : 0 },
-                          ]}
-                          pointerEvents="none"
-                        >
-                          <WalkingVideo
-                            source={walkVideo}
-                            playing={isAvatarWalking}
-                            style={{ width: "100%", height: "100%" }}
-                          />
-                        </View>
-                      </>
-                    );
-                  }
-
-                  if (isAvatarWalking && walkFrames) {
-                    return (
-                      <WalkingSprite
-                        frames={walkFrames}
-                        style={{ width: "100%", height: "100%" }}
-                      />
-                    );
-                  }
-
-                  return staticAvatar;
-                })()}
+                <AvatarWalker pet={selectedPet} isWalking={isAvatarWalking} />
               </PressableScale>
             </View>
 
@@ -505,12 +431,8 @@ export default function DailyPawLog() {
 }
 
 const styles = StyleSheet.create({
-  // See SELECT_PET_BACKGROUND's own comment above for why this needs explicit
-  // width/height:"100%" alongside the absolute-fill positioning below on
-  // react-native-web. Written out literally (rather than spreading
-  // StyleSheet.absoluteFillObject) since that helper isn't declared in this
-  // project's installed react-native type definitions (TS2551) — the literal
-  // object is exactly what absoluteFillObject itself is under the hood.
+  // Explicit 100% size is required on RN Web for local images; written out
+  // literally since absoluteFillObject isn't in this project's RN types.
   background: {
     position: "absolute",
     top: 0,
@@ -530,8 +452,6 @@ const styles = StyleSheet.create({
     padding: 14,
     paddingTop: 80,
   },
-
-  // Doubles the old text title's fontSize (32 -> 64), matching the Home/Login/Mini Games logo swaps.
 
   coinBadge: {
     flexDirection: "row",
