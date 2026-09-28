@@ -10,7 +10,14 @@ import {
 
 import { findIdleAspect, findIdleFrames, findIdleSequence } from "../../data/idleAnimations";
 import { AVATAR_OPTIONS, AvatarOption, PetCategory } from "../../data/petcategories";
+import { findSheetAnimation } from "../../data/sheetAnimations";
 import { IdleSprite } from "./IdleSprite";
+import { SpriteSheetPlayer } from "./SpriteSheetPlayer";
+
+// Rendered (sprite-sheet) idle art: default height of the dog as a fraction of the avatar box.
+// A sheet can override it with `heightFrac` (data/sheetAnimations.ts), so each breed keeps the
+// size its static avatar art already had on the lawn.
+const SHEET_DOG_HEIGHT_FRAC = 0.66;
 
 // Shared "picture frame mat" color behind avatar art.
 export const AVATAR_BACKDROP_COLOR = "#D8C79A";
@@ -58,7 +65,25 @@ export function AvatarDisplay({
   const option = findAvatarOption(category, emoji, color);
   const source =
     variant === "face" ? option?.faceImage ?? option?.image : option?.image;
+  const sheetAnimation = animated && variant === "full" ? findSheetAnimation(option?.emoji) : undefined;
   const idleFrames = animated && variant === "full" ? findIdleFrames(option?.emoji) : undefined;
+
+  // Pre-rendered idle loop (e.g. the golden retriever's Blender breathe + blink): preferred over
+  // the hand-drawn idle frames. Pinned to the bottom-center of the box, paws on its bottom edge
+  // like the idle loop below, with no round clip.
+  if (source && sheetAnimation) {
+    const dogHeight = size * (sheetAnimation.heightFrac ?? SHEET_DOG_HEIGHT_FRAC);
+    const dogWidth = (dogHeight * sheetAnimation.frameWidth) / sheetAnimation.frameHeight;
+    return (
+      <View style={[{ width: size, height: size }, style as StyleProp<ViewStyle>]}>
+        <SpriteSheetPlayer
+          key={option?.emoji}
+          animation={sheetAnimation}
+          style={{ position: "absolute", left: (size - dogWidth) / 2, bottom: 0, width: dogWidth }}
+        />
+      </View>
+    );
+  }
 
   // Idle-animated full-body art: drawn full-width and pinned to the bottom of the box (paws on
   // the box's bottom edge, where the Home lawn's shadow sits), with no round clip -- the wide idle
